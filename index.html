@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Portfolio PEA — Dashboard V11</title>
+<title>Mon Portfolio — Dashboard V27</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
 function norm(v){
  return String(v ?? '').trim().toLowerCase()
@@ -108,6 +108,10 @@ function goalCalc(){
 
 document.getElementById('snapDate').value = new Date().toISOString().slice(0,10);
 let snapshots = JSON.parse(localStorage.getItem('portfolioSnapshots') || '[]');
+if(!snapshots.length){
+  snapshots = [{date:'2026-10-03', value:7307.43}];
+  localStorage.setItem('portfolioSnapshots', JSON.stringify(snapshots));
+}
 
 function renderSnapshots(){
  const body=document.getElementById('snapBody');
@@ -212,7 +216,7 @@ function parseWafaText(text,fileName){
 
 function exportBackup(){
  const data={
-   version:'V20',
+   version:'V27',
    portfolioId:document.getElementById('portfolioId').value,
    savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
    snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
@@ -310,7 +314,7 @@ function parseWafaText(text,fileName){
 
 function exportBackup(){
  const data={
-   version:'V20',
+   version:'V27',
    portfolioId:document.getElementById('portfolioId').value,
    savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
    snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
@@ -354,24 +358,23 @@ function importBackup(event){
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mon Portfolio">
 <style>
-.install-card{margin:16px 0;padding:16px;border:1px solid #d1d5db;border-radius:14px;background:#f9fafb}
+.install-card{margin:16px 0;padding:16px;border:1px solid #263544;border-radius:14px;background:#101820;color:#e5edf5}.install-card strong{color:#f3f7fb}.install-card p{color:#aeb9c6}.install-card small,.install-card span{color:#aeb9c6!important}
 .install-card button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer}
 </style>
 
 </head>
 <body>
 <div class="install-card" style="border-left:4px solid #10b981">
-  <strong>🔐 Mode privé</strong>
+  <strong>📊 Données Wafa Bourse intégrées</strong>
   <p style="margin:8px 0">
-    Cette version ne contient pas les données personnelles de ton portefeuille.
-    Utilise <b>Importer Backup</b> pour restaurer tes données sur ton appareil.
+    Cette version contient les données du relevé Wafa Bourse du 03/10/2026. <b>Attention :</b> ce site GitHub Pages est public ; les données affichées peuvent être consultées par toute personne ayant le lien.
   </p>
 </div>
 
 <div class="install-card" id="syncPanel">
   <strong>☁️ Synchronisation entre appareils</strong>
   <p style="margin:8px 0">
-    V26 prépare la synchronisation : exporte un fichier Backup depuis un appareil,
+    V27 permet la synchronisation manuelle : exporte un fichier Backup depuis un appareil,
     puis importe-le sur l’autre. Aucun mot de passe Wafa Bourse n’est enregistré.
   </p>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -396,19 +399,23 @@ function importBackup(event){
 <div><h1>Mon Portfolio</h1><div class="sub">PEA • Dashboard personnel • MAD</div></div>
 <button onclick="window.print()">Exporter / Imprimer</button>
 </header>
+<div class="hint" style="margin:0 0 14px 0">
+  Source : relevé « Portefeuille titres » Wafa Bourse, daté du 03/10/2026.
+  Les valeurs affichées sont celles du relevé au moment de son impression.
+</div>
 
 <div class="cards">
-<div class="card"><div class="label">Valorisation</div><div class="num">— MAD</div></div>
-<div class="card"><div class="label">Cash disponible</div><div class="num">— MAD</div></div>
-<div class="card"><div class="label">+/- latent</div><div class="num red">— MAD</div></div>
-<div class="card"><div class="label">Performance</div><div class="num red">— %</div></div>
+<div class="card"><div class="label">Valorisation</div><div class="num">7 307,43 MAD</div></div>
+<div class="card"><div class="label">Cash disponible</div><div class="num">138,11 MAD</div></div>
+<div class="card"><div class="label">+/- latent</div><div class="num red">-477,17 MAD</div></div>
+<div class="card"><div class="label">Performance</div><div class="num red">-6,13 %</div></div>
 </div>
 
 <div class="grid section">
 <div class="card">
 <h2>📈 Évolution du portefeuille</h2>
 <canvas id="chart"></canvas>
-<div class="hint">Historique à compléter avec les anciennes valorisations Wafa Bourse. Le point actuel est — MAD.</div>
+<div class="hint">Point actuel du relevé Wafa Bourse du 03/10/2026 : 7 307,43 MAD. Ajoute d’anciens snapshots pour construire l’historique.</div>
 </div>
 
 <div class="card">
@@ -432,11 +439,11 @@ function importBackup(event){
 <table>
 <thead><tr><th>Valeur</th><th>Qté</th><th>CMP</th><th>Cours/VL</th><th>Valorisation</th><th>+/-</th></tr></thead>
 <tbody>
-<tr><td>Position à importer</td><td>0,565</td><td>1 415,73</td><td>1 300,61</td><td>734,84</td><td class="red">-65,04</td></tr>
-<tr><td>Position à importer</td><td>1,777</td><td>1 124,96</td><td>1 043,54</td><td>1 854,37</td><td class="red">-144,68</td></tr>
-<tr><td>Position à importer</td><td>1</td><td>945,73</td><td>879,10</td><td>879,10</td><td class="red">-66,63</td></tr>
-<tr><td>Position à importer</td><td>2</td><td>1 420,02</td><td>1 370,00</td><td>2 740,00</td><td class="red">-100,04</td></tr>
-<tr><td>Position à importer</td><td>7,538</td><td>159,18</td><td>145,81</td><td>1 099,12</td><td class="red">-100,78</td></tr>
+<tr><td>ATTIJARI AL MOUCHARAKA</td><td>0,565</td><td>1 415,73</td><td>1 300,61</td><td>734,84</td><td class="red">-65,04</td></tr>
+<tr><td>ATTIJARI DIVIDEND FUND</td><td>1,777</td><td>1 124,96</td><td>1 043,54</td><td>1 854,37</td><td class="red">-144,68</td></tr>
+<tr><td>ATTIJARI ACTIONS</td><td>1</td><td>945,73</td><td>879,10</td><td>879,10</td><td class="red">-66,63</td></tr>
+<tr><td>TOTALENERGIES</td><td>2</td><td>1 420,02</td><td>1 370,00</td><td>2 740,00</td><td class="red">-100,04</td></tr>
+<tr><td>WG LOW VOLATILITY FACTOR FUND</td><td>7,538</td><td>159,18</td><td>145,81</td><td>1 099,12</td><td class="red">-100,78</td></tr>
 </tbody>
 </table>
 </div>
@@ -445,11 +452,11 @@ function importBackup(event){
 <div class="card"><h2>🎯 Objectif d'allocation</h2>
 <div class="item"><span>Actions</span><b>2 740,00 MAD</b></div>
 <div class="item"><span>OPCVM</span><b>4 567,43 MAD</b></div>
-<div class="item"><span>Cash</span><b>— MAD</b></div>
+<div class="item"><span>Cash</span><b>138,11 MAD</b></div>
 <div class="item"><span>Total des avoirs</span><b>7 445,54 MAD</b></div>
 </div>
 <div class="card"><h2>🧾 Résumé</h2>
-<div class="item"><span>+/- latentes</span><b class="red">— MAD</b></div>
+<div class="item"><span>+/- latentes</span><b class="red">-477,17 MAD</b></div>
 <div class="item"><span>+/- réalisées</span><b class="red">-33,25 MAD</b></div>
 <div class="item"><span>+/- total</span><b class="red">-510,42 MAD</b></div>
 <div class="item"><span>Op. en cours</span><b>0,00 MAD</b></div>
@@ -567,7 +574,7 @@ function importBackup(event){
 <div class="card">
 <div class="label">Dernière mise à jour</div>
 <div class="num">03/10/2026</div>
-<div class="hint">Données saisies depuis ta capture Wafa Bourse.</div>
+<div class="hint">Données intégrées depuis le relevé Wafa Bourse du 03/10/2026.</div>
 </div>
 </div>
 </div>
@@ -617,7 +624,7 @@ function importBackup(event){
 <table>
 <thead><tr><th>#</th><th>Date</th><th>Opération</th><th>Valeur</th><th>Montant</th></tr></thead>
 <tbody>
-<tr><td>1</td><td>25/09/2026</td><td>ACHAT</td><td>Position à importer MARK</td><td>À renseigner</td></tr>
+<tr><td>1</td><td>25/09/2026</td><td>ACHAT</td><td>TOTALENERGIES</td><td>À renseigner</td></tr>
 <tr><td>2</td><td>23/09/2026</td><td>VENTE</td><td>AKDITAL</td><td>À renseigner</td></tr>
 <tr><td>3</td><td>23/09/2026</td><td>VENTE</td><td>CIH</td><td>À renseigner</td></tr>
 <tr><td>4</td><td>21/09/2026</td><td>Crédit</td><td>VIR.WEB RECU DE JAJA</td><td>À renseigner</td></tr>
@@ -708,14 +715,14 @@ Montants calculés comme quantité × cours affiché. Ils sont des montants brut
 <div class="grid section">
 <div class="card">
 <h2>📦 État des titres après les opérations visibles</h2>
-<div class="item"><span>Position à importer</span><b class="green">2 actions achetées</b></div>
+<div class="item"><span>TOTALENERGIES</span><b class="green">2 actions achetées</b></div>
 <div class="item"><span>AKDITAL</span><b>2 actions vendues</b></div>
 <div class="item"><span>CIH</span><b>2 actions vendues</b></div>
 <div class="hint" style="margin-top:10px">Cet état est basé uniquement sur les 5 confirmations visibles. Il ne remplace pas l'état complet « Titres ».</div>
 </div>
 <div class="card">
 <h2>💡 Coût d'achat moyen des opérations</h2>
-<div class="item"><span>Position à importer</span><b>1 400,00 MAD</b></div>
+<div class="item"><span>TOTALENERGIES</span><b>1 400,00 MAD</b></div>
 <div class="item"><span>AKDITAL</span><b>1 122,00 MAD</b></div>
 <div class="item"><span>CIH</span><b>325,10 MAD</b></div>
 <div class="hint" style="margin-top:10px">Ces prix sont les cours des confirmations, hors frais.</div>
@@ -724,8 +731,8 @@ Montants calculés comme quantité × cours affiché. Ils sont des montants brut
 
 <div class="section card">
 <h2>🧠 Contrôle de cohérence</h2>
-<div class="item"><span>Valorisation affichée Wafa Bourse</span><b>— MAD</b></div>
-<div class="item"><span>Cash disponible</span><b>— MAD</b></div>
+<div class="item"><span>Valorisation affichée Wafa Bourse</span><b>7 307,43 MAD</b></div>
+<div class="item"><span>Cash disponible</span><b>138,11 MAD</b></div>
 <div class="item"><span>Opérations en cours</span><b>0,00 MAD</b></div>
 <div class="item"><span>+/- latent</span><b class="red">— MAD</b></div>
 <div class="item"><span>+/- réalisé</span><b class="red">-33,25 MAD</b></div>
@@ -954,11 +961,11 @@ document.getElementById('filterType').addEventListener('change',filterPositions)
 
 function exportCSV(){
  const rows=[['Valeur','Quantité','CMP','Cours/VL','Valorisation','+/-'],
- ['ATTIJARI AL…','0.565','1415.73','1300.61','734.84','-65.04'],
- ['ATTIJARI DIV…','1.777','1124.96','1043.54','1854.37','-144.68'],
- ['ATTIJARI AC…','1','945.73','879.10','879.10','-66.63'],
- ['TOTALENERG…','2','1420.02','1370.00','2740.00','-100.04'],
- ['WG LOW VOL…','7.538','159.18','145.81','1099.12','-100.78']];
+ ['ATTIJARI AL MOUCHARAKA','0.565','1415.73','1300.61','734.84','-65.04'],
+ ['ATTIJARI DIVIDEND FUND','1.777','1124.96','1043.54','1854.37','-144.68'],
+ ['ATTIJARI ACTIONS','1','945.73','879.10','879.10','-66.63'],
+ ['TOTALENERGIES','2','1420.02','1370.00','2740.00','-100.04'],
+ ['WG LOW VOLATILITY FACTOR FUND','7.538','159.18','145.81','1099.12','-100.78']];
  const csv=rows.map(r=>r.join(';')).join('\\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
@@ -1107,6 +1114,10 @@ function goalCalc(){
 
 document.getElementById('snapDate').value = new Date().toISOString().slice(0,10);
 let snapshots = JSON.parse(localStorage.getItem('portfolioSnapshots') || '[]');
+if(!snapshots.length){
+  snapshots = [{date:'2026-10-03', value:7307.43}];
+  localStorage.setItem('portfolioSnapshots', JSON.stringify(snapshots));
+}
 
 function renderSnapshots(){
  const body=document.getElementById('snapBody');
@@ -1211,7 +1222,7 @@ function parseWafaText(text,fileName){
 
 function exportBackup(){
  const data={
-   version:'V20',
+   version:'V27',
    portfolioId:document.getElementById('portfolioId').value,
    savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
    snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
@@ -1287,7 +1298,7 @@ if ('serviceWorker' in navigator) {
     }
     return {
       app: 'Mon Portfolio',
-      version: 'V23',
+      version: 'V27',
       exportedAt: new Date().toISOString(),
       localStorage: data
     };
@@ -1299,7 +1310,7 @@ if ('serviceWorker' in navigator) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'portfolio_backup_V23.json';
+    a.download = 'portfolio_backup_V27.json';
     a.click();
     URL.revokeObjectURL(url);
     status.textContent = '✅ Backup exporté. Envoie ce fichier à ton autre appareil.';
