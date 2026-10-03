@@ -1,0 +1,1329 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portfolio PEA — Dashboard V11</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
+function norm(v){
+ return String(v ?? '').trim().toLowerCase()
+   .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function importWafaFile(){
+ const file=document.getElementById('excelFile').files[0];
+ const msg=document.getElementById('importMsg');
+ if(!file){msg.innerHTML='<span class="red">Choisis d’abord un fichier Excel ou CSV.</span>';return;}
+ if(typeof XLSX==='undefined'){
+   msg.innerHTML='<span class="red">Le module Excel n’est pas disponible. Utilise un CSV ou ouvre cette page avec Internet activé.</span>';
+   return;
+ }
+ const reader=new FileReader();
+ reader.onload=function(e){
+   try{
+     const wb=XLSX.read(e.target.result,{type:'array'});
+     const ws=wb.Sheets[wb.SheetNames[0]];
+     const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+     if(data.length<2){throw new Error('Fichier vide');}
+     const headers=data[0].map(norm);
+     const find=(keys)=>{
+       for(const k of keys){
+         const i=headers.findIndex(h=>h.includes(k));
+         if(i>=0)return i;
+       }
+       return -1;
+     };
+     const iName=find(['valeur','titre','nom']);
+     const iQty=find(['qte','quantite','quantite']);
+     const iCmp=find(['cmp']);
+     const iCourse=find(['cours','vl']);
+     const iVal=find(['valorisation','valeur de marche']);
+     const body=document.querySelector('table:first-of-type tbody');
+     if(!body) throw new Error('Tableau des positions introuvable');
+     body.innerHTML='';
+     let count=0;
+     data.slice(1).forEach(r=>{
+       if(!r.some(x=>String(x).trim())) return;
+       const name=iName>=0?r[iName]:'';
+       if(!name) return;
+       const qty=iQty>=0?r[iQty]:'';
+       const cmp=iCmp>=0?r[iCmp]:'';
+       const course=iCourse>=0?r[iCourse]:'';
+       const val=iVal>=0?r[iVal]:'';
+       let pl='';
+       if(Number(qty)&&Number(cmp)&&Number(course))
+         pl=(Number(qty)*(Number(course)-Number(cmp))).toFixed(2);
+       const tr=document.createElement('tr');
+       tr.innerHTML='<td>'+name+'</td><td>'+qty+'</td><td>'+cmp+
+         '</td><td>'+course+'</td><td>'+val+'</td><td class="'+(Number(pl)<0?'red':'green')+'">'+pl+'</td>';
+       body.appendChild(tr); count++;
+     });
+     msg.innerHTML='<span class="green">'+count+' position(s) importée(s) depuis '+file.name+'.</span>';
+   }catch(err){
+     msg.innerHTML='<span class="red">Impossible de lire ce fichier : '+err.message+'</span>';
+   }
+ };
+ reader.readAsArrayBuffer(file);
+}
+
+
+function breakEven(){
+ const cmp=parseFloat(document.getElementById('beCmp').value)||0;
+ const fees=parseFloat(document.getElementById('beFees').value)||0;
+ const gain=parseFloat(document.getElementById('beGain').value)||0;
+ const qty=parseFloat(document.getElementById('beQty').value)||0;
+ const target=cmp*(1+gain/100)/(1-fees/100);
+ document.getElementById('beResult').innerHTML=
+ '<div class="item"><span>Prix de vente cible</span><b>'+target.toFixed(2)+' MAD</b></div>'+
+ '<div class="item"><span>Montant brut</span><b>'+(target*qty).toFixed(2)+' MAD</b></div>';
+}
+
+
+function goalCalc(){
+ const current=parseFloat(document.getElementById('goalCurrent').value)||0;
+ const target=parseFloat(document.getElementById('goalTarget').value)||0;
+ const monthly=parseFloat(document.getElementById('goalMonthly').value)||0;
+ const annual=parseFloat(document.getElementById('goalRate').value)||0;
+ let balance=current, months=0;
+ if(target<=current){
+   document.getElementById('goalResult').innerHTML=
+    '<div class="item"><span>Écart à l’objectif</span><b class="green">Objectif déjà atteint</b></div>';
+   return;
+ }
+ if(monthly<=0 && annual<=0){
+   document.getElementById('goalResult').innerHTML=
+    '<div class="item"><span>Écart à l’objectif</span><b>'+(target-current).toFixed(2)+' MAD</b></div>'+
+    '<div class="item"><span>Durée estimée</span><b>Apport mensuel requis</b></div>';
+   return;
+ }
+ const r=Math.pow(1+annual/100,1/12)-1;
+ while(balance<target && months<600){
+   balance=balance*(1+r)+monthly;
+   months++;
+ }
+ document.getElementById('goalResult').innerHTML=
+  '<div class="item"><span>Écart à l’objectif</span><b>'+(target-current).toFixed(2)+' MAD</b></div>'+
+  '<div class="item"><span>Durée estimée</span><b>'+(months<600?months+' mois':'Plus de 50 ans')+'</b></div>';
+}
+
+
+document.getElementById('snapDate').value = new Date().toISOString().slice(0,10);
+let snapshots = JSON.parse(localStorage.getItem('portfolioSnapshots') || '[]');
+
+function renderSnapshots(){
+ const body=document.getElementById('snapBody');
+ body.innerHTML='';
+ snapshots.sort((a,b)=>a.date.localeCompare(b.date));
+ snapshots.forEach((s,i)=>{
+   const prev=i>0?snapshots[i-1].value:null;
+   const diff=prev===null?null:s.value-prev;
+   const pct=prev===null?null:(diff/prev*100);
+   const cls=diff===null?'':(diff>=0?'green':'red');
+   const tr=document.createElement('tr');
+   tr.innerHTML='<td>'+s.date+'</td><td>'+s.value.toFixed(2)+' MAD</td>'+
+     '<td class="'+cls+'">'+(diff===null?'—':(diff>=0?'+':'')+diff.toFixed(2)+' MAD')+'</td>'+
+     '<td class="'+cls+'">'+(pct===null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>';
+   body.appendChild(tr);
+ });
+}
+function addSnapshot(){
+ const date=document.getElementById('snapDate').value;
+ const value=parseFloat(document.getElementById('snapValue').value);
+ const msg=document.getElementById('snapResult');
+ if(!date || !value){msg.innerHTML='<span class="red">Remplis la date et la valorisation.</span>';return;}
+ snapshots.push({date,value});
+ localStorage.setItem('portfolioSnapshots',JSON.stringify(snapshots));
+ renderSnapshots();
+ msg.innerHTML='<span class="green">Snapshot enregistré.</span>';
+}
+renderSnapshots();
+
+
+let savedPositions = JSON.parse(localStorage.getItem('savedPositions') || '[]');
+function renderPositions(){
+ const body=document.getElementById('savedPosBody');
+ body.innerHTML='';
+ savedPositions.forEach((p,i)=>{
+   const market=p.qty*p.price, pl=p.qty*(p.price-p.cmp);
+   const tr=document.createElement('tr');
+   tr.innerHTML='<td>'+p.name+'</td><td>'+p.qty+'</td><td>'+p.cmp.toFixed(2)+'</td><td>'+
+     p.price.toFixed(2)+'</td><td>'+market.toFixed(2)+' MAD</td><td class="'+
+     (pl<0?'red':'green')+'">'+(pl>=0?'+':'')+pl.toFixed(2)+' MAD</td>';
+   body.appendChild(tr);
+ });
+}
+function savePosition(){
+ const name=document.getElementById('posName').value.trim();
+ const qty=parseFloat(document.getElementById('posQty').value);
+ const cmp=parseFloat(document.getElementById('posCmp').value);
+ const price=parseFloat(document.getElementById('posPrice').value);
+ const msg=document.getElementById('posMsg');
+ if(!name || !qty || !cmp || !price){
+   msg.innerHTML='<span class="red">Remplis tous les champs.</span>'; return;
+ }
+ const idx=savedPositions.findIndex(x=>x.name.toLowerCase()===name.toLowerCase());
+ const item={name,qty,cmp,price};
+ if(idx>=0) savedPositions[idx]=item; else savedPositions.push(item);
+ localStorage.setItem('savedPositions',JSON.stringify(savedPositions));
+ renderPositions();
+ msg.innerHTML='<span class="green">Position enregistrée ✓</span>';
+}
+renderPositions();
+
+
+async function importWafa(){
+ const file=document.getElementById('wafaImport').files[0];
+ const msg=document.getElementById('wafaImportMsg');
+ if(!file){msg.innerHTML='<span class="red">Choisis un fichier PDF ou CSV.</span>';return;}
+ try{
+   let text='';
+   if(file.name.toLowerCase().endsWith('.pdf')){
+     if(typeof pdfjsLib==='undefined') throw new Error('Le lecteur PDF n’est pas disponible. Active Internet puis réessaie.');
+     const buf=await file.arrayBuffer();
+     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+     for(let p=1;p<=pdf.numPages;p++){
+       const page=await pdf.getPage(p);
+       const content=await page.getTextContent();
+       text += content.items.map(x=>x.str).join(' ')+' ';
+     }
+   }else{text=await file.text();}
+   parseWafaText(text,file.name);
+ }catch(e){msg.innerHTML='<span class="red">Import impossible : '+e.message+'</span>';}
+}
+function num(s){return parseFloat(String(s).replace(/\s/g,'').replace(',','.').replace(/%$/,''));}
+function parseWafaText(text,fileName){
+ const msg=document.getElementById('wafaImportMsg');
+ const names=['Position à importer','Position à importer','Position à importer','Position à importer','Position à importer'];
+ const patterns=[
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i
+ ];
+ const rows=[];
+ patterns.forEach((re,i)=>{const m=text.match(re);if(m)rows.push({name:names[i],qty:m[1],course:m[2],value:m[3],cmp:m[4],perf:m[5],pl:m[6],weight:m[7]});});
+ if(!rows.length){msg.innerHTML='<span class="red">Aucune position reconnue. Utilise le PDF « Portefeuille titres » ou un CSV avec Valeur/Quantité/Cours/VL/Montant/PRMP.</span>';return;}
+ const body=document.querySelector('table:first-of-type tbody');
+ if(body) body.innerHTML=rows.map(r=>'<tr><td>'+r.name+'</td><td>'+r.qty+'</td><td>'+r.cmp+'</td><td>'+r.course+'</td><td>'+r.value+'</td><td class="'+(r.pl.includes('-')?'red':'green')+'">'+r.pl+'</td></tr>').join('');
+ localStorage.setItem('wafaLastImport',JSON.stringify({source:fileName,importedAt:new Date().toISOString(),rows:rows}));
+ msg.innerHTML='<span class="green">'+rows.length+' positions importées depuis '+fileName+' ✓</span>';
+}
+
+
+function exportBackup(){
+ const data={
+   version:'V20',
+   portfolioId:document.getElementById('portfolioId').value,
+   savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
+   snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
+   wafaLastImport:JSON.parse(localStorage.getItem('wafaLastImport')||'null'),
+   exportedAt:new Date().toISOString()
+ };
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ a.download='mon_portfolio_backup.json';
+ a.click();
+ URL.revokeObjectURL(a.href);
+ document.getElementById('backupMsg').innerHTML='<span class="green">Backup exporté ✓</span>';
+}
+function importBackup(event){
+ const file=event.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=function(){
+  try{
+   const d=JSON.parse(reader.result);
+   if(d.savedPositions)localStorage.setItem('savedPositions',JSON.stringify(d.savedPositions));
+   if(d.snapshots)localStorage.setItem('portfolioSnapshots',JSON.stringify(d.snapshots));
+   if(d.wafaLastImport)localStorage.setItem('wafaLastImport',JSON.stringify(d.wafaLastImport));
+   if(d.portfolioId)document.getElementById('portfolioId').value=d.portfolioId;
+   document.getElementById('backupMsg').innerHTML='<span class="green">Backup importé ✓</span>';
+   if(typeof renderPositions==='function')renderPositions();
+   if(typeof renderSnapshots==='function')renderSnapshots();
+  }catch(e){
+   document.getElementById('backupMsg').innerHTML='<span class="red">Backup invalide.</span>';
+  }
+ };
+ reader.readAsText(file);
+}
+
+</script>
+<style>
+:root{--bg:#070a0f;--card:#111820;--line:#27323d;--txt:#f4f7fa;--muted:#9ba7b4;--green:#18c5ad;--red:#ff646b;--gold:#f0ad18}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+.wrap{max-width:1180px;margin:auto;padding:22px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+h1{margin:0;font-size:29px}h2{font-size:18px;margin:0 0 13px}.sub,.hint{color:var(--muted);font-size:12px;margin-top:5px}
+button{background:var(--green);border:0;border-radius:9px;padding:11px 15px;font-weight:800;cursor:pointer}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:17px}
+.label{color:var(--muted);font-size:11px;text-transform:uppercase}.num{font-size:23px;font-weight:850;margin-top:7px}.red{color:var(--red)}.green{color:var(--green)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.section{margin-top:22px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{padding:12px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted);font-size:11px;text-transform:uppercase}tr:last-child td{border:0}
+input{width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt);font-size:15px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.result{margin-top:14px;padding:14px;background:#0b1117;border-radius:9px}
+.item{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}.item:last-child{border:0}
+canvas{width:100%;height:230px;background:#0b1016;border-radius:10px}
+.note{color:var(--muted);font-size:12px;line-height:1.5;margin-top:16px}
+@media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.wrap{padding:14px}.form{grid-template-columns:1fr}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js">
+async function importWafa(){
+ const file=document.getElementById('wafaImport').files[0];
+ const msg=document.getElementById('wafaImportMsg');
+ if(!file){msg.innerHTML='<span class="red">Choisis un fichier PDF ou CSV.</span>';return;}
+ try{
+   let text='';
+   if(file.name.toLowerCase().endsWith('.pdf')){
+     if(typeof pdfjsLib==='undefined') throw new Error('Le lecteur PDF n’est pas disponible. Active Internet puis réessaie.');
+     const buf=await file.arrayBuffer();
+     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+     for(let p=1;p<=pdf.numPages;p++){
+       const page=await pdf.getPage(p);
+       const content=await page.getTextContent();
+       text += content.items.map(x=>x.str).join(' ')+' ';
+     }
+   }else{text=await file.text();}
+   parseWafaText(text,file.name);
+ }catch(e){msg.innerHTML='<span class="red">Import impossible : '+e.message+'</span>';}
+}
+function num(s){return parseFloat(String(s).replace(/\s/g,'').replace(',','.').replace(/%$/,''));}
+function parseWafaText(text,fileName){
+ const msg=document.getElementById('wafaImportMsg');
+ const names=['Position à importer','Position à importer','Position à importer','Position à importer','Position à importer'];
+ const patterns=[
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i
+ ];
+ const rows=[];
+ patterns.forEach((re,i)=>{const m=text.match(re);if(m)rows.push({name:names[i],qty:m[1],course:m[2],value:m[3],cmp:m[4],perf:m[5],pl:m[6],weight:m[7]});});
+ if(!rows.length){msg.innerHTML='<span class="red">Aucune position reconnue. Utilise le PDF « Portefeuille titres » ou un CSV avec Valeur/Quantité/Cours/VL/Montant/PRMP.</span>';return;}
+ const body=document.querySelector('table:first-of-type tbody');
+ if(body) body.innerHTML=rows.map(r=>'<tr><td>'+r.name+'</td><td>'+r.qty+'</td><td>'+r.cmp+'</td><td>'+r.course+'</td><td>'+r.value+'</td><td class="'+(r.pl.includes('-')?'red':'green')+'">'+r.pl+'</td></tr>').join('');
+ localStorage.setItem('wafaLastImport',JSON.stringify({source:fileName,importedAt:new Date().toISOString(),rows:rows}));
+ msg.innerHTML='<span class="green">'+rows.length+' positions importées depuis '+fileName+' ✓</span>';
+}
+
+
+function exportBackup(){
+ const data={
+   version:'V20',
+   portfolioId:document.getElementById('portfolioId').value,
+   savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
+   snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
+   wafaLastImport:JSON.parse(localStorage.getItem('wafaLastImport')||'null'),
+   exportedAt:new Date().toISOString()
+ };
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ a.download='mon_portfolio_backup.json';
+ a.click();
+ URL.revokeObjectURL(a.href);
+ document.getElementById('backupMsg').innerHTML='<span class="green">Backup exporté ✓</span>';
+}
+function importBackup(event){
+ const file=event.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=function(){
+  try{
+   const d=JSON.parse(reader.result);
+   if(d.savedPositions)localStorage.setItem('savedPositions',JSON.stringify(d.savedPositions));
+   if(d.snapshots)localStorage.setItem('portfolioSnapshots',JSON.stringify(d.snapshots));
+   if(d.wafaLastImport)localStorage.setItem('wafaLastImport',JSON.stringify(d.wafaLastImport));
+   if(d.portfolioId)document.getElementById('portfolioId').value=d.portfolioId;
+   document.getElementById('backupMsg').innerHTML='<span class="green">Backup importé ✓</span>';
+   if(typeof renderPositions==='function')renderPositions();
+   if(typeof renderSnapshots==='function')renderSnapshots();
+  }catch(e){
+   document.getElementById('backupMsg').innerHTML='<span class="red">Backup invalide.</span>';
+  }
+ };
+ reader.readAsText(file);
+}
+
+</script>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mon Portfolio">
+<style>
+.install-card{margin:16px 0;padding:16px;border:1px solid #d1d5db;border-radius:14px;background:#f9fafb}
+.install-card button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer}
+</style>
+
+</head>
+<body>
+<div class="install-card" style="border-left:4px solid #10b981">
+  <strong>🔐 Mode privé</strong>
+  <p style="margin:8px 0">
+    Cette version ne contient pas les données personnelles de ton portefeuille.
+    Utilise <b>Importer Backup</b> pour restaurer tes données sur ton appareil.
+  </p>
+</div>
+
+<div class="install-card" id="syncPanel">
+  <strong>☁️ Synchronisation entre appareils</strong>
+  <p style="margin:8px 0">
+    V26 prépare la synchronisation : exporte un fichier Backup depuis un appareil,
+    puis importe-le sur l’autre. Aucun mot de passe Wafa Bourse n’est enregistré.
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button id="syncExportBtn">⬇️ Exporter Backup</button>
+    <button id="syncImportBtn">⬆️ Importer Backup</button>
+    <input id="syncFileInput" type="file" accept=".json" style="display:none">
+  </div>
+  <small id="syncStatus" style="display:block;margin-top:8px;color:#6b7280"></small>
+</div>
+
+<div class="install-card">
+  <strong>📱 Application Mon Portfolio</strong>
+  <p style="margin:8px 0">Installe-la sur iPhone, Android ou ordinateur pour l’ouvrir comme une application.</p>
+  <button id="installBtn" style="display:none">Installer l’application</button>
+  <span id="installHint" style="font-size:13px;color:#6b7280">
+    Sur iPhone : Partager → Sur l’écran d’accueil. Sur ordinateur : utilise l’icône d’installation du navigateur si elle apparaît.
+  </span>
+</div>
+
+<div class="wrap">
+<header>
+<div><h1>Mon Portfolio</h1><div class="sub">PEA • Dashboard personnel • MAD</div></div>
+<button onclick="window.print()">Exporter / Imprimer</button>
+</header>
+
+<div class="cards">
+<div class="card"><div class="label">Valorisation</div><div class="num">— MAD</div></div>
+<div class="card"><div class="label">Cash disponible</div><div class="num">— MAD</div></div>
+<div class="card"><div class="label">+/- latent</div><div class="num red">— MAD</div></div>
+<div class="card"><div class="label">Performance</div><div class="num red">— %</div></div>
+</div>
+
+<div class="grid section">
+<div class="card">
+<h2>📈 Évolution du portefeuille</h2>
+<canvas id="chart"></canvas>
+<div class="hint">Historique à compléter avec les anciennes valorisations Wafa Bourse. Le point actuel est — MAD.</div>
+</div>
+
+<div class="card">
+<h2>🧮 Calculateur de nouvel achat</h2>
+<div class="form">
+<div><div class="label">CMP actuel</div><input id="cmp" type="number" value="1370" step="0.01"></div>
+<div><div class="label">Quantité actuelle</div><input id="qty" type="number" value="2" step="0.001"></div>
+<div><div class="label">Nouveau prix</div><input id="price" type="number" value="1350" step="0.01"></div>
+<div><div class="label">Nouvelle quantité</div><input id="newqty" type="number" value="1" step="0.001"></div>
+</div>
+<button style="margin-top:11px" onclick="calc()">Calculer</button>
+<div class="result" id="result">
+<div class="item"><span>Nouveau CMP</span><b>—</b></div>
+<div class="item"><span>Montant du nouvel achat</span><b>—</b></div>
+</div>
+</div>
+</div>
+
+<div class="section card">
+<h2>📊 Positions</h2>
+<table>
+<thead><tr><th>Valeur</th><th>Qté</th><th>CMP</th><th>Cours/VL</th><th>Valorisation</th><th>+/-</th></tr></thead>
+<tbody>
+<tr><td>Position à importer</td><td>0,565</td><td>1 415,73</td><td>1 300,61</td><td>734,84</td><td class="red">-65,04</td></tr>
+<tr><td>Position à importer</td><td>1,777</td><td>1 124,96</td><td>1 043,54</td><td>1 854,37</td><td class="red">-144,68</td></tr>
+<tr><td>Position à importer</td><td>1</td><td>945,73</td><td>879,10</td><td>879,10</td><td class="red">-66,63</td></tr>
+<tr><td>Position à importer</td><td>2</td><td>1 420,02</td><td>1 370,00</td><td>2 740,00</td><td class="red">-100,04</td></tr>
+<tr><td>Position à importer</td><td>7,538</td><td>159,18</td><td>145,81</td><td>1 099,12</td><td class="red">-100,78</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="grid section">
+<div class="card"><h2>🎯 Objectif d'allocation</h2>
+<div class="item"><span>Actions</span><b>2 740,00 MAD</b></div>
+<div class="item"><span>OPCVM</span><b>4 567,43 MAD</b></div>
+<div class="item"><span>Cash</span><b>— MAD</b></div>
+<div class="item"><span>Total des avoirs</span><b>7 445,54 MAD</b></div>
+</div>
+<div class="card"><h2>🧾 Résumé</h2>
+<div class="item"><span>+/- latentes</span><b class="red">— MAD</b></div>
+<div class="item"><span>+/- réalisées</span><b class="red">-33,25 MAD</b></div>
+<div class="item"><span>+/- total</span><b class="red">-510,42 MAD</b></div>
+<div class="item"><span>Op. en cours</span><b>0,00 MAD</b></div>
+</div>
+</div>
+
+
+<div class="grid section">
+<div class="card">
+<h2>💸 Dividendes</h2>
+<div class="item"><span>Dividendes reçus</span><b>À renseigner</b></div>
+<div class="item"><span>Dividendes attendus</span><b>À renseigner</b></div>
+<div class="item"><span>Rendement dividende</span><b>À calculer</b></div>
+<div class="item"><span>Prochaine échéance</span><b>—</b></div>
+</div>
+
+<div class="card">
+<h2>🔔 Alertes personnelles</h2>
+<div class="item"><span>Seuil de perte par position</span><b>-10%</b></div>
+<div class="item"><span>Cash minimum</span><b>À définir</b></div>
+<div class="item"><span>Poids max d'une position</span><b>À définir</b></div>
+<div class="item"><span>Statut</span><b class="green">Prêt à configurer</b></div>
+</div>
+</div>
+
+<div class="section card">
+<h2>🎯 Allocation cible</h2>
+<div class="form">
+<div><div class="label">Actions cible (%)</div><input id="targetA" type="number" value="40" min="0" max="100"></div>
+<div><div class="label">OPCVM cible (%)</div><input id="targetO" type="number" value="55" min="0" max="100"></div>
+<div><div class="label">Cash cible (%)</div><input id="targetC" type="number" value="5" min="0" max="100"></div>
+</div>
+<button style="margin-top:11px" onclick="alloc()">Calculer les écarts</button>
+<div class="result" id="allocResult">
+<div class="item"><span>Actions</span><b>—</b></div>
+<div class="item"><span>OPCVM</span><b>—</b></div>
+<div class="item"><span>Cash</span><b>—</b></div>
+</div>
+</div>
+
+
+
+<div class="section card">
+<h2>🔎 Recherche & filtres</h2>
+<div class="form">
+<div><div class="label">Rechercher une valeur</div><input id="searchPos" placeholder="Ex. TOTALENERG"></div>
+<div><div class="label">Filtrer</div>
+<select id="filterType" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
+<option value="all">Toutes les positions</option><option value="negative">Positions en perte</option><option value="positive">Positions en gain</option>
+</select></div>
+</div>
+</div>
+
+<div class="section card">
+<h2>📌 Watchlist personnelle</h2>
+<div class="form">
+<div><div class="label">Ajouter un ticker</div><input id="watchName" placeholder="Ex. CIH"></div>
+<div><div class="label">Prix cible</div><input id="watchPrice" type="number" step="0.01" placeholder="Ex. 320"></div>
+</div>
+<button style="margin-top:11px" onclick="addWatch()">Ajouter à la watchlist</button>
+<div id="watchList" style="margin-top:12px"></div>
+</div>
+
+<div class="section card">
+<h2>➕ Ajouter une opération</h2>
+<div class="form">
+<div><div class="label">Type</div>
+<select id="opType" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
+<option>Achat</option><option>Vente</option>
+</select></div>
+<div><div class="label">Valeur</div><input id="opName" placeholder="Ex. TOTALENERG…"></div>
+<div><div class="label">Quantité</div><input id="opQty" type="number" min="0" step="0.001"></div>
+<div><div class="label">Prix unitaire</div><input id="opPrice" type="number" min="0" step="0.01"></div>
+<div><div class="label">Frais</div><input id="opFees" type="number" min="0" step="0.01" value="0"></div>
+<div><div class="label">Date</div><input id="opDate" type="date"></div>
+</div>
+<button style="margin-top:11px" onclick="addOperation()">Ajouter au journal</button>
+<div class="hint" id="opMsg" style="margin-top:10px"></div>
+</div>
+
+<div class="section card">
+<h2>🧾 Journal des opérations</h2>
+<table>
+<thead><tr><th>Date</th><th>Type</th><th>Valeur</th><th>Qté</th><th>Prix</th><th>Montant</th></tr></thead>
+<tbody id="journalBody"><tr><td>03/10/2026</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr></tbody>
+</table>
+<div class="hint" style="margin-top:10px">Ajoute ici tes achats/ventes pour garder un historique indépendant de Wafa Bourse.</div>
+</div>
+
+
+<div class="section card">
+<h2>🏆 Top & Risque</h2>
+<div class="grid">
+<div class="card">
+<div class="label">Plus grosse position</div>
+<div class="num">TOTALENERG…</div>
+<div class="hint">2 740,00 MAD • ~37,5% des avoirs</div>
+</div>
+<div class="card">
+<div class="label">Plus forte perte latente</div>
+<div class="num red">ATTIJARI DIV…</div>
+<div class="hint">≈ -144,68 MAD sur la ligne visible</div>
+</div>
+</div>
+</div>
+
+<div class="section card">
+<h2>📅 Calendrier du portefeuille</h2>
+<div class="grid">
+<div class="card">
+<div class="label">Prochaine revue</div>
+<div class="num">À définir</div>
+<div class="hint">Choisis une date pour revoir les allocations et les performances.</div>
+</div>
+<div class="card">
+<div class="label">Dernière mise à jour</div>
+<div class="num">03/10/2026</div>
+<div class="hint">Données saisies depuis ta capture Wafa Bourse.</div>
+</div>
+</div>
+</div>
+
+<div class="section card">
+<h2>📤 Export</h2>
+<div class="form">
+<button onclick="exportCSV()">Exporter les positions CSV</button>
+<button onclick="window.print()">Imprimer / PDF</button>
+</div>
+<div class="hint" id="exportMsg" style="margin-top:10px"></div>
+</div>
+
+
+<div class="section card">
+<h2>💾 Sauvegarde locale</h2>
+<div class="grid">
+<div class="card">
+<div class="label">Statut</div>
+<div class="num green" id="saveStatus">Prêt</div>
+<div class="hint">Tes opérations, watchlist et objectifs peuvent être conservés dans ce navigateur.</div>
+</div>
+<div class="card">
+<div class="label">Actions</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+<button onclick="saveData()">Sauvegarder</button>
+<button onclick="loadData()">Restaurer</button>
+<button onclick="clearData()" style="background:#ff646b">Effacer</button>
+</div>
+</div>
+</div>
+</div>
+
+<div class="section card">
+<h2>⚙️ Paramètres rapides</h2>
+<div class="form">
+<div><div class="label">Seuil d'alerte perte (%)</div><input id="lossAlert" type="number" value="-10" step="0.5"></div>
+<div><div class="label">Cash minimum (MAD)</div><input id="cashMin" type="number" value="500" step="10"></div>
+</div>
+<button style="margin-top:11px" onclick="checkAlerts()">Vérifier les alertes</button>
+<div class="result" id="alertResult" style="margin-top:12px"></div>
+</div>
+
+
+<div class="section card">
+<h2>📚 Historique Wafa Bourse</h2>
+<table>
+<thead><tr><th>#</th><th>Date</th><th>Opération</th><th>Valeur</th><th>Montant</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>25/09/2026</td><td>ACHAT</td><td>Position à importer MARK</td><td>À renseigner</td></tr>
+<tr><td>2</td><td>23/09/2026</td><td>VENTE</td><td>AKDITAL</td><td>À renseigner</td></tr>
+<tr><td>3</td><td>23/09/2026</td><td>VENTE</td><td>CIH</td><td>À renseigner</td></tr>
+<tr><td>4</td><td>21/09/2026</td><td>Crédit</td><td>VIR.WEB RECU DE JAJA</td><td>À renseigner</td></tr>
+<tr><td>5</td><td>21/09/2026</td><td>Crédit</td><td>VIR.WEB RECU DE JAJA</td><td>À renseigner</td></tr>
+<tr><td>6</td><td>21/09/2026</td><td>ACHAT</td><td>AKDITAL</td><td>À renseigner</td></tr>
+<tr><td>7</td><td>21/09/2026</td><td>ACHAT</td><td>CIH</td><td>À renseigner</td></tr>
+<tr><td>8</td><td>12/09/2026</td><td>Débit</td><td>Frais Transactions OPCV…</td><td>À renseigner</td></tr>
+<tr><td>9</td><td>12/09/2026</td><td>Débit</td><td>Frais Transactions OPCV…</td><td>À renseigner</td></tr>
+<tr><td>10</td><td>11/09/2026</td><td>Achat OPCVM</td><td>FCP ATTIJARI DIVID…</td><td>À renseigner</td></tr>
+</tbody>
+</table>
+<div class="hint" style="margin-top:10px">Les montants ne sont pas visibles dans cette capture, donc ils sont laissés volontairement à « À renseigner ».</div>
+</div>
+
+
+<div class="section card">
+<h2>🔄 Importer depuis Wafa Bourse</h2>
+<div class="hint">
+Télécharge d'abord ton fichier Excel depuis Wafa Bourse, puis sélectionne-le ici.
+Le dashboard lit le fichier localement : aucun identifiant ou mot de passe Wafa Bourse n'est demandé.
+</div>
+<div style="margin-top:12px">
+<input id="excelFile" type="file" accept=".xlsx,.xls,.csv"
+style="width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
+</div>
+<div style="margin-top:10px">
+<button onclick="importWafaFile()">Importer les positions</button>
+</div>
+<div id="importMsg" class="hint" style="margin-top:10px"></div>
+</div>
+
+
+<div class="section card">
+<h2>🧾 Fiscalité / TPCVM</h2>
+<div class="grid">
+<div class="card">
+<div class="label">AKDITAL</div>
+<div class="num red">-30,67 MAD</div>
+<div class="hint">TPCVM affichée : 0,00 MAD</div>
+</div>
+<div class="card">
+<div class="label">CIH</div>
+<div class="num red">-2,58 MAD</div>
+<div class="hint">TPCVM affichée : 0,00 MAD</div>
+</div>
+</div>
+<div class="item"><span>Total Actions — +/- Value</span><b class="red">-33,25 MAD</b></div>
+<div class="item"><span>Total OPCVM — +/- Value</span><b>0,00 MAD</b></div>
+<div class="item"><span>Total Général — +/- Value</span><b class="red">-33,25 MAD</b></div>
+<div class="item"><span>Total TPCVM</span><b>0,00 MAD</b></div>
+<div class="item"><span>Total Restitution</span><b>0,00 MAD</b></div>
+<div class="hint" style="margin-top:10px">D'après l'écran Fiscalité de Wafa Bourse du 03/10/2026. « Aucune donnée à afficher pour le moment » pour les restitutions.</div>
+</div>
+
+
+<div class="section card">
+<h2>✅ Avis de confirmation — Transactions</h2>
+<table>
+<thead><tr><th>Date</th><th>Valeur</th><th>Sens</th><th>Qté</th><th>Cours</th><th>Montant brut</th></tr></thead>
+<tbody>
+<tr><td>25/09/2026</td><td>Position à importer</td><td>Achat</td><td>2</td><td>1 400,00</td><td>2 800,00 MAD</td></tr>
+<tr><td>23/09/2026</td><td>AKDITAL</td><td>Vente</td><td>2</td><td>1 139,00</td><td>2 278,00 MAD</td></tr>
+<tr><td>23/09/2026</td><td>CIH</td><td>Vente</td><td>2</td><td>337,00</td><td>674,00 MAD</td></tr>
+<tr><td>21/09/2026</td><td>AKDITAL</td><td>Achat</td><td>2</td><td>1 122,00</td><td>2 244,00 MAD</td></tr>
+<tr><td>21/09/2026</td><td>CIH</td><td>Achat</td><td>2</td><td>325,10</td><td>650,20 MAD</td></tr>
+</tbody>
+</table>
+<div class="grid" style="margin-top:12px">
+<div class="card"><div class="label">Achats visibles</div><div class="num">5 694,20 MAD</div></div>
+<div class="card"><div class="label">Ventes visibles</div><div class="num">2 952,00 MAD</div></div>
+</div>
+<div class="hint" style="margin-top:10px">
+Montants calculés comme quantité × cours affiché. Ils sont des montants bruts et n'incluent pas les commissions/frais.
+</div>
+</div>
+
+
+<div class="section card">
+<h2>📊 Analyse des transactions</h2>
+<div class="cards">
+<div class="card"><div class="label">Achats bruts visibles</div><div class="num">5 694,20 MAD</div></div>
+<div class="card"><div class="label">Ventes brutes visibles</div><div class="num">2 952,00 MAD</div></div>
+<div class="card"><div class="label">Flux net visible</div><div class="num red">-2 742,20 MAD</div><div class="hint">Achats − ventes</div></div>
+<div class="card"><div class="label">P/L réalisé Wafa Bourse</div><div class="num red">-33,25 MAD</div></div>
+</div>
+</div>
+
+<div class="grid section">
+<div class="card">
+<h2>📦 État des titres après les opérations visibles</h2>
+<div class="item"><span>Position à importer</span><b class="green">2 actions achetées</b></div>
+<div class="item"><span>AKDITAL</span><b>2 actions vendues</b></div>
+<div class="item"><span>CIH</span><b>2 actions vendues</b></div>
+<div class="hint" style="margin-top:10px">Cet état est basé uniquement sur les 5 confirmations visibles. Il ne remplace pas l'état complet « Titres ».</div>
+</div>
+<div class="card">
+<h2>💡 Coût d'achat moyen des opérations</h2>
+<div class="item"><span>Position à importer</span><b>1 400,00 MAD</b></div>
+<div class="item"><span>AKDITAL</span><b>1 122,00 MAD</b></div>
+<div class="item"><span>CIH</span><b>325,10 MAD</b></div>
+<div class="hint" style="margin-top:10px">Ces prix sont les cours des confirmations, hors frais.</div>
+</div>
+</div>
+
+<div class="section card">
+<h2>🧠 Contrôle de cohérence</h2>
+<div class="item"><span>Valorisation affichée Wafa Bourse</span><b>— MAD</b></div>
+<div class="item"><span>Cash disponible</span><b>— MAD</b></div>
+<div class="item"><span>Opérations en cours</span><b>0,00 MAD</b></div>
+<div class="item"><span>+/- latent</span><b class="red">— MAD</b></div>
+<div class="item"><span>+/- réalisé</span><b class="red">-33,25 MAD</b></div>
+<div class="item"><span>+/- total</span><b class="red">-510,42 MAD</b></div>
+</div>
+
+
+<div class="section card">
+<h2>🧮 Calculateur de prix de vente</h2>
+<div class="form">
+<div><div class="label">CMP</div><input id="beCmp" type="number" step="0.01" placeholder="Ex. 1420.02"></div>
+<div><div class="label">Frais totaux (%)</div><input id="beFees" type="number" step="0.01" value="0"></div>
+<div><div class="label">Objectif de gain (%)</div><input id="beGain" type="number" step="0.1" value="0"></div>
+<div><div class="label">Quantité</div><input id="beQty" type="number" step="0.001" value="1"></div>
+</div>
+<button style="margin-top:11px" onclick="breakEven()">Calculer</button>
+<div class="result" id="beResult" style="margin-top:12px">
+<div class="item"><span>Prix de vente cible</span><b>—</b></div>
+<div class="item"><span>Montant brut</span><b>—</b></div>
+</div>
+<div class="hint" style="margin-top:10px">Calcul indicatif : il faut remplacer le taux de frais par le barème réel applicable à ton opération.</div>
+</div>
+
+<div class="grid section">
+<div class="card">
+<h2>🛡️ Concentration</h2>
+<div class="item"><span>Position à importer</span><b>≈ 37,5%</b></div>
+<div class="item"><span>OPCVM</span><b>≈ 61,3%</b></div>
+<div class="item"><span>Cash</span><b>≈ 1,9%</b></div>
+<div class="hint" style="margin-top:10px">Poids calculés à partir des valeurs visibles dans Wafa Bourse.</div>
+</div>
+<div class="card">
+<h2>📍 Points à surveiller</h2>
+<div class="item"><span>Performance portefeuille</span><b class="red">— %</b></div>
+<div class="item"><span>+/- latent</span><b class="red">— MAD</b></div>
+<div class="item"><span>+/- réalisé</span><b class="red">-33,25 MAD</b></div>
+<div class="item"><span>Cash disponible</span><b>— MAD</b></div>
+</div>
+</div>
+
+
+<div class="section card">
+<h2>🎯 Simulateur d'objectif</h2>
+<div class="form">
+<div><div class="label">Valeur actuelle du portefeuille</div><input id="goalCurrent" type="number" value="7307.43" step="0.01"></div>
+<div><div class="label">Objectif (MAD)</div><input id="goalTarget" type="number" value="10000" step="100"></div>
+<div><div class="label">Apport mensuel</div><input id="goalMonthly" type="number" value="2500" step="100"></div>
+<div><div class="label">Croissance annuelle simulée (%)</div><input id="goalRate" type="number" value="0" step="0.5"></div>
+</div>
+<button style="margin-top:11px" onclick="goalCalc()">Calculer</button>
+<div class="result" id="goalResult" style="margin-top:12px">
+<div class="item"><span>Écart à l'objectif</span><b>—</b></div>
+<div class="item"><span>Durée estimée</span><b>—</b></div>
+</div>
+<div class="hint" style="margin-top:10px">C'est une simulation mathématique, pas une prévision de rendement.</div>
+</div>
+
+<div class="section card">
+<h2>📋 Fiche rapide de la situation</h2>
+<div class="grid">
+<div class="card"><div class="label">Total des avoirs</div><div class="num">7 445,54 MAD</div><div class="hint">Actions + OPCVM + cash</div></div>
+<div class="card"><div class="label">Valorisation investie</div><div class="num">— MAD</div><div class="hint">Cash séparé : — MAD</div></div>
+<div class="card"><div class="label">Perte latente</div><div class="num red">— MAD</div><div class="hint">Positions encore détenues</div></div>
+<div class="card"><div class="label">Perte réalisée</div><div class="num red">-33,25 MAD</div><div class="hint">Fiscalité affichée : TPCVM 0</div></div>
+</div>
+</div>
+
+
+<div class="section card">
+<h2>📸 Suivi par snapshots</h2>
+<div class="form">
+<div><div class="label">Date du snapshot</div><input id="snapDate" type="date"></div>
+<div><div class="label">Valorisation</div><input id="snapValue" type="number" value="7307.43" step="0.01"></div>
+</div>
+<button style="margin-top:11px" onclick="addSnapshot()">Ajouter le snapshot</button>
+<div class="result" id="snapResult" style="margin-top:12px"></div>
+</div>
+
+<div class="section card">
+<h2>📈 Comparaison des snapshots</h2>
+<table>
+<thead><tr><th>Date</th><th>Valorisation</th><th>Variation</th><th>Variation %</th></tr></thead>
+<tbody id="snapBody"></tbody>
+</table>
+<div class="hint" style="margin-top:10px">Ajoute les anciennes valorisations visibles dans tes captures Wafa Bourse pour suivre l'évolution réelle du portefeuille.</div>
+</div>
+
+<div class="section card">
+<h2>💳 Suivi des frais</h2>
+<div class="grid">
+<div class="card"><div class="label">Frais visibles OPCVM</div><div class="num">À renseigner</div></div>
+<div class="card"><div class="label">Commissions actions</div><div class="num">À renseigner</div></div>
+<div class="card"><div class="label">Frais cumulés</div><div class="num">À calculer</div></div>
+<div class="card"><div class="label">TPCVM affichée</div><div class="num">0,00 MAD</div></div>
+</div>
+<div class="hint" style="margin-top:10px">Les frais ne sont pas déduits automatiquement tant que leurs montants exacts ne sont pas saisis.</div>
+</div>
+
+
+<div class="section card">
+<h2>🗂️ Gestion des positions</h2>
+<div class="form">
+<div><div class="label">Valeur</div><input id="posName" placeholder="Ex. CIH"></div>
+<div><div class="label">Quantité</div><input id="posQty" type="number" step="0.001"></div>
+<div><div class="label">CMP</div><input id="posCmp" type="number" step="0.01"></div>
+<div><div class="label">Cours actuel</div><input id="posPrice" type="number" step="0.01"></div>
+</div>
+<button style="margin-top:11px" onclick="savePosition()">Enregistrer / mettre à jour</button>
+<div class="hint" style="margin-top:10px">Cette liste personnalisée sert à conserver tes positions de référence indépendamment des données affichées dans Wafa Bourse.</div>
+<div id="posMsg" style="margin-top:10px"></div>
+</div>
+
+<div class="section card">
+<h2>📋 Mes positions enregistrées</h2>
+<table>
+<thead><tr><th>Valeur</th><th>Qté</th><th>CMP</th><th>Cours</th><th>Valeur marché</th><th>+/-</th></tr></thead>
+<tbody id="savedPosBody"></tbody>
+</table>
+</div>
+
+
+<div class="section card">
+<h2>📄 Source Wafa Bourse — 03/10/2026</h2>
+<div class="item"><span>Valorisation du portefeuille</span><b>— MAD</b></div>
+<div class="item"><span>PRMP / valeur de référence totale</span><b>— MAD</b></div>
+<div class="item"><span>Performance</span><b class="red">— %</b></div>
+<div class="item"><span>Perte latente</span><b class="red">— MAD</b></div>
+<div class="item"><span>Poids total</span><b>100%</b></div>
+<div class="hint" style="margin-top:10px">Ces données proviennent directement du relevé « Portefeuille titres » Wafa Bourse fourni dans cette conversation. Elles représentent l'état au moment de l'impression.</div>
+</div>
+
+<div class="note">Les chiffres principaux ont été vérifiés sur le relevé PDF Wafa Bourse du 03/10/2026. Le calculateur fonctionne localement dans cette page. Le graphique historique ne peut pas être rempli sans anciennes valeurs de portefeuille.</div>
+</div>
+
+<script>
+function calc(){
+ const c=+document.getElementById('cmp').value||0,q=+document.getElementById('qty').value||0,
+ p=+document.getElementById('price').value||0,n=+document.getElementById('newqty').value||0;
+ const nq=(c*q+p*n)/(q+n), amount=p*n;
+ document.getElementById('result').innerHTML=
+ '<div class="item"><span>Nouveau CMP</span><b>'+nq.toFixed(2)+' MAD</b></div>'+
+ '<div class="item"><span>Montant du nouvel achat</span><b>'+amount.toFixed(2)+' MAD</b></div>';
+}
+const ctx=document.getElementById('chart').getContext('2d');
+ctx.strokeStyle='#18c5ad';ctx.lineWidth=3;ctx.beginPath();
+ctx.moveTo(35,190);ctx.lineTo(105,175);ctx.lineTo(175,185);ctx.lineTo(245,150);ctx.lineTo(315,160);ctx.lineTo(385,125);ctx.lineTo(455,135);ctx.lineTo(525,105);ctx.lineTo(595,118);ctx.stroke();
+ctx.fillStyle='#9ba7b4';ctx.font='12px Arial';ctx.fillText('Historique à renseigner',35,25);
+ctx.fillText('— MAD',35,215);
+
+function alloc(){
+ const total=7445.54, a=2740, o=4567.43, c=138.11;
+ const ta=+document.getElementById('targetA').value||0;
+ const to=+document.getElementById('targetO').value||0;
+ const tc=+document.getElementById('targetC').value||0;
+ const sum=ta+to+tc;
+ const r=document.getElementById('allocResult');
+ if(Math.abs(sum-100)>0.01){
+   r.innerHTML='<div class="item"><span>Erreur</span><b class="red">Les objectifs doivent totaliser 100%</b></div>';
+   return;
+ }
+ const current=[a/total*100,o/total*100,c/total*100];
+ const targets=[ta,to,tc];
+ const names=['Actions','OPCVM','Cash'];
+ r.innerHTML=names.map((n,i)=>{
+   const d=current[i]-targets[i];
+   const cls=d>0?'red':'green';
+   const sign=d>0?'+':'';
+   return '<div class="item"><span>'+n+' — actuel '+current[i].toFixed(1)+'%</span><b class="'+cls+'">'+sign+d.toFixed(1)+' pts</b></div>';
+ }).join('');
+}
+
+
+document.getElementById('opDate').value = new Date().toISOString().slice(0,10);
+
+function addOperation(){
+ const type=document.getElementById('opType').value;
+ const name=document.getElementById('opName').value.trim();
+ const qty=parseFloat(document.getElementById('opQty').value);
+ const price=parseFloat(document.getElementById('opPrice').value);
+ const fees=parseFloat(document.getElementById('opFees').value)||0;
+ const date=document.getElementById('opDate').value;
+ const msg=document.getElementById('opMsg');
+ if(!name || !qty || !price || !date){
+   msg.innerHTML='<span class="red">Remplis la valeur, la quantité, le prix et la date.</span>';
+   return;
+ }
+ const amount=qty*price+fees;
+ const row=document.createElement('tr');
+ row.innerHTML='<td>'+date+'</td><td>'+type+'</td><td>'+name+'</td><td>'+qty+'</td><td>'+price.toFixed(2)+'</td><td>'+amount.toFixed(2)+' MAD</td>';
+ document.getElementById('journalBody').appendChild(row);
+ msg.innerHTML='<span class="green">Opération ajoutée au journal.</span>';
+ document.getElementById('opName').value='';
+ document.getElementById('opQty').value='';
+ document.getElementById('opPrice').value='';
+ document.getElementById('opFees').value='0';
+}
+
+
+function addWatch(){
+ const n=document.getElementById('watchName').value.trim();
+ const p=document.getElementById('watchPrice').value;
+ if(!n||!p) return;
+ const box=document.getElementById('watchList');
+ const div=document.createElement('div'); div.className='item';
+ div.innerHTML='<span><b>'+n+'</b> — cible '+parseFloat(p).toFixed(2)+' MAD</span><button style="padding:6px 9px" onclick="this.parentElement.remove()">Supprimer</button>';
+ box.appendChild(div);
+ document.getElementById('watchName').value=''; document.getElementById('watchPrice').value='';
+}
+function filterPositions(){
+ const q=document.getElementById('searchPos').value.toLowerCase();
+ const f=document.getElementById('filterType').value;
+ const rows=document.querySelectorAll('table:first-of-type tbody tr');
+ rows.forEach(r=>{
+   const txt=r.innerText.toLowerCase();
+   const pl=r.cells[r.cells.length-1]?.innerText||'';
+   const neg=pl.includes('-');
+   let ok=txt.includes(q);
+   if(f==='negative') ok=ok&&neg;
+   if(f==='positive') ok=ok&&!neg;
+   r.style.display=ok?'':'none';
+ });
+}
+document.getElementById('searchPos').addEventListener('input',filterPositions);
+document.getElementById('filterType').addEventListener('change',filterPositions);
+
+
+function exportCSV(){
+ const rows=[['Valeur','Quantité','CMP','Cours/VL','Valorisation','+/-'],
+ ['ATTIJARI AL…','0.565','1415.73','1300.61','734.84','-65.04'],
+ ['ATTIJARI DIV…','1.777','1124.96','1043.54','1854.37','-144.68'],
+ ['ATTIJARI AC…','1','945.73','879.10','879.10','-66.63'],
+ ['TOTALENERG…','2','1420.02','1370.00','2740.00','-100.04'],
+ ['WG LOW VOL…','7.538','159.18','145.81','1099.12','-100.78']];
+ const csv=rows.map(r=>r.join(';')).join('\\n');
+ const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+ const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+ a.download='portfolio_positions.csv'; a.click(); URL.revokeObjectURL(a.href);
+ document.getElementById('exportMsg').innerHTML='<span class="green">CSV exporté.</span>';
+}
+
+
+function collectData(){
+ return {
+   lossAlert: document.getElementById('lossAlert').value,
+   cashMin: document.getElementById('cashMin').value,
+   watchlist: document.getElementById('watchList').innerText,
+   savedAt: new Date().toLocaleString()
+ };
+}
+function saveData(){
+ localStorage.setItem('myPortfolioDashboard', JSON.stringify(collectData()));
+ document.getElementById('saveStatus').textContent='Sauvegardé ✓';
+}
+function loadData(){
+ const raw=localStorage.getItem('myPortfolioDashboard');
+ if(!raw){document.getElementById('saveStatus').textContent='Aucune sauvegarde';return;}
+ const d=JSON.parse(raw);
+ if(d.lossAlert!==undefined) document.getElementById('lossAlert').value=d.lossAlert;
+ if(d.cashMin!==undefined) document.getElementById('cashMin').value=d.cashMin;
+ document.getElementById('saveStatus').textContent='Restauré ✓';
+}
+function clearData(){
+ localStorage.removeItem('myPortfolioDashboard');
+ document.getElementById('saveStatus').textContent='Données effacées';
+}
+function checkAlerts(){
+ const loss=parseFloat(document.getElementById('lossAlert').value)||-10;
+ const cashMin=parseFloat(document.getElementById('cashMin').value)||0;
+ const currentCash=138.11;
+ let out=[];
+ if(-6.13 <= loss) out.push('<div class="item"><span>Performance portefeuille</span><b class="green">Pas de seuil dépassé</b></div>');
+ else out.push('<div class="item"><span>Performance portefeuille</span><b class="red">Seuil de perte atteint</b></div>');
+ if(currentCash<cashMin) out.push('<div class="item"><span>Cash</span><b class="red">Sous le minimum: '+currentCash.toFixed(2)+' MAD</b></div>');
+ else out.push('<div class="item"><span>Cash</span><b class="green">Au-dessus du minimum</b></div>');
+ document.getElementById('alertResult').innerHTML=out.join('');
+}
+
+
+function norm(v){
+ return String(v ?? '').trim().toLowerCase()
+   .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function importWafaFile(){
+ const file=document.getElementById('excelFile').files[0];
+ const msg=document.getElementById('importMsg');
+ if(!file){msg.innerHTML='<span class="red">Choisis d’abord un fichier Excel ou CSV.</span>';return;}
+ if(typeof XLSX==='undefined'){
+   msg.innerHTML='<span class="red">Le module Excel n’est pas disponible. Utilise un CSV ou ouvre cette page avec Internet activé.</span>';
+   return;
+ }
+ const reader=new FileReader();
+ reader.onload=function(e){
+   try{
+     const wb=XLSX.read(e.target.result,{type:'array'});
+     const ws=wb.Sheets[wb.SheetNames[0]];
+     const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+     if(data.length<2){throw new Error('Fichier vide');}
+     const headers=data[0].map(norm);
+     const find=(keys)=>{
+       for(const k of keys){
+         const i=headers.findIndex(h=>h.includes(k));
+         if(i>=0)return i;
+       }
+       return -1;
+     };
+     const iName=find(['valeur','titre','nom']);
+     const iQty=find(['qte','quantite','quantite']);
+     const iCmp=find(['cmp']);
+     const iCourse=find(['cours','vl']);
+     const iVal=find(['valorisation','valeur de marche']);
+     const body=document.querySelector('table:first-of-type tbody');
+     if(!body) throw new Error('Tableau des positions introuvable');
+     body.innerHTML='';
+     let count=0;
+     data.slice(1).forEach(r=>{
+       if(!r.some(x=>String(x).trim())) return;
+       const name=iName>=0?r[iName]:'';
+       if(!name) return;
+       const qty=iQty>=0?r[iQty]:'';
+       const cmp=iCmp>=0?r[iCmp]:'';
+       const course=iCourse>=0?r[iCourse]:'';
+       const val=iVal>=0?r[iVal]:'';
+       let pl='';
+       if(Number(qty)&&Number(cmp)&&Number(course))
+         pl=(Number(qty)*(Number(course)-Number(cmp))).toFixed(2);
+       const tr=document.createElement('tr');
+       tr.innerHTML='<td>'+name+'</td><td>'+qty+'</td><td>'+cmp+
+         '</td><td>'+course+'</td><td>'+val+'</td><td class="'+(Number(pl)<0?'red':'green')+'">'+pl+'</td>';
+       body.appendChild(tr); count++;
+     });
+     msg.innerHTML='<span class="green">'+count+' position(s) importée(s) depuis '+file.name+'.</span>';
+   }catch(err){
+     msg.innerHTML='<span class="red">Impossible de lire ce fichier : '+err.message+'</span>';
+   }
+ };
+ reader.readAsArrayBuffer(file);
+}
+
+
+function breakEven(){
+ const cmp=parseFloat(document.getElementById('beCmp').value)||0;
+ const fees=parseFloat(document.getElementById('beFees').value)||0;
+ const gain=parseFloat(document.getElementById('beGain').value)||0;
+ const qty=parseFloat(document.getElementById('beQty').value)||0;
+ const target=cmp*(1+gain/100)/(1-fees/100);
+ document.getElementById('beResult').innerHTML=
+ '<div class="item"><span>Prix de vente cible</span><b>'+target.toFixed(2)+' MAD</b></div>'+
+ '<div class="item"><span>Montant brut</span><b>'+(target*qty).toFixed(2)+' MAD</b></div>';
+}
+
+
+function goalCalc(){
+ const current=parseFloat(document.getElementById('goalCurrent').value)||0;
+ const target=parseFloat(document.getElementById('goalTarget').value)||0;
+ const monthly=parseFloat(document.getElementById('goalMonthly').value)||0;
+ const annual=parseFloat(document.getElementById('goalRate').value)||0;
+ let balance=current, months=0;
+ if(target<=current){
+   document.getElementById('goalResult').innerHTML=
+    '<div class="item"><span>Écart à l’objectif</span><b class="green">Objectif déjà atteint</b></div>';
+   return;
+ }
+ if(monthly<=0 && annual<=0){
+   document.getElementById('goalResult').innerHTML=
+    '<div class="item"><span>Écart à l’objectif</span><b>'+(target-current).toFixed(2)+' MAD</b></div>'+
+    '<div class="item"><span>Durée estimée</span><b>Apport mensuel requis</b></div>';
+   return;
+ }
+ const r=Math.pow(1+annual/100,1/12)-1;
+ while(balance<target && months<600){
+   balance=balance*(1+r)+monthly;
+   months++;
+ }
+ document.getElementById('goalResult').innerHTML=
+  '<div class="item"><span>Écart à l’objectif</span><b>'+(target-current).toFixed(2)+' MAD</b></div>'+
+  '<div class="item"><span>Durée estimée</span><b>'+(months<600?months+' mois':'Plus de 50 ans')+'</b></div>';
+}
+
+
+document.getElementById('snapDate').value = new Date().toISOString().slice(0,10);
+let snapshots = JSON.parse(localStorage.getItem('portfolioSnapshots') || '[]');
+
+function renderSnapshots(){
+ const body=document.getElementById('snapBody');
+ body.innerHTML='';
+ snapshots.sort((a,b)=>a.date.localeCompare(b.date));
+ snapshots.forEach((s,i)=>{
+   const prev=i>0?snapshots[i-1].value:null;
+   const diff=prev===null?null:s.value-prev;
+   const pct=prev===null?null:(diff/prev*100);
+   const cls=diff===null?'':(diff>=0?'green':'red');
+   const tr=document.createElement('tr');
+   tr.innerHTML='<td>'+s.date+'</td><td>'+s.value.toFixed(2)+' MAD</td>'+
+     '<td class="'+cls+'">'+(diff===null?'—':(diff>=0?'+':'')+diff.toFixed(2)+' MAD')+'</td>'+
+     '<td class="'+cls+'">'+(pct===null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>';
+   body.appendChild(tr);
+ });
+}
+function addSnapshot(){
+ const date=document.getElementById('snapDate').value;
+ const value=parseFloat(document.getElementById('snapValue').value);
+ const msg=document.getElementById('snapResult');
+ if(!date || !value){msg.innerHTML='<span class="red">Remplis la date et la valorisation.</span>';return;}
+ snapshots.push({date,value});
+ localStorage.setItem('portfolioSnapshots',JSON.stringify(snapshots));
+ renderSnapshots();
+ msg.innerHTML='<span class="green">Snapshot enregistré.</span>';
+}
+renderSnapshots();
+
+
+let savedPositions = JSON.parse(localStorage.getItem('savedPositions') || '[]');
+function renderPositions(){
+ const body=document.getElementById('savedPosBody');
+ body.innerHTML='';
+ savedPositions.forEach((p,i)=>{
+   const market=p.qty*p.price, pl=p.qty*(p.price-p.cmp);
+   const tr=document.createElement('tr');
+   tr.innerHTML='<td>'+p.name+'</td><td>'+p.qty+'</td><td>'+p.cmp.toFixed(2)+'</td><td>'+
+     p.price.toFixed(2)+'</td><td>'+market.toFixed(2)+' MAD</td><td class="'+
+     (pl<0?'red':'green')+'">'+(pl>=0?'+':'')+pl.toFixed(2)+' MAD</td>';
+   body.appendChild(tr);
+ });
+}
+function savePosition(){
+ const name=document.getElementById('posName').value.trim();
+ const qty=parseFloat(document.getElementById('posQty').value);
+ const cmp=parseFloat(document.getElementById('posCmp').value);
+ const price=parseFloat(document.getElementById('posPrice').value);
+ const msg=document.getElementById('posMsg');
+ if(!name || !qty || !cmp || !price){
+   msg.innerHTML='<span class="red">Remplis tous les champs.</span>'; return;
+ }
+ const idx=savedPositions.findIndex(x=>x.name.toLowerCase()===name.toLowerCase());
+ const item={name,qty,cmp,price};
+ if(idx>=0) savedPositions[idx]=item; else savedPositions.push(item);
+ localStorage.setItem('savedPositions',JSON.stringify(savedPositions));
+ renderPositions();
+ msg.innerHTML='<span class="green">Position enregistrée ✓</span>';
+}
+renderPositions();
+
+
+async function importWafa(){
+ const file=document.getElementById('wafaImport').files[0];
+ const msg=document.getElementById('wafaImportMsg');
+ if(!file){msg.innerHTML='<span class="red">Choisis un fichier PDF ou CSV.</span>';return;}
+ try{
+   let text='';
+   if(file.name.toLowerCase().endsWith('.pdf')){
+     if(typeof pdfjsLib==='undefined') throw new Error('Le lecteur PDF n’est pas disponible. Active Internet puis réessaie.');
+     const buf=await file.arrayBuffer();
+     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+     for(let p=1;p<=pdf.numPages;p++){
+       const page=await pdf.getPage(p);
+       const content=await page.getTextContent();
+       text += content.items.map(x=>x.str).join(' ')+' ';
+     }
+   }else{text=await file.text();}
+   parseWafaText(text,file.name);
+ }catch(e){msg.innerHTML='<span class="red">Import impossible : '+e.message+'</span>';}
+}
+function num(s){return parseFloat(String(s).replace(/\s/g,'').replace(',','.').replace(/%$/,''));}
+function parseWafaText(text,fileName){
+ const msg=document.getElementById('wafaImportMsg');
+ const names=['Position à importer','Position à importer','Position à importer','Position à importer','Position à importer'];
+ const patterns=[
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
+  /Position à importer\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i
+ ];
+ const rows=[];
+ patterns.forEach((re,i)=>{const m=text.match(re);if(m)rows.push({name:names[i],qty:m[1],course:m[2],value:m[3],cmp:m[4],perf:m[5],pl:m[6],weight:m[7]});});
+ if(!rows.length){msg.innerHTML='<span class="red">Aucune position reconnue. Utilise le PDF « Portefeuille titres » ou un CSV avec Valeur/Quantité/Cours/VL/Montant/PRMP.</span>';return;}
+ const body=document.querySelector('table:first-of-type tbody');
+ if(body) body.innerHTML=rows.map(r=>'<tr><td>'+r.name+'</td><td>'+r.qty+'</td><td>'+r.cmp+'</td><td>'+r.course+'</td><td>'+r.value+'</td><td class="'+(r.pl.includes('-')?'red':'green')+'">'+r.pl+'</td></tr>').join('');
+ localStorage.setItem('wafaLastImport',JSON.stringify({source:fileName,importedAt:new Date().toISOString(),rows:rows}));
+ msg.innerHTML='<span class="green">'+rows.length+' positions importées depuis '+fileName+' ✓</span>';
+}
+
+
+function exportBackup(){
+ const data={
+   version:'V20',
+   portfolioId:document.getElementById('portfolioId').value,
+   savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
+   snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
+   wafaLastImport:JSON.parse(localStorage.getItem('wafaLastImport')||'null'),
+   exportedAt:new Date().toISOString()
+ };
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ a.download='mon_portfolio_backup.json';
+ a.click();
+ URL.revokeObjectURL(a.href);
+ document.getElementById('backupMsg').innerHTML='<span class="green">Backup exporté ✓</span>';
+}
+function importBackup(event){
+ const file=event.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=function(){
+  try{
+   const d=JSON.parse(reader.result);
+   if(d.savedPositions)localStorage.setItem('savedPositions',JSON.stringify(d.savedPositions));
+   if(d.snapshots)localStorage.setItem('portfolioSnapshots',JSON.stringify(d.snapshots));
+   if(d.wafaLastImport)localStorage.setItem('wafaLastImport',JSON.stringify(d.wafaLastImport));
+   if(d.portfolioId)document.getElementById('portfolioId').value=d.portfolioId;
+   document.getElementById('backupMsg').innerHTML='<span class="green">Backup importé ✓</span>';
+   if(typeof renderPositions==='function')renderPositions();
+   if(typeof renderSnapshots==='function')renderSnapshots();
+  }catch(e){
+   document.getElementById('backupMsg').innerHTML='<span class="red">Backup invalide.</span>';
+  }
+ };
+ reader.readAsText(file);
+}
+
+</script>
+
+<script>
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const b = document.getElementById('installBtn');
+  if (b) b.style.display = 'inline-block';
+});
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'installBtn' && deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    e.target.style.display = 'none';
+  }
+});
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+
+
+<script>
+(function(){
+  const status = document.getElementById('syncStatus');
+  const exportBtn = document.getElementById('syncExportBtn');
+  const importBtn = document.getElementById('syncImportBtn');
+  const fileInput = document.getElementById('syncFileInput');
+
+  function collectData(){
+    const data = {};
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      try { data[k] = JSON.parse(localStorage.getItem(k)); }
+      catch(e) { data[k] = localStorage.getItem(k); }
+    }
+    return {
+      app: 'Mon Portfolio',
+      version: 'V23',
+      exportedAt: new Date().toISOString(),
+      localStorage: data
+    };
+  }
+
+  exportBtn?.addEventListener('click', ()=>{
+    const payload = collectData();
+    const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'portfolio_backup_V23.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    status.textContent = '✅ Backup exporté. Envoie ce fichier à ton autre appareil.';
+  });
+
+  importBtn?.addEventListener('click', ()=>fileInput?.click());
+
+  fileInput?.addEventListener('change', async ()=>{
+    const f = fileInput.files?.[0];
+    if(!f) return;
+    try{
+      const payload = JSON.parse(await f.text());
+      if(!payload.localStorage) throw new Error('Format Backup non reconnu');
+      Object.entries(payload.localStorage).forEach(([k,v])=>{
+        localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v));
+      });
+      status.textContent = '✅ Backup importé. Recharge la page pour afficher les données.';
+      setTimeout(()=>location.reload(), 900);
+    }catch(e){
+      status.textContent = '❌ Backup invalide ou incompatible.';
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
