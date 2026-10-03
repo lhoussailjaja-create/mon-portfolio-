@@ -1,9 +1,11 @@
 {
-  "name": "Mon Portfolio",
-  "short_name": "Portfolio",
+  "name": "Mon Portfolio V28",
+  "short_name": "Mon Portfolio",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#0b0f14",
+  "background_color": "#070b10",
   "theme_color": "#111827",
-  "lang": "fr"
+  "description": "Dashboard personnel de portefeuille, sans données personnelles préchargées",
+  "icons": []
 }
