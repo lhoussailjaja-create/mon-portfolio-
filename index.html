@@ -107,7 +107,7 @@ function goalCalc(){
 
 
 document.getElementById('snapDate').value = new Date().toISOString().slice(0,10);
-let snapshots = JSON.parse(localStorage.getItem('portfolioSnapshots') || '[]');
+ snapshots = JSON.parse(localStorage.getItem('portfolioSnapshots') || '[]');
 
 function renderSnapshots(){
  const body=document.getElementById('snapBody');
@@ -138,7 +138,7 @@ function addSnapshot(){
 renderSnapshots();
 
 
-let savedPositions = JSON.parse(localStorage.getItem('savedPositions') || '[]');
+ savedPositions = JSON.parse(localStorage.getItem('savedPositions') || '[]');
 function renderPositions(){
  const body=document.getElementById('savedPosBody');
  body.innerHTML='';
@@ -376,11 +376,51 @@ function importBackup(event){
 </header>
 
 <div class="cards">
-<div class="card"><div class="label">Valorisation</div><div class="num">7 307,43 MAD</div></div>
-<div class="card"><div class="label">Cash disponible</div><div class="num">138,11 MAD</div></div>
-<div class="card"><div class="label">+/- latent</div><div class="num red">-477,17 MAD</div></div>
-<div class="card"><div class="label">Performance</div><div class="num red">-6,13%</div></div>
-</div>
+
+  <div class="card">
+    <div class="label">💰 Valorisation totale</div>
+    <div class="num">7 307,43 MAD</div>
+  </div>
+
+  <div class="card">
+    <div class="label">💵 Cash disponible</div>
+    <div class="num">138,11 MAD</div>
+  </div>
+
+  <div class="card">
+    <div class="label">📉 Gain / Perte latent</div>
+    <div class="num red">-477,17 MAD</div>
+  </div>
+
+  <div class="card">
+    <div class="label">📊 Performance</div>
+    <div class="num red">-6,13%</div>
+  </div>
+
+  <div class="card">
+    <div class="label">🔝 Plus grosse position</div>
+    <div class="num">TotalEnergies</div>
+    <div class="hint">37,5% du portefeuille</div>
+  </div>
+
+  <div class="card">
+    <div class="label">🔻 Plus grosse perte</div>
+    <div class="num red">-144,68 MAD</div>
+    <div class="hint">Attijari Dividend Fund</div>
+  </div>
+
+  <div class="card">
+    <div class="label">⚠️ Concentration</div>
+    <div class="num">37,5%</div>
+    <div class="hint">Plus grosse position</div>
+  </div>
+
+  <div class="card">
+    <div class="label">🛡️ Niveau de risque</div>
+    <div class="num">Modéré</div>
+    <div class="hint">À surveiller : concentration</div>
+  </div>
+
 
 <div class="grid section">
 <div class="card">
