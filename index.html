@@ -577,23 +577,6 @@ function importBackup(event){
 </div>
 
 <div class="section card">
-<h2>➕ Ajouter une opération</h2>
-<div class="form">
-<div><div class="label">Type</div>
-<select id="opType" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
-<option>Achat</option><option>Vente</option>
-</select></div>
-<div><div class="label">Valeur</div><input id="opName" placeholder="Ex. TOTALENERG…"></div>
-<div><div class="label">Quantité</div><input id="opQty" type="number" min="0" step="0.001"></div>
-<div><div class="label">Prix unitaire</div><input id="opPrice" type="number" min="0" step="0.01"></div>
-<div><div class="label">Frais</div><input id="opFees" type="number" min="0" step="0.01" value="0"></div>
-<div><div class="label">Date</div><input id="opDate" type="date"></div>
-</div>
-<button style="margin-top:11px" onclick="addOperation()">Ajouter au journal</button>
-<div class="hint" id="opMsg" style="margin-top:10px"></div>
-</div>
-
-<div class="section card">
 <h2>🧾 Journal des opérations</h2>
 <table>
 <thead><tr><th>Date</th><th>Type</th><th>Valeur</th><th>Qté</th><th>Prix</th><th>Montant</th></tr></thead>
@@ -696,20 +679,20 @@ function importBackup(event){
 </div>
 
 
-<div class="section card">
-<h2>🔄 Importer depuis Wafa Bourse</h2>
+<div class="section card" id="mainWafaPdfImporter">
+<h2>🔄 Importer depuis Wafa Bourse — PDF</h2>
 <div class="hint">
-Télécharge d'abord ton fichier Excel depuis Wafa Bourse, puis sélectionne-le ici.
-Le dashboard lit le fichier localement : aucun identifiant ou mot de passe Wafa Bourse n'est demandé.
+Sélectionne directement le <b>PDF original Wafa Bourse</b>. Le dashboard le lit localement et ajoute les opérations au journal après détection automatique. Aucun identifiant ou mot de passe n'est demandé.
 </div>
 <div style="margin-top:12px">
-<input id="excelFile" type="file" accept=".xlsx,.xls,.csv,.pdf"
+<input id="mainPdfFile" type="file" accept="application/pdf,.pdf"
 style="width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
 </div>
 <div style="margin-top:10px">
-<button type="button" onclick="importWafaFile()">Importer les positions</button>
+<button type="button" onclick="importMainWafaPdf()">📥 Importer le PDF</button>
 </div>
-<div id="importMsg" class="hint" style="margin-top:10px"></div>
+<div id="mainPdfMsg" class="hint" style="margin-top:10px"></div>
+<div id="mainPdfPreview" style="overflow:auto;margin-top:12px"></div>
 </div>
 
 
@@ -1627,7 +1610,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <section class="section card" id="pdfOpsImporter">
   <h2>📥 Importer l'historique Wafa Bourse (PDF)</h2>
   <div class="hint">
-    Sélectionne un relevé PDF Wafa Bourse. Le fichier est lu localement par le navigateur et les opérations détectées sont affichées avant validation.
+    Sélectionne un relevé PDF Wafa Bourse. Le fichier est lu localement par le navigateur. Les opérations Achat/Vente détectées sont ajoutées automatiquement au Journal des opérations, sans saisie manuelle.
   </div>
   <div class="form" style="margin-top:12px">
     <div>
@@ -1642,7 +1625,7 @@ document.addEventListener('DOMContentLoaded', function(){
       <input id="pdfOpsFile" type="file" accept=".pdf">
     </div>
   </div>
-  <button style="margin-top:11px" onclick="readWafaPdfOperations()">🔎 Lire le PDF</button>
+  <button style="margin-top:11px" onclick="readWafaPdfOperations()">📥 Importer automatiquement</button>
   <div id="pdfOpsMsg" class="hint" style="margin-top:10px"></div>
   <div id="pdfOpsPreview" style="overflow:auto;margin-top:12px"></div>
   <div id="pdfOpsActions" style="display:none;margin-top:12px;gap:8px;flex-wrap:wrap">
@@ -1841,8 +1824,9 @@ async function readWafaPdfOperations(){
     preview.innerHTML='<table><thead><tr><th>Compte</th><th>Date</th><th>Type</th><th>Valeur</th><th>Qté</th><th>Cours</th><th>Montant net</th><th>Frais</th></tr></thead><tbody>'+
       unique.map(o=>'<tr><td>'+account+'</td><td>'+o.date+'</td><td>'+o.type+'</td><td>'+wafaPdfCleanName(o.value)+'</td><td>'+o.qty+'</td><td>'+o.price.toFixed(2)+'</td><td>'+o.net.toFixed(2)+' MAD</td><td>'+o.fees.toFixed(2)+' MAD</td></tr>').join('')+
       '</tbody></table>';
-    msg.innerHTML='<span class="green">'+unique.length+' opération(s) détectée(s) ✓</span> Vérifie le tableau avant validation.';
-    document.getElementById('pdfOpsActions').style.display='flex';
+    msg.innerHTML='<span class="green">'+unique.length+' opération(s) détectée(s) ✓ Import automatique en cours…</span>';
+    document.getElementById('pdfOpsActions').style.display='none';
+    validateWafaPdfOperations();
   }catch(e){
     msg.innerHTML='<span class="red">Import impossible : '+e.message+'</span>';
     preview.innerHTML=''; document.getElementById('pdfOpsActions').style.display='none';
@@ -1858,11 +1842,12 @@ function validateWafaPdfOperations(){
   const keys=new Set(existing.map(o=>[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|')));
   const added=stamped.filter(o=>{const k=[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|'); if(keys.has(k)) return false; keys.add(k); return true;});
   localStorage.setItem('portfolioOperations',JSON.stringify(existing.concat(added)));
-  document.getElementById('pdfOpsMsg').innerHTML='<span class="green">'+added.length+' opération(s) ajoutée(s) au '+account+' ✓</span>'+(added.length<stamped.length?' Les doublons ont été ignorés.':'');
+  document.getElementById('pdfOpsMsg').innerHTML='<span class="green"><b>'+added.length+' opération(s) ajoutée(s) automatiquement au Journal</b> ✓</span>'+(added.length<stamped.length?' '+(stamped.length-added.length)+' doublon(s) ignoré(s).':'');
   renderImportedOperations();
   renderWafaHistoryAmounts();
   renderFeeTracking();
-  clearWafaPdfPreview(false);
+  if(window.refreshAdvancedAnalytics) window.refreshAdvancedAnalytics();
+  wafaPdfPendingOperations=[];
 }
 
 function clearWafaPdfPreview(clearMsg=true){
@@ -1967,6 +1952,48 @@ renderWafaHistoryAmounts();
 renderFeeTracking();
 </script>
 
+
+<script>
+/* ================= MAIN WAFA PDF IMPORTER ================= */
+async function importMainWafaPdf(){
+  const file=document.getElementById('mainPdfFile')?.files?.[0];
+  const msg=document.getElementById('mainPdfMsg');
+  const preview=document.getElementById('mainPdfPreview');
+  if(!file){msg.innerHTML='<span class="red">Choisis d’abord le PDF original Wafa Bourse.</span>';return;}
+  try{
+    if(typeof pdfjsLib==='undefined') throw new Error('Le lecteur PDF n’est pas chargé. Recharge la page avec Internet activé.');
+    const lines=await readWafaPdfText(file);
+    const ops=[]; let pendingValue='';
+    lines.forEach(line=>{
+      const clean=wafaPdfCleanName(line);
+      const op=parseWafaOperationLine(clean);
+      if(op){
+        if((op.type==='ACHAT'||op.type==='VENTE') && pendingValue) op.value=pendingValue;
+        ops.push(op); pendingValue='';
+      }else if(clean && !/^Historique du compte$/i.test(clean) && !/^Du \d/.test(clean) && !/^Lieu, date|^Client|^Compte titres|^Compte espèces|^Dépositaire|^Date Opération|^Avertissement/i.test(clean)){
+        pendingValue=clean;
+      }
+    });
+    const unique=[]; const seen=new Set();
+    ops.forEach(o=>{const k=[o.date,o.type,o.value,o.qty,o.price,o.net].join('|');if(!seen.has(k)){seen.add(k);unique.push(o);}});
+    if(!unique.length) throw new Error('Aucune opération reconnue. Utilise le PDF original « Historique du compte » Wafa Bourse.');
+    const old=(()=>{try{return JSON.parse(localStorage.getItem('portfolioOperations')||'[]')}catch(e){return []}})();
+    const keys=new Set(old.map(o=>[o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|')));
+    let added=0;
+    unique.forEach(o=>{const x={...o,account:localStorage.getItem('currentAccount')||'Wafa Bourse',source:file.name,importedAt:new Date().toISOString()};const k=[x.date,x.type,x.value,x.qty,x.price,x.net,x.fees].join('|');if(!keys.has(k)){old.push(x);keys.add(k);added++;}});
+    localStorage.setItem('portfolioOperations',JSON.stringify(old));
+    localStorage.setItem('wafaLastImport',JSON.stringify({source:file.name,importedAt:new Date().toISOString(),operations:unique}));
+    preview.innerHTML='<table><thead><tr><th>Date</th><th>Type</th><th>Valeur</th><th>Qté</th><th>Cours</th><th>Montant</th><th>Frais</th></tr></thead><tbody>'+unique.map(o=>'<tr><td>'+o.date+'</td><td>'+o.type+'</td><td>'+wafaPdfCleanName(o.value)+'</td><td>'+o.qty+'</td><td>'+Number(o.price||0).toFixed(2)+'</td><td>'+Number(o.net||0).toFixed(2)+' MAD</td><td>'+Number(o.fees||0).toFixed(2)+' MAD</td></tr>').join('')+'</tbody></table>';
+    try{if(window.renderImportedOperations)window.renderImportedOperations();}catch(e){}
+    try{if(window.renderWafaHistoryAmounts)window.renderWafaHistoryAmounts();}catch(e){}
+    try{if(window.renderFeeTracking)window.renderFeeTracking();}catch(e){}
+    try{if(window.refreshAdvancedAnalytics)window.refreshAdvancedAnalytics();}catch(e){}
+    msg.innerHTML='<span class="green"><b>'+unique.length+' opération(s) détectée(s)</b> — '+added+' nouvelle(s) ajoutée(s) au journal ✓</span>';
+  }catch(e){
+    msg.innerHTML='<span class="red"><b>Import impossible :</b> '+e.message+'</span>'; preview.innerHTML='';
+  }
+}
+</script>
 
 <script>
 /* ================= FINAL STABILITY PATCH ================= */
@@ -2273,172 +2300,6 @@ renderFeeTracking();
 })();
 </script>
 
-<script>
-/* IMPORT WAFA BOURSE — handler autonome.
-   Il ne dépend pas du onclick inline ni du module XLSX pour les CSV. */
-(function(){
-  function wSet(msg){
-    var el=document.getElementById('importMsg');
-    if(el) el.innerHTML=msg;
-  }
-  function num(v){
-    var x=String(v==null?'':v).trim().replace(/\u00A0/g,' ').replace(/\s/g,'');
-    if(!x) return 0;
-    if(x.includes(',') && x.includes('.')){
-      if(x.lastIndexOf(',')>x.lastIndexOf('.')) x=x.replace(/\./g,'').replace(',','.');
-      else x=x.replace(/,/g,'');
-    }else if(x.includes(',')) x=x.replace(',','.');
-    x=x.replace(/[^\d.-]/g,'');
-    var n=Number(x);
-    return Number.isFinite(n)?n:0;
-  }
-  function norm(v){
-    return String(v==null?'':v).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-  }
-  function splitCSV(text){
-    text=String(text||'').replace(/^\uFEFF/,'');
-    var lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
-    var sample=lines.slice(0,10).filter(x=>x.trim()).join('\n');
-    var candidates=[';','\t',','];
-    var delim=candidates.sort(function(a,b){
-      return (sample.split(b).length-1)-(sample.split(a).length-1);
-    })[0];
-    return lines.filter(function(x){return x.trim()!=='';}).map(function(line){
-      var row=[], cur='', q=false;
-      for(var i=0;i<line.length;i++){
-        var c=line[i];
-        if(c==='"'){
-          if(q && line[i+1]==='"'){cur+='"';i++;}
-          else q=!q;
-        }else if(c===delim && !q){row.push(cur);cur='';}
-        else cur+=c;
-      }
-      row.push(cur);
-      return row.map(function(v){return v.trim();});
-    });
-  }
-  function findHeader(rows){
-    for(var h=0;h<Math.min(rows.length,50);h++){
-      var hs=rows[h].map(norm);
-      var hasDate=hs.some(function(x){return x.includes('date');});
-      var hasValue=hs.some(function(x){return x.includes('valeur')||x.includes('titre')||x.includes('libelle')||x.includes('designation');});
-      var hasType=hs.some(function(x){return x.includes('operation')||x.includes('sens')||x.includes('type')||x.includes('mouvement');});
-      if((hasDate&&hasValue)||(hasDate&&hasType)) return h;
-    }
-    return -1;
-  }
-  function col(hs,keys){
-    for(var i=0;i<hs.length;i++){
-      var x=norm(hs[i]);
-      for(var j=0;j<keys.length;j++) if(x.includes(keys[j])) return i;
-    }
-    return -1;
-  }
-  function dateVal(v){
-    var x=String(v||'').trim();
-    var m=x.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
-    return m ? m[3]+'-'+m[2]+'-'+m[1] : x;
-  }
-  function typeVal(v){
-    var x=norm(v).toUpperCase();
-    if(/VENTE|SELL|CESSION/.test(x)) return 'VENTE';
-    if(/ACHAT|BUY|SOUSCRIPTION|ACQUISITION/.test(x)) return 'ACHAT';
-    if(/CREDIT|VIR|VERSEMENT/.test(x)) return 'CREDIT';
-    if(/DEBIT|FRAIS|COMMISSION|TAXE/.test(x)) return 'DEBIT';
-    return String(v||'').trim()||'OPERATION';
-  }
-  function saveOps(ops,fileName){
-    var old=[];
-    try{old=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');}catch(e){}
-    var seen=new Set(old.map(function(o){return [o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|').toUpperCase();}));
-    var added=0;
-    ops.forEach(function(o){
-      var k=[o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|').toUpperCase();
-      if(!seen.has(k)){old.push(o);seen.add(k);added++;}
-    });
-    localStorage.setItem('portfolioOperations',JSON.stringify(old));
-    localStorage.setItem('wafaLastImport',JSON.stringify({source:fileName,importedAt:new Date().toISOString(),operations:ops}));
-    try{if(window.renderImportedOperations)window.renderImportedOperations();}catch(e){}
-    try{if(window.renderWafaHistoryAmounts)window.renderWafaHistoryAmounts();}catch(e){}
-    try{if(window.renderFeeTracking)window.renderFeeTracking();}catch(e){}
-    try{if(window.refreshAdvancedAnalytics)window.refreshAdvancedAnalytics();}catch(e){}
-    return added;
-  }
 
-  function run(file){
-    if(!file){wSet('<span class="red">Choisis un fichier CSV/Excel/PDF.</span>');return;}
-    wSet('<span class="green">Lecture du fichier en cours…</span>');
-    var reader=new FileReader();
-    reader.onerror=function(){wSet('<span class="red">Impossible de lire le fichier.</span>');};
-    reader.onload=function(e){
-      try{
-        var bytes=new Uint8Array(e.target.result);
-        var sig=new TextDecoder().decode(bytes.slice(0,8));
-        if(sig.indexOf('%PDF-')===0){
-          if(typeof pdfjsLib==='undefined') throw new Error('PDF.js non chargé.');
-          /* Re-route to the existing PDF importer when the file is actually a PDF. */
-          if(typeof window.importWafaFile==='function'){
-            var input=document.getElementById('excelFile');
-            /* Existing importer reads the same selected file. */
-            window.importWafaFile.__forced=true;
-            return window.importWafaFile();
-          }
-          throw new Error('Lecteur PDF non disponible.');
-        }
-
-        var text=new TextDecoder('utf-8',{fatal:false}).decode(bytes);
-        var rows=splitCSV(text);
-        if(!rows.length) throw new Error('CSV vide ou illisible.');
-        var h=findHeader(rows);
-        if(h<0){
-          /* Some Wafa CSV exports have no clean header; show a useful diagnostic. */
-          throw new Error('CSV lu, mais aucune ligne d’en-têtes Date/Valeur/Opération reconnue.');
-        }
-        var hs=rows[h];
-        var iDate=col(hs,['date']);
-        var iType=col(hs,['operation','sens','type','mouvement','nature']);
-        var iValue=col(hs,['valeur','titre','libelle','designation','instrument','nom']);
-        var iQty=col(hs,['quantite','qte','nombre']);
-        var iPrice=col(hs,['prix unitaire','cours execution','cours execute','cours','prix']);
-        var iAmount=col(hs,['montant net','montant brut','montant','net','total']);
-        var iFees=col(hs,['frais','commission','commissions','tpcvm','taxe']);
-        if(iDate<0 || iValue<0) throw new Error('Le CSV ne contient pas les colonnes Date et Valeur/Titre nécessaires.');
-
-        var ops=[];
-        rows.slice(h+1).forEach(function(r){
-          var value=String(r[iValue]||'').trim();
-          var rawDate=String(r[iDate]||'').trim();
-          if(!value || !rawDate) return;
-          var type=typeVal(iType>=0?r[iType]:'');
-          var qty=iQty>=0?num(r[iQty]):0;
-          var price=iPrice>=0?num(r[iPrice]):0;
-          var net=iAmount>=0?num(r[iAmount]):0;
-          var fees=iFees>=0?Math.abs(num(r[iFees])):0;
-          ops.push({account:localStorage.getItem('currentAccount')||'Wafa Bourse',
-            date:dateVal(rawDate),type:type,value:value,qty:qty,price:price,net:net,fees:fees,source:file.name});
-        });
-        if(!ops.length) throw new Error('CSV lu, mais aucune opération exploitable trouvée.');
-        var added=saveOps(ops,file.name);
-        wSet('<span class="green"><b>'+ops.length+' opération(s) lue(s)</b> — '+added+' nouvelle(s) ajoutée(s) ✓</span>');
-      }catch(err){
-        console.error(err);
-        wSet('<span class="red"><b>Import impossible :</b> '+String(err.message||err)+'</span>');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  }
-
-  function bind(){
-    var btn=document.querySelector('button[onclick*="importWafaFile"]');
-    var input=document.getElementById('excelFile');
-    if(!btn || !input) return;
-    btn.onclick=function(ev){ if(ev)ev.preventDefault(); run(input.files&&input.files[0]); return false; };
-    btn.removeAttribute('onclick');
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind);
-  else bind();
-})();
-</script>
 </body>
 </html>
