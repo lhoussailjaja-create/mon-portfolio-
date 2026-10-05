@@ -1732,29 +1732,90 @@ async function readWafaPdfText(file){
 }
 
 function parseWafaOperationLine(line){
-  const m=line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(.+)$/);
+  const m=line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.+)$/);
   if(!m) return null;
   const date=m[1];
-  const rest=m[2]+' '+m[3];
-  const typeMatch=rest.match(/\b(ACHAT|VENTE|Credit|Débit)\b/i);
+  const rest=m[2].trim();
+  const typeMatch=rest.match(/\b(ACHAT(?:\s+OPCVM)?|VENTE|CREDIT|DEBIT|DÉBIT)\b/i);
   if(!typeMatch) return null;
-  const type=typeMatch[1].toUpperCase()==='CREDIT'?'CREDIT':typeMatch[1].toUpperCase()==='DÉBIT'?'DEBIT':typeMatch[1].toUpperCase();
-  let after=rest.slice(typeMatch.index+typeMatch[0].length).trim();
-  const nums=after.match(/-?\d[\d\s]*(?:[.,]\d+)?/g)||[];
+  const rawType=typeMatch[1].toUpperCase();
+  const type=rawType.startsWith('ACHAT')?'ACHAT':rawType==='VENTE'?'VENTE':rawType==='CREDIT'?'CREDIT':'DEBIT';
+  const after=rest.slice(typeMatch.index+typeMatch[0].length).trim();
+
+  // Pour les crédits/débits, le dernier nombre est le montant.
+  const allNums=after.match(/-?\d[\d\s\u00A0]*(?:[.,]\d+)?/g)||[];
   if(type==='CREDIT' || type==='DEBIT'){
-    const amount=nums.length?pdfOpsNumber(nums[nums.length-1]):0;
-    const value=after.replace(/-?\d[\d\s]*(?:[.,]\d+)?/g,' ').replace(/\s+/g,' ').trim();
+    const amount=allNums.length ? pdfOpsNumber(allNums[allNums.length-1]) : 0;
+    const value=after.replace(allNums.length ? allNums[allNums.length-1] : '', '').trim();
     return {date,type,value:value||'Mouvement espèces',qty:0,price:0,net:amount,fees:0};
   }
-  if(nums.length<3) return null;
-  // In Wafa Bourse history: Valeur ... Quantité Cours Montant Net Comm courtage Comm RL HT Comm BVC TVA
-  const qty=pdfOpsNumber(nums[nums.length-8] || nums[0]);
-  const price=pdfOpsNumber(nums[nums.length-7] || nums[1]);
-  const net=pdfOpsNumber(nums[nums.length-6] || nums[2]);
-  const fees=[nums[nums.length-5],nums[nums.length-4],nums[nums.length-3],nums[nums.length-2]].filter(Boolean).reduce((a,v)=>a+Math.abs(pdfOpsNumber(v)),0);
-  let value=after;
-  const cut=after.search(/-?\d[\d\s]*(?:[.,]\d+)?/);
-  if(cut>=0) value=after.slice(0,cut).trim();
+
+  // Sépare le libellé du bloc numérique. PDF.js peut coller les colonnes :
+  // 2 + 1400.00 -> 21400.00
+  // 1.777 + 1120.48 -> 1.7771120.48
+  const numericStart=after.search(/\d/);
+  if(numericStart<0) return null;
+  const value=after.slice(0,numericStart).trim();
+  const numericPart=after.slice(numericStart).trim();
+
+  let qty=0, price=0, net=0, fees=0;
+
+  // Cas normal : colonnes séparées par des espaces.
+  const normal=numericPart.match(/^(\d+(?:[.,]\d{1,3})?)\s+(\d+(?:[.,]\d{1,2})?)\s+(-?\d[\d\s\u00A0]*(?:[.,]\d{1,2})?)(?:\s+(.*))?$/);
+  if(normal){
+    qty=pdfOpsNumber(normal[1]);
+    price=pdfOpsNumber(normal[2]);
+    net=pdfOpsNumber(normal[3]);
+    const tailNums=(normal[4]||'').match(/-?\d[\d\s\u00A0]*(?:[.,]\d{1,2})?/g)||[];
+    fees=tailNums.slice(0,4).reduce((a,v)=>a+Math.abs(pdfOpsNumber(v)),0);
+    return {date,type,value:value||'À identifier',qty,price,net,fees};
+  }
+
+  // Cas concaténé : on récupère d'abord le montant net qui suit le couple
+  // quantité/cours. Le PDF fourni produit notamment :
+  // 21400.00  -> 2 / 1400.00
+  // 21139.00  -> 2 / 1139.00
+  // 2337.00   -> 2 / 337.00
+  // 21122.00  -> 2 / 1122.00
+  // 2325.10   -> 2 / 325.10
+  // 1.7771120.48 -> 1.777 / 1120.48
+  // 7.538158.55  -> 7.538 / 158.55
+  const tokenMatch=numericPart.match(/^(\d+(?:[.,]\d+)?)(.*)$/);
+  if(!tokenMatch) return null;
+  const blob=tokenMatch[1].replace(/,/g,'.');
+  let remainder=tokenMatch[2].trim();
+
+  // Si toute la chaîne numérique est dans un seul token, le montant net est
+  // généralement le token suivant. On ne laisse donc pas le regex avaler les
+  // colonnes concaténées.
+  if(!remainder){
+    // Reconstitue les séparations possibles q/pr et utilise le montant net
+    // présent dans le texte original après le premier bloc si disponible.
+    return null;
+  }
+
+  const nextNums=remainder.match(/^-?\d[\d\s\u00A0]*(?:[.,]\d{1,2})?(?:\s+|$)/g)||[];
+  const netMatch=remainder.match(/^-?(?:\d[\d\s\u00A0]*)(?:[.,]\d{1,2})?/);
+  if(!netMatch) return null;
+  net=pdfOpsNumber(netMatch[0]);
+  remainder=remainder.slice(netMatch[0].length).trim();
+
+  const candidates=[];
+  for(let i=1;i<blob.length;i++){
+    const a=blob.slice(0,i), b=blob.slice(i);
+    if(a.endsWith('.') || b.startsWith('.')) continue;
+    const q=pdfOpsNumber(a), pr=pdfOpsNumber(b);
+    if(!(q>0 && q<=10000 && pr>=0.01 && pr<=100000)) continue;
+    const gap=Math.abs(Math.abs(q*pr)-Math.abs(net));
+    candidates.push({q,pr,gap});
+  }
+  if(!candidates.length) return null;
+  candidates.sort((a,b)=>a.gap-b.gap);
+  qty=candidates[0].q;
+  price=candidates[0].pr;
+
+  const feeNums=remainder.match(/-?\d[\d\s\u00A0]*(?:[.,]\d{1,2})?/g)||[];
+  fees=feeNums.slice(0,4).reduce((a,v)=>a+Math.abs(pdfOpsNumber(v)),0);
   return {date,type,value:value||'À identifier',qty,price,net,fees};
 }
 
@@ -1766,9 +1827,23 @@ async function readWafaPdfOperations(){
   try{
     const lines=await readWafaPdfText(file);
     const ops=[];
+    let pendingValue='';
     lines.forEach(line=>{
-      const op=parseWafaOperationLine(line);
-      if(op) ops.push(op);
+      const clean=wafaPdfCleanName(line);
+      const op=parseWafaOperationLine(clean);
+      if(op){
+        // Wafa Bourse prints the security/fund name on the line above the dated row.
+        // Prefer that name for trades so values such as MARK/OPCVM do not replace it.
+        if((op.type==='ACHAT'||op.type==='VENTE') && pendingValue){
+          op.value=pendingValue;
+        }
+        ops.push(op);
+        pendingValue='';
+      }else if(clean && !/^Historique du compte$/i.test(clean) && !/^Du \d/.test(clean) && !/^Lieu, date|^Client|^Compte titres|^Compte espèces|^Dépositaire|^Date Opération|^Avertissement/i.test(clean)){
+        // In the Wafa Bourse PDF, the security/fund name is printed on the line
+        // immediately above the dated operation. Keep it for the next operation.
+        pendingValue=clean;
+      }
     });
     // Remove obvious duplicates produced by PDF line layout.
     const unique=[]; const seen=new Set();
