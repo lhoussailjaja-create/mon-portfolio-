@@ -1928,18 +1928,18 @@ renderFeeTracking();
       const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
       const normalizeType=v=>/VENTE|SELL/i.test(v)?'VENTE':'ACHAT';
       const rows=[];
-      const re=/(\\d{2}\\/\\d{2}\\/\\d{4})\\s+([\\s\\S]*?)(?=\\d{2}\\/\\d{2}\\/\\d{4}|$)/g;
+      const re=/(\d{2}\/\d{2}\/\d{4})\s+([\s\S]*?)(?=\d{2}\/\d{2}\/\d{4}|$)/g;
       let m;
       while((m=re.exec(text))){
         const date=m[1], seg=clean(m[2]);
-        const tm=seg.match(/\\b(ACHAT|VENTE|BUY|SELL)\\b/i);
+        const tm=seg.match(/\b(ACHAT|VENTE|BUY|SELL)\b/i);
         if(!tm) continue;
         const after=clean(seg.slice(tm.index+tm[0].length));
-        const nums=[...after.matchAll(/-?\\d[\\d\\s.,]*/g)].map(x=>({raw:x[0],index:x.index}));
+        const nums=[...after.matchAll(/-?\d[\d\s.,]*/g)].map(x=>({raw:x[0],index:x.index}));
         if(nums.length<2) continue;
         const qty=parseNum(nums[0].raw), price=parseNum(nums[1].raw);
         if(!Number.isFinite(qty)||!Number.isFinite(price)||qty<=0||price<=0) continue;
-        const name=clean(after.slice(0,nums[0].index)).replace(/^[|:;\\-]+|[|:;\\-]+$/g,'');
+        const name=clean(after.slice(0,nums[0].index)).replace(/^[|:;\-]+|[|:;\-]+$/g,'');
         if(!name || /montant|commission|frais|total/i.test(name)) continue;
         rows.push({date,type:normalizeType(tm[1]),name,qty,price,fees:0,net:qty*price,value:name});
       }
@@ -2166,6 +2166,174 @@ renderFeeTracking();
     if(window.renderFeeTracking) window.renderFeeTracking();
     if(window.refreshAdvancedAnalytics) setTimeout(window.refreshAdvancedAnalytics,100);
   });
+})();
+</script>
+
+<script>
+/* IMPORT WAFA BOURSE — handler autonome.
+   Il ne dépend pas du onclick inline ni du module XLSX pour les CSV. */
+(function(){
+  function wSet(msg){
+    var el=document.getElementById('importMsg');
+    if(el) el.innerHTML=msg;
+  }
+  function num(v){
+    var x=String(v==null?'':v).trim().replace(/\u00A0/g,' ').replace(/\s/g,'');
+    if(!x) return 0;
+    if(x.includes(',') && x.includes('.')){
+      if(x.lastIndexOf(',')>x.lastIndexOf('.')) x=x.replace(/\./g,'').replace(',','.');
+      else x=x.replace(/,/g,'');
+    }else if(x.includes(',')) x=x.replace(',','.');
+    x=x.replace(/[^\d.-]/g,'');
+    var n=Number(x);
+    return Number.isFinite(n)?n:0;
+  }
+  function norm(v){
+    return String(v==null?'':v).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  }
+  function splitCSV(text){
+    text=String(text||'').replace(/^\uFEFF/,'');
+    var lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+    var sample=lines.slice(0,10).filter(x=>x.trim()).join('\n');
+    var candidates=[';','\t',','];
+    var delim=candidates.sort(function(a,b){
+      return (sample.split(b).length-1)-(sample.split(a).length-1);
+    })[0];
+    return lines.filter(function(x){return x.trim()!=='';}).map(function(line){
+      var row=[], cur='', q=false;
+      for(var i=0;i<line.length;i++){
+        var c=line[i];
+        if(c==='"'){
+          if(q && line[i+1]==='"'){cur+='"';i++;}
+          else q=!q;
+        }else if(c===delim && !q){row.push(cur);cur='';}
+        else cur+=c;
+      }
+      row.push(cur);
+      return row.map(function(v){return v.trim();});
+    });
+  }
+  function findHeader(rows){
+    for(var h=0;h<Math.min(rows.length,50);h++){
+      var hs=rows[h].map(norm);
+      var hasDate=hs.some(function(x){return x.includes('date');});
+      var hasValue=hs.some(function(x){return x.includes('valeur')||x.includes('titre')||x.includes('libelle')||x.includes('designation');});
+      var hasType=hs.some(function(x){return x.includes('operation')||x.includes('sens')||x.includes('type')||x.includes('mouvement');});
+      if((hasDate&&hasValue)||(hasDate&&hasType)) return h;
+    }
+    return -1;
+  }
+  function col(hs,keys){
+    for(var i=0;i<hs.length;i++){
+      var x=norm(hs[i]);
+      for(var j=0;j<keys.length;j++) if(x.includes(keys[j])) return i;
+    }
+    return -1;
+  }
+  function dateVal(v){
+    var x=String(v||'').trim();
+    var m=x.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+    return m ? m[3]+'-'+m[2]+'-'+m[1] : x;
+  }
+  function typeVal(v){
+    var x=norm(v).toUpperCase();
+    if(/VENTE|SELL|CESSION/.test(x)) return 'VENTE';
+    if(/ACHAT|BUY|SOUSCRIPTION|ACQUISITION/.test(x)) return 'ACHAT';
+    if(/CREDIT|VIR|VERSEMENT/.test(x)) return 'CREDIT';
+    if(/DEBIT|FRAIS|COMMISSION|TAXE/.test(x)) return 'DEBIT';
+    return String(v||'').trim()||'OPERATION';
+  }
+  function saveOps(ops,fileName){
+    var old=[];
+    try{old=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');}catch(e){}
+    var seen=new Set(old.map(function(o){return [o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|').toUpperCase();}));
+    var added=0;
+    ops.forEach(function(o){
+      var k=[o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|').toUpperCase();
+      if(!seen.has(k)){old.push(o);seen.add(k);added++;}
+    });
+    localStorage.setItem('portfolioOperations',JSON.stringify(old));
+    localStorage.setItem('wafaLastImport',JSON.stringify({source:fileName,importedAt:new Date().toISOString(),operations:ops}));
+    try{if(window.renderImportedOperations)window.renderImportedOperations();}catch(e){}
+    try{if(window.renderWafaHistoryAmounts)window.renderWafaHistoryAmounts();}catch(e){}
+    try{if(window.renderFeeTracking)window.renderFeeTracking();}catch(e){}
+    try{if(window.refreshAdvancedAnalytics)window.refreshAdvancedAnalytics();}catch(e){}
+    return added;
+  }
+
+  function run(file){
+    if(!file){wSet('<span class="red">Choisis un fichier CSV/Excel/PDF.</span>');return;}
+    wSet('<span class="green">Lecture du fichier en cours…</span>');
+    var reader=new FileReader();
+    reader.onerror=function(){wSet('<span class="red">Impossible de lire le fichier.</span>');};
+    reader.onload=function(e){
+      try{
+        var bytes=new Uint8Array(e.target.result);
+        var sig=new TextDecoder().decode(bytes.slice(0,8));
+        if(sig.indexOf('%PDF-')===0){
+          if(typeof pdfjsLib==='undefined') throw new Error('PDF.js non chargé.');
+          /* Re-route to the existing PDF importer when the file is actually a PDF. */
+          if(typeof window.importWafaFile==='function'){
+            var input=document.getElementById('excelFile');
+            /* Existing importer reads the same selected file. */
+            window.importWafaFile.__forced=true;
+            return window.importWafaFile();
+          }
+          throw new Error('Lecteur PDF non disponible.');
+        }
+
+        var text=new TextDecoder('utf-8',{fatal:false}).decode(bytes);
+        var rows=splitCSV(text);
+        if(!rows.length) throw new Error('CSV vide ou illisible.');
+        var h=findHeader(rows);
+        if(h<0){
+          /* Some Wafa CSV exports have no clean header; show a useful diagnostic. */
+          throw new Error('CSV lu, mais aucune ligne d’en-têtes Date/Valeur/Opération reconnue.');
+        }
+        var hs=rows[h];
+        var iDate=col(hs,['date']);
+        var iType=col(hs,['operation','sens','type','mouvement','nature']);
+        var iValue=col(hs,['valeur','titre','libelle','designation','instrument','nom']);
+        var iQty=col(hs,['quantite','qte','nombre']);
+        var iPrice=col(hs,['prix unitaire','cours execution','cours execute','cours','prix']);
+        var iAmount=col(hs,['montant net','montant brut','montant','net','total']);
+        var iFees=col(hs,['frais','commission','commissions','tpcvm','taxe']);
+        if(iDate<0 || iValue<0) throw new Error('Le CSV ne contient pas les colonnes Date et Valeur/Titre nécessaires.');
+
+        var ops=[];
+        rows.slice(h+1).forEach(function(r){
+          var value=String(r[iValue]||'').trim();
+          var rawDate=String(r[iDate]||'').trim();
+          if(!value || !rawDate) return;
+          var type=typeVal(iType>=0?r[iType]:'');
+          var qty=iQty>=0?num(r[iQty]):0;
+          var price=iPrice>=0?num(r[iPrice]):0;
+          var net=iAmount>=0?num(r[iAmount]):0;
+          var fees=iFees>=0?Math.abs(num(r[iFees])):0;
+          ops.push({account:localStorage.getItem('currentAccount')||'Wafa Bourse',
+            date:dateVal(rawDate),type:type,value:value,qty:qty,price:price,net:net,fees:fees,source:file.name});
+        });
+        if(!ops.length) throw new Error('CSV lu, mais aucune opération exploitable trouvée.');
+        var added=saveOps(ops,file.name);
+        wSet('<span class="green"><b>'+ops.length+' opération(s) lue(s)</b> — '+added+' nouvelle(s) ajoutée(s) ✓</span>');
+      }catch(err){
+        console.error(err);
+        wSet('<span class="red"><b>Import impossible :</b> '+String(err.message||err)+'</span>');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function bind(){
+    var btn=document.querySelector('button[onclick*="importWafaFile"]');
+    var input=document.getElementById('excelFile');
+    if(!btn || !input) return;
+    btn.onclick=function(ev){ if(ev)ev.preventDefault(); run(input.files&&input.files[0]); return false; };
+    btn.removeAttribute('onclick');
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind);
+  else bind();
 })();
 </script>
 </body>
