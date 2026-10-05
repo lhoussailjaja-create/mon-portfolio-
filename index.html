@@ -1742,12 +1742,20 @@ function parseWafaOperationLine(line){
   const type=rawType.startsWith('ACHAT')?'ACHAT':rawType==='VENTE'?'VENTE':rawType==='CREDIT'?'CREDIT':'DEBIT';
   const after=rest.slice(typeMatch.index+typeMatch[0].length).trim();
 
-  // Pour les crédits/débits, le dernier nombre est le montant.
+  // Pour les crédits/débits, Wafa Bourse peut concaténer les colonnes
+  // (ex. 0 2 500.00 0.00... ou 0 -11.00 0.00...).
+  // On prend le premier montant non nul, et pas le dernier 0.00.
   const allNums=after.match(/-?\d[\d\s\u00A0]*(?:[.,]\d+)?/g)||[];
   if(type==='CREDIT' || type==='DEBIT'){
-    const amount=allNums.length ? pdfOpsNumber(allNums[allNums.length-1]) : 0;
-    const value=after.replace(allNums.length ? allNums[allNums.length-1] : '', '').trim();
-    return {date,type,value:value||'Mouvement espèces',qty:0,price:0,net:amount,fees:0};
+    let amount=0;
+    for(const token of allNums){
+      const n=pdfOpsNumber(token);
+      if(Math.abs(n)>0.000001){ amount=n; break; }
+    }
+    let value='Mouvement espèces';
+    if(type==='CREDIT') value='Virement reçu';
+    if(type==='DEBIT') value=/frais/i.test(after) ? 'Frais Transactions OPCVM' : 'Mouvement espèces';
+    return {date,type,value,qty:0,price:0,net:amount,fees:type==='DEBIT'?Math.abs(amount):0};
   }
 
   // Sépare le libellé du bloc numérique. PDF.js peut coller les colonnes :
