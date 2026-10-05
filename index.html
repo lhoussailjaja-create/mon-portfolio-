@@ -295,6 +295,110 @@ function importBackup(event){
  cards{display:flex;flex-wrap:nowrap;gap:16px;overflow-x:auto}
 </style>
 
+
+<script>
+/* Wafa CSV importer isolé: aucune dépendance à XLSX/PDF.js ni aux anciens importers. */
+(function(){
+  function setMsg(html){
+    var e=document.getElementById('importMsg');
+    if(e) e.innerHTML=html;
+  }
+  function n(v){
+    var x=String(v==null?'':v).trim().replace(/\u00A0/g,' ').replace(/\s/g,'');
+    if(!x)return 0;
+    if(x.indexOf(',')>=0 && x.indexOf('.')>=0){
+      if(x.lastIndexOf(',')>x.lastIndexOf('.')) x=x.replace(/\./g,'').replace(',','.');
+      else x=x.replace(/,/g,'');
+    } else if(x.indexOf(',')>=0) x=x.replace(',','.');
+    x=x.replace(/[^\d.-]/g,'');
+    var z=Number(x); return Number.isFinite(z)?z:0;
+  }
+  function norm(v){
+    return String(v==null?'':v).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  }
+  function rowsFrom(text){
+    var lines=String(text||'').replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(function(x){return x.trim()});
+    if(!lines.length)return [];
+    var sample=lines.slice(0,15).join('\n');
+    var ds=[';','\t',','];
+    var d=ds[0], best=-1;
+    ds.forEach(function(x){var c=(sample.match(new RegExp('\\'+x,'g'))||[]).length;if(c>best){best=c;d=x;}});
+    return lines.map(function(line){
+      var a=[],cur='',q=false;
+      for(var i=0;i<line.length;i++){
+        var c=line[i];
+        if(c==='"'){
+          if(q && line[i+1]==='"'){cur+='"';i++;} else q=!q;
+        }else if(c===d && !q){a.push(cur.trim());cur='';}else cur+=c;
+      }
+      a.push(cur.trim()); return a;
+    });
+  }
+  function find(h, keys){
+    for(var i=0;i<h.length;i++){var x=norm(h[i]);for(var j=0;j<keys.length;j++)if(x.indexOf(keys[j])>=0)return i;}
+    return -1;
+  }
+  function dt(v){
+    var x=String(v||'').trim(),m=x.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+    return m?m[3]+'-'+m[2]+'-'+m[1]:x;
+  }
+  function typ(v){
+    var x=norm(v).toUpperCase();
+    if(/VENTE|SELL|CESSION/.test(x))return 'VENTE';
+    if(/ACHAT|BUY|SOUSCRIPTION|ACQUISITION/.test(x))return 'ACHAT';
+    if(/CREDIT|VIR|VERSEMENT/.test(x))return 'CREDIT';
+    if(/DEBIT|FRAIS|COMMISSION|TAXE/.test(x))return 'DEBIT';
+    return String(v||'').trim()||'OPERATION';
+  }
+  window.wafaCsvForceImport=function(){
+    var input=document.getElementById('excelFile'), file=input&&input.files&&input.files[0];
+    if(!file){setMsg('<span class="red">Choisis un fichier d’abord.</span>');return;}
+    setMsg('<span class="green">Lecture du CSV en cours…</span>');
+    var r=new FileReader();
+    r.onerror=function(){setMsg('<span class="red">Erreur de lecture du fichier.</span>');};
+    r.onload=function(){
+      try{
+        var buf=r.result, bytes=new Uint8Array(buf);
+        var head=new TextDecoder('utf-8').decode(bytes.slice(0,8));
+        if(head.indexOf('%PDF-')===0){setMsg('<span class="red">Ce fichier est un PDF renommé en .CSV. Il faut utiliser le fichier PDF original.</span>');return;}
+        var text=new TextDecoder('utf-8',{fatal:false}).decode(bytes);
+        var rows=rowsFrom(text), h=-1;
+        for(var i=0;i<Math.min(rows.length,60);i++){
+          var hh=rows[i].map(norm);
+          if(hh.some(function(x){return x.indexOf('date')>=0;}) &&
+             hh.some(function(x){return x.indexOf('valeur')>=0||x.indexOf('titre')>=0||x.indexOf('libelle')>=0||x.indexOf('designation')>=0;})){h=i;break;}
+        }
+        if(h<0)throw new Error('En-têtes Date + Valeur/Titre non trouvées dans ce CSV.');
+        var H=rows[h], id=find(H,['date']), it=find(H,['operation','sens','type','mouvement','nature']),
+            iv=find(H,['valeur','titre','libelle','designation','instrument','nom']),
+            iq=find(H,['quantite','qte','nombre']), ip=find(H,['prix unitaire','cours execution','cours execute','cours','prix']),
+            ia=find(H,['montant net','montant brut','montant','net','total']),
+            iff=find(H,['frais','commission','commissions','tpcvm','taxe']);
+        if(id<0||iv<0)throw new Error('Colonnes nécessaires absentes: Date + Valeur/Titre.');
+        var ops=[];
+        rows.slice(h+1).forEach(function(row){
+          var value=String(row[iv]||'').trim(), date=String(row[id]||'').trim();
+          if(!value||!date)return;
+          ops.push({account:localStorage.getItem('currentAccount')||'Wafa Bourse',date:dt(date),
+            type:typ(it>=0?row[it]:''),value:value,qty:iq>=0?n(row[iq]):0,price:ip>=0?n(row[ip]):0,
+            net:ia>=0?n(row[ia]):0,fees:iff>=0?Math.abs(n(row[iff])):0,source:file.name});
+        });
+        if(!ops.length)throw new Error('Aucune opération trouvée dans le CSV.');
+        var old=[];try{old=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');}catch(e){}
+        var seen=new Set(old.map(function(o){return [o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|');})), added=0;
+        ops.forEach(function(o){var k=[o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|');if(!seen.has(k)){old.push(o);seen.add(k);added++;}});
+        localStorage.setItem('portfolioOperations',JSON.stringify(old));
+        localStorage.setItem('wafaLastImport',JSON.stringify({source:file.name,importedAt:new Date().toISOString(),operations:ops}));
+        ['renderImportedOperations','renderWafaHistoryAmounts','renderFeeTracking','refreshAdvancedAnalytics'].forEach(function(fn){try{if(typeof window[fn]==='function')window[fn]();}catch(e){}});
+        setMsg('<span class="green"><b>'+ops.length+' opération(s) lue(s)</b> — '+added+' nouvelle(s) ajoutée(s) ✓</span>');
+      }catch(e){console.error(e);setMsg('<span class="red"><b>Import impossible :</b> '+e.message+'</span>');}
+    };
+    r.readAsArrayBuffer(file);
+  };
+})();
+</script>
+
 </head>
 <body>
 <div class="install-card">
@@ -603,7 +707,7 @@ Le dashboard lit le fichier localement : aucun identifiant ou mot de passe Wafa 
 style="width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
 </div>
 <div style="margin-top:10px">
-<button onclick="importWafaFile()">Importer les positions</button>
+<button type="button" onclick="wafaCsvForceImport()">Importer les positions</button>
 </div>
 <div id="importMsg" class="hint" style="margin-top:10px"></div>
 </div>
