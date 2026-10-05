@@ -1778,53 +1778,90 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   function parseRowsFromPdfText(text){
-    const t=cleanText(text);
+    /* Fallback parser for plain PDF text. It deliberately uses the Wafa Bourse
+       column order: Date / Opération / Valeur / Quantité / Cours / Montant Net / frais... */
     const rows=[];
-    /* Découpe autour des dates pour éviter qu'un nom de valeur mange l'opération suivante. */
-    const re=/(\d{2}\/\d{2}\/\d{4})(.*?)(?=\d{2}\/\d{2}\/\d{4}|$)/g;
+    const t=String(text||'').replace(/\u00a0/g,' ').replace(/\r/g,' ');
+    const dateRe=/(\d{2}\/\d{2}\/\d{4})(.*?)(?=\d{2}\/\d{2}\/\d{4}|$)/g;
     let m;
-    while((m=re.exec(t))){
+    const numberRe=/-?(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d+)(?:[.,]\d+)?/g;
+    while((m=dateRe.exec(t))){
       const date=m[1], seg=cleanText(m[2]);
       const tm=seg.match(/\b(ACHAT|VENTE|BUY|SELL)\b/i);
       if(!tm) continue;
       const type=normalizeType(tm[1]);
       const after=cleanText(seg.slice(tm.index+tm[0].length));
-      const nums=[...after.matchAll(/-?\d[\d\s.,]*/g)]
-        .map(x=>({raw:x[0], index:x.index}))
-        .filter(x=>/[0-9]/.test(x.raw));
+      const nums=[];
+      let nm;
+      while((nm=numberRe.exec(after))){ nums.push({raw:nm[0],index:nm.index}); }
       if(nums.length<2) continue;
-
-      /* Les deux premiers nombres plausibles après le nom sont quantité et cours. */
-      const qtyIdx=nums.findIndex(x=>{
-        const n=toNumber(x.raw);
-        return Number.isFinite(n) && n>0 && n<=100000;
-      });
-      if(qtyIdx<0) continue;
-
-      const qty=toNumber(nums[qtyIdx].raw);
-      let price=NaN, priceIdx=-1;
-      for(let i=qtyIdx+1;i<nums.length;i++){
-        const n=toNumber(nums[i].raw);
-        if(Number.isFinite(n) && n>0){
-          price=n; priceIdx=i; break;
-        }
+      const qty=toNumber(nums[0].raw), price=toNumber(nums[1].raw);
+      if(!Number.isFinite(qty)||!Number.isFinite(price)||qty<=0||price<=0) continue;
+      const name=cleanText(after.slice(0,nums[0].index)).replace(/^[|:;\-]+|[|:;\-]+$/g,'');
+      if(!name) continue;
+      /* If the PDF exposes commission/frais after the net amount, add them. */
+      let fees=0;
+      for(let i=3;i<Math.min(nums.length,8);i++){
+        const n=Math.abs(toNumber(nums[i].raw));
+        if(Number.isFinite(n)) fees+=n;
       }
-      if(!Number.isFinite(price)) continue;
-
-      const namePart=cleanText(after.slice(0, nums[qtyIdx].index));
-      const name=namePart.replace(/^[|:;\-]+|[|:;\-]+$/g,'').trim();
-      if(!name || /montant|commission|frais|total/i.test(name)) continue;
-
-      rows.push({date,type,name,qty,price,fees:0});
+      rows.push({date,type,name,qty,price,fees});
     }
     return rows;
   }
 
+  async function parsePdfPages(file){
+    if(typeof pdfjsLib==='undefined') throw new Error('Lecteur PDF indisponible. Vérifie la connexion Internet.');
+    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    const rows=[];
+    const dateRe=/^\d{2}\/\d{2}\/\d{4}$/;
+    const typeRe=/^(ACHAT|VENTE|BUY|SELL)$/i;
+    const numberRe=/^-?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d+)?)$/;
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p);
+      const content=await page.getTextContent();
+      const items=content.items.map(it=>({
+        str:cleanText(it.str), x:Number(it.transform?.[4]||0), y:Number(it.transform?.[5]||0)
+      })).filter(it=>it.str);
+      const groups=[];
+      for(const it of items){
+        let g=groups.find(q=>Math.abs(q.y-it.y)<2.5);
+        if(!g){g={y:it.y,items:[]};groups.push(g);}
+        g.items.push(it);
+      }
+      groups.sort((a,b)=>b.y-a.y);
+      for(const g of groups){
+        const a=g.items.sort((u,v)=>u.x-v.x);
+        const di=a.findIndex(x=>dateRe.test(x.str));
+        if(di<0) continue;
+        const ti=a.slice(di+1).findIndex(x=>typeRe.test(x.str));
+        if(ti<0) continue;
+        const tpos=di+1+ti, type=normalizeType(a[tpos].str);
+        const tail=a.slice(tpos+1);
+        const ni=tail.findIndex(x=>numberRe.test(x.str));
+        if(ni<0 || ni+1>=tail.length) continue;
+        const qty=toNumber(tail[ni].str), price=toNumber(tail[ni+1].str);
+        if(!Number.isFinite(qty)||!Number.isFinite(price)||qty<=0||price<=0) continue;
+        const name=cleanText(tail.slice(0,ni).map(x=>x.str).join(' '));
+        if(!name) continue;
+        const later=tail.slice(ni+2).filter(x=>numberRe.test(x.str));
+        let fees=0;
+        for(let i=1;i<Math.min(later.length,5);i++){
+          const n=Math.abs(toNumber(later[i].str));
+          if(Number.isFinite(n)) fees+=n;
+        }
+        rows.push({date:a[di].str,type,name,qty,price,fees});
+      }
+    }
+    return rows;
+  }
   async function readFile(file){
     const isPdf=/\.pdf$/i.test(file.name);
     const isExcel=/\.(xlsx|xls)$/i.test(file.name);
     if(isPdf){
       if(typeof pdfjsLib==='undefined') throw new Error('Lecteur PDF indisponible. Vérifie la connexion Internet.');
+      const coordRows=await parsePdfPages(file);
+      if(coordRows.length) return coordRows;
       const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
       let text='';
       for(let p=1;p<=pdf.numPages;p++){
@@ -1883,7 +1920,7 @@ document.addEventListener('DOMContentLoaded', function(){
         return;
       }
       const added=addUniqueOps(rows);
-      msg.innerHTML='<span class="green">'+added+' opération(s) ajoutée(s) depuis '+esc(file.name)+' ✓</span>';
+      msg.innerHTML='<span class="green">'+added+' opération(s) ajoutée(s) depuis '+esc(file.name)+' ✓</span>'+(rows.length?' <span class="hint">('+rows.map(r=>esc(r.date+' '+r.type+' '+r.name)).slice(0,12).join(' • ')+(rows.length>12?' • …':'')+')</span>':'');
     }catch(e){
       msg.innerHTML='<span class="red">Import impossible : '+esc(e.message)+'</span>';
     }
