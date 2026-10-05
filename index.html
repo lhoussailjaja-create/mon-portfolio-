@@ -703,11 +703,11 @@ Télécharge d'abord ton fichier Excel depuis Wafa Bourse, puis sélectionne-le 
 Le dashboard lit le fichier localement : aucun identifiant ou mot de passe Wafa Bourse n'est demandé.
 </div>
 <div style="margin-top:12px">
-<input id="excelFile" type="file" accept=".xlsx,.xls,.csv"
+<input id="excelFile" type="file" accept=".xlsx,.xls,.csv,.pdf"
 style="width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
 </div>
 <div style="margin-top:10px">
-<button type="button" onclick="wafaCsvForceImport()">Importer les positions</button>
+<button type="button" onclick="importWafaFile()">Importer les positions</button>
 </div>
 <div id="importMsg" class="hint" style="margin-top:10px"></div>
 </div>
