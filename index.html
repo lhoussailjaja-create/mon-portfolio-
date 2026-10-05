@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mon Portfolio — Dashboard V24</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
 function norm(v){
  return String(v ?? '').trim().toLowerCase()
    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -267,7 +267,7 @@ canvas{width:100%;height:230px;background:#0b1016;border-radius:10px}
 .note{color:var(--muted);font-size:12px;line-height:1.5;margin-top:16px}
 @media(max-width:760px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.wrap{width:100%;max-width:none;padding:14px}.form{grid-template-columns:1fr}header{gap:10px;align-items:flex-start}header button{white-space:nowrap}.card{min-width:0}table{font-size:12px}th,td{padding:9px}.num{font-size:21px}}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script>
 async function importWafa(){
  const file=document.getElementById('wafaImport').files[0];
  const msg=document.getElementById('wafaImportMsg');
@@ -639,20 +639,20 @@ function importBackup(event){
 <h2>📚 Historique Wafa Bourse</h2>
 <table>
 <thead><tr><th>#</th><th>Date</th><th>Opération</th><th>Valeur</th><th>Montant</th></tr></thead>
-<tbody>
-<tr><td>1</td><td>25/09/2026</td><td>ACHAT</td><td>TOTALENERGIES MARK</td><td>À renseigner</td></tr>
-<tr><td>2</td><td>23/09/2026</td><td>VENTE</td><td>AKDITAL</td><td>À renseigner</td></tr>
-<tr><td>3</td><td>23/09/2026</td><td>VENTE</td><td>CIH</td><td>À renseigner</td></tr>
-<tr><td>4</td><td>21/09/2026</td><td>Crédit</td><td>VIR.WEB RECU DE JAJA</td><td>À renseigner</td></tr>
-<tr><td>5</td><td>21/09/2026</td><td>Crédit</td><td>VIR.WEB RECU DE JAJA</td><td>À renseigner</td></tr>
-<tr><td>6</td><td>21/09/2026</td><td>ACHAT</td><td>AKDITAL</td><td>À renseigner</td></tr>
-<tr><td>7</td><td>21/09/2026</td><td>ACHAT</td><td>CIH</td><td>À renseigner</td></tr>
-<tr><td>8</td><td>12/09/2026</td><td>Débit</td><td>Frais Transactions OPCV…</td><td>À renseigner</td></tr>
-<tr><td>9</td><td>12/09/2026</td><td>Débit</td><td>Frais Transactions OPCV…</td><td>À renseigner</td></tr>
-<tr><td>10</td><td>11/09/2026</td><td>Achat OPCVM</td><td>FCP ATTIJARI DIVID…</td><td>À renseigner</td></tr>
+<tbody id="wafaHistoryBody">
+<tr data-hkey="2026-09-25|ACHAT|TOTALENERGIES"><td>1</td><td>25/09/2026</td><td>ACHAT</td><td>TOTALENERGIES MARK</td><td>2 800,00 MAD</td></tr>
+<tr data-hkey="2026-09-23|VENTE|AKDITAL"><td>2</td><td>23/09/2026</td><td>VENTE</td><td>AKDITAL</td><td>2 278,00 MAD</td></tr>
+<tr data-hkey="2026-09-23|VENTE|CIH"><td>3</td><td>23/09/2026</td><td>VENTE</td><td>CIH</td><td>674,00 MAD</td></tr>
+<tr data-hkey="2026-09-21|CREDIT|VIR.WEB RECU DE JAJA"><td>4</td><td>21/09/2026</td><td>Crédit</td><td>VIR.WEB RECU DE JAJA</td><td class="unknown">À renseigner</td></tr>
+<tr data-hkey="2026-09-21|CREDIT|VIR.WEB RECU DE JAJA"><td>5</td><td>21/09/2026</td><td>Crédit</td><td>VIR.WEB RECU DE JAJA</td><td class="unknown">À renseigner</td></tr>
+<tr data-hkey="2026-09-21|ACHAT|AKDITAL"><td>6</td><td>21/09/2026</td><td>ACHAT</td><td>AKDITAL</td><td>2 244,00 MAD</td></tr>
+<tr data-hkey="2026-09-21|ACHAT|CIH"><td>7</td><td>21/09/2026</td><td>ACHAT</td><td>CIH</td><td>650,20 MAD</td></tr>
+<tr data-hkey="2026-09-12|DEBIT|FRAIS TRANSACTIONS OPCVM"><td>8</td><td>12/09/2026</td><td>Débit</td><td>Frais Transactions OPCV…</td><td class="unknown">À renseigner</td></tr>
+<tr data-hkey="2026-09-12|DEBIT|FRAIS TRANSACTIONS OPCVM"><td>9</td><td>12/09/2026</td><td>Débit</td><td>Frais Transactions OPCV…</td><td class="unknown">À renseigner</td></tr>
+<tr data-hkey="2026-09-11|ACHAT OPCVM|FCP ATTIJARI DIVID"><td>10</td><td>11/09/2026</td><td>Achat OPCVM</td><td>FCP ATTIJARI DIVID…</td><td class="unknown">À renseigner</td></tr>
 </tbody>
 </table>
-<div class="hint" style="margin-top:10px">Les montants ne sont pas visibles dans cette capture, donc ils sont laissés volontairement à « À renseigner ».</div>
+<div class="hint" style="margin-top:10px">Les montants connus des confirmations Wafa Bourse sont affichés. Les crédits/frais dont le montant source n’est pas disponible restent « À renseigner » jusqu’à import du relevé correspondant.</div>
 </div>
 
 
@@ -839,12 +839,12 @@ Montants calculés comme quantité × cours affiché. Ils sont des montants brut
 <div class="section card">
 <h2>💳 Suivi des frais</h2>
 <div class="grid">
-<div class="card"><div class="label">Frais visibles OPCVM</div><div class="num">À renseigner</div></div>
-<div class="card"><div class="label">Commissions actions</div><div class="num">À renseigner</div></div>
-<div class="card"><div class="label">Frais cumulés</div><div class="num">À calculer</div></div>
-<div class="card"><div class="label">TPCVM affichée</div><div class="num">0,00 MAD</div></div>
+<div class="card"><div class="label">Frais visibles OPCVM</div><div class="num" id="feesOpcvm">0,00 MAD</div></div>
+<div class="card"><div class="label">Commissions actions</div><div class="num" id="feesActions">0,00 MAD</div></div>
+<div class="card"><div class="label">Frais cumulés</div><div class="num" id="feesTotal">0,00 MAD</div></div>
+<div class="card"><div class="label">TPCVM affichée</div><div class="num" id="feesTpcvm">0,00 MAD</div></div>
 </div>
-<div class="hint" style="margin-top:10px">Les frais ne sont pas déduits automatiquement tant que leurs montants exacts ne sont pas saisis.</div>
+<div class="hint" id="feesHint" style="margin-top:10px">Les frais sont calculés automatiquement à partir des opérations importées (PDF) et des opérations saisies manuellement.</div>
 </div>
 
 
@@ -1244,10 +1244,16 @@ function addOperation(){
    return;
  }
  const amount=qty*price+fees;
- const row=document.createElement('tr');
- row.innerHTML='<td>'+date+'</td><td>'+type+'</td><td>'+name+'</td><td>'+qty+'</td><td>'+price.toFixed(2)+'</td><td>'+amount.toFixed(2)+' MAD</td>';
- document.getElementById('journalBody').appendChild(row);
- msg.innerHTML='<span class="green">Opération ajoutée au journal.</span>';
+ const op={account:'PEA',date,type,value:name,qty,price,net:amount,fees,source:'Saisie manuelle',importedAt:new Date().toISOString()};
+ const ops=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');
+ const key=[op.account,op.date,op.type,op.value,op.qty,op.price,op.net].join('|');
+ const exists=ops.some(o=>[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|')===key);
+ if(!exists) ops.push(op);
+ localStorage.setItem('portfolioOperations',JSON.stringify(ops));
+ renderImportedOperations();
+ renderWafaHistoryAmounts();
+ renderFeeTracking();
+ msg.innerHTML='<span class="green">Opération ajoutée au journal et aux frais ✓</span>';
  document.getElementById('opName').value='';
  document.getElementById('opQty').value='';
  document.getElementById('opPrice').value='';
@@ -1887,6 +1893,8 @@ function validateWafaPdfOperations(){
   localStorage.setItem('portfolioOperations',JSON.stringify(existing.concat(added)));
   document.getElementById('pdfOpsMsg').innerHTML='<span class="green">'+added.length+' opération(s) ajoutée(s) au '+account+' ✓</span>'+(added.length<stamped.length?' Les doublons ont été ignorés.':'');
   renderImportedOperations();
+  renderWafaHistoryAmounts();
+  renderFeeTracking();
   clearWafaPdfPreview(false);
 }
 
@@ -1897,13 +1905,65 @@ function clearWafaPdfPreview(clearMsg=true){
   if(clearMsg){const m=document.getElementById('pdfOpsMsg');if(m)m.innerHTML='';}
 }
 
+function isOpcvmOperation(o){
+ const n=String(o.value||'').toUpperCase();
+ return o.type==='DEBIT' && /FRAIS.*OPCVM/.test(n) || /OPCVM|FCP|FUND|MOUCHARAKA|DIVIDEND|LOW VOLATILITY|MOMENTUM|MONETAIRE|OBLIGATIONS|PATRIMOINE/.test(n);
+}
+
+function renderFeeTracking(){
+ const ops=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');
+ let opcvm=0, actions=0, total=0, tpcvm=0;
+ ops.forEach(o=>{
+   const f=Math.abs(Number(o.fees)||0);
+   if(!f) return;
+   total+=f;
+   if(isOpcvmOperation(o)) opcvm+=f; else actions+=f;
+ });
+ const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v.toFixed(2).replace('.',',')+' MAD';};
+ set('feesOpcvm',opcvm);
+ set('feesActions',actions);
+ set('feesTotal',total);
+ set('feesTpcvm',tpcvm);
+ const h=document.getElementById('feesHint');
+ if(h) h.textContent=ops.length ? 'Frais calculés automatiquement sur '+ops.length+' opération(s) enregistrée(s). Les frais affichés dans le PDF sont additionnés sans modifier la valorisation.' : 'Aucune opération avec frais enregistrée pour le moment.';
+}
+
 function renderImportedOperations(){
   const body=document.getElementById('importedOpsBody');
   if(!body)return;
   const ops=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');
-  body.innerHTML=ops.map(o=>'<tr><td>'+o.account+'</td><td>'+o.date+'</td><td>'+o.type+'</td><td>'+wafaPdfCleanName(o.value)+'</td><td>'+o.qty+'</td><td>'+o.price.toFixed(2)+'</td><td>'+o.net.toFixed(2)+' MAD</td><td>'+o.fees.toFixed(2)+' MAD</td></tr>').join('');
+  body.innerHTML=ops.map(o=>'<tr><td>'+o.account+'</td><td>'+o.date+'</td><td>'+o.type+'</td><td>'+wafaPdfCleanName(o.value)+'</td><td>'+o.qty+'</td><td>'+Number(o.price||0).toFixed(2)+'</td><td>'+Number(o.net||0).toFixed(2)+' MAD</td><td>'+Number(o.fees||0).toFixed(2)+' MAD</td></tr>').join('');
+}
+
+function renderWafaHistoryAmounts(){
+  const body=document.getElementById('wafaHistoryBody');
+  if(!body)return;
+  const ops=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');
+  const normName=v=>String(v||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+  const rows=[...body.querySelectorAll('tr[data-hkey]')];
+  rows.forEach(row=>{
+    const key=row.getAttribute('data-hkey').split('|');
+    const date=key[0], type=key[1], wanted=normName(key.slice(2).join('|'));
+    const matches=ops.filter(o=>{
+      const od=String(o.date||'').replace(/-/g,'-');
+      const ot=String(o.type||'').toUpperCase();
+      const ov=normName(o.value);
+      const typeOk=(type==='CREDIT' ? /CREDIT|VIR/.test(ot) : ot===type || (type==='ACHAT OPCVM' && ot==='ACHAT'));
+      return od===date && typeOk && (ov.includes(wanted)||wanted.includes(ov));
+    });
+    if(matches.length){
+      const total=matches.reduce((sum,o)=>sum+Number(o.net||0),0);
+      const cell=row.cells[row.cells.length-1];
+      if(total || matches.some(o=>Number(o.net)===0)){
+        cell.textContent=total.toFixed(2).replace('.',',')+' MAD';
+        cell.classList.remove('unknown');
+      }
+    }
+  });
 }
 renderImportedOperations();
+renderWafaHistoryAmounts();
+renderFeeTracking();
 </script>
 
 </body>
