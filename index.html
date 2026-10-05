@@ -1971,47 +1971,118 @@ renderFeeTracking();
           return;
         }
 
-        /* Vrai Excel : lecture normale, mais avec toutes les feuilles et jusqu’à
-           30 lignes possibles pour les en-têtes. */
+        /* Excel / CSV : on accepte soit un état de positions, soit un historique
+           d'opérations Wafa Bourse. */
         if(typeof XLSX==='undefined') throw new Error('Le module Excel n’est pas chargé. Recharge la page avec Internet activé.');
-        const wb=XLSX.read(bytes,{type:'array',cellDates:true});
-        let best=null;
+        const wb=XLSX.read(bytes,{type:'array',cellDates:true,raw:false});
+        let bestPos=null, bestOps=null;
+
+        const parseDate=(v)=>{
+          if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+          let x=String(v??'').trim();
+          let m=x.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+          return m ? `${m[3]}-${m[2]}-${m[1]}` : x;
+        };
+        const normalizeType=(v)=>{
+          const x=window.normWafa(v).toUpperCase();
+          if(/VENTE|SELL|CESSION/.test(x)) return 'VENTE';
+          if(/ACHAT|BUY|SOUSCRIPTION|ACQUISITION/.test(x)) return 'ACHAT';
+          if(/CREDIT|VIR|VERSEMENT/.test(x)) return 'CREDIT';
+          if(/DEBIT|FRAIS|COMMISSION|TAXE/.test(x)) return 'DEBIT';
+          return String(v??'').trim()||'OPERATION';
+        };
+
         wb.SheetNames.forEach(sheetName=>{
           const ws=wb.Sheets[sheetName];
-          const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+          const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
           if(!data.length) return;
-          for(let h=0;h<Math.min(data.length,30);h++){
+
+          for(let h=0;h<Math.min(data.length,40);h++){
             const headers=data[h].map(window.normWafa);
             const find=(keys)=>keys.reduce((found,k)=>found>=0?found:headers.findIndex(x=>x.includes(k)),-1);
-            const iName=find(['valeur','titre','designation','nom','libelle']);
-            const iQty=find(['quantite','qte','nombre']);
+
+            // Position schema
+            const iName=find(['valeur','titre','designation','libelle','nom']);
+            const iQty=find(['quantite','qte','nombre','position']);
             const iCmp=find(['cmp','prmp','prix moyen','prix de revient']);
             const iCourse=find(['cours','vl','cours actuel','cours de bourse']);
             const iVal=find(['valorisation','valeur de marche','montant','valorisation totale']);
             if(iName>=0 && (iQty>=0||iCmp>=0||iCourse>=0||iVal>=0)){
-              const rows=data.slice(h+1).filter(r=>r.some(x=>String(x).trim()) && String(r[iName]??'').trim());
-              const score=rows.length+(iQty>=0?2:0)+(iCmp>=0?2:0)+(iCourse>=0?1:0)+(iVal>=0?1:0);
-              if(!best||score>best.score) best={data,header:h,iName,iQty,iCmp,iCourse,iVal,score,sheetName};
+              const rows=data.slice(h+1).filter(r=>String(r[iName]??'').trim());
+              const score=rows.length+4+(iQty>=0?3:0)+(iCmp>=0?2:0)+(iCourse>=0?2:0)+(iVal>=0?2:0);
+              if(!bestPos||score>bestPos.score) bestPos={data,header:h,iName,iQty,iCmp,iCourse,iVal,score,sheetName};
+            }
+
+            // Operation schema: date + type/sens + value, with qty/price/amount optional.
+            const iDate=find(['date','date operation','date de transaction','date transaction']);
+            const iType=find(['operation','type','sens','nature','mouvement']);
+            const iOName=find(['valeur','titre','designation','libelle','nom','instrument']);
+            const iOQty=find(['quantite','qte','nombre']);
+            const iPrice=find(['cours','prix','prix unitaire','cours execution','cours execute']);
+            const iAmount=find(['montant','montant brut','montant net','net','total']);
+            const iFees=find(['frais','commission','commissions','tpcvm','taxe']);
+            if(iDate>=0 && iOName>=0 && (iType>=0 || iAmount>=0)){
+              const rows=data.slice(h+1).filter(r=>String(r[iDate]??'').trim() && String(r[iOName]??'').trim());
+              const score=rows.length+5+(iType>=0?3:0)+(iOQty>=0?1:0)+(iPrice>=0?1:0)+(iAmount>=0?2:0)+(iFees>=0?2:0);
+              if(!bestOps||score>bestOps.score) bestOps={data,header:h,iDate,iType,iOName,iOQty,iPrice,iAmount,iFees,score,sheetName};
             }
           }
         });
-        if(!best) throw new Error('Ce fichier n’est pas un Excel exploitable. Il ressemble peut-être à un PDF renommé.');
+
+        // Prefer an operations sheet when it has a clear date/type schema.
+        if(bestOps && bestOps.score>=7){
+          const ops=[];
+          bestOps.data.slice(bestOps.header+1).forEach(r=>{
+            const value=String(r[bestOps.iOName]??'').trim();
+            if(!value) return;
+            const date=parseDate(r[bestOps.iDate]);
+            const type=normalizeType(bestOps.iType>=0?r[bestOps.iType]:'');
+            const qty=bestOps.iOQty>=0?parseNum(r[bestOps.iOQty]):0;
+            const price=bestOps.iPrice>=0?parseNum(r[bestOps.iPrice]):0;
+            const net=bestOps.iAmount>=0?parseNum(r[bestOps.iAmount]):0;
+            const fees=bestOps.iFees>=0?parseNum(r[bestOps.iFees]):0;
+            if(!date && !value) return;
+            ops.push({
+              account: localStorage.getItem('currentAccount')||'Wafa Bourse',
+              date,type,value,qty:Number.isFinite(qty)?qty:0,
+              price:Number.isFinite(price)?price:0,
+              net:Number.isFinite(net)?net:0,
+              fees:Number.isFinite(fees)?Math.abs(fees):0,
+              source:file.name
+            });
+          });
+          if(!ops.length) throw new Error('CSV/Excel lu, mais aucune opération exploitable n’a été trouvée.');
+          const oldOps=(()=>{try{return JSON.parse(localStorage.getItem('portfolioOperations')||'[]')}catch(e){return []}})();
+          const key=o=>[o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|').toUpperCase();
+          const seen=new Set(oldOps.map(key));
+          ops.forEach(o=>{if(!seen.has(key(o))){oldOps.push(o);seen.add(key(o));}});
+          localStorage.setItem('portfolioOperations',JSON.stringify(oldOps));
+          localStorage.setItem('wafaLastImport',JSON.stringify({source:file.name,sheet:bestOps.sheetName,importedAt:new Date().toISOString(),operations:ops}));
+          if(window.renderImportedOperations) window.renderImportedOperations();
+          if(window.renderWafaHistoryAmounts) window.renderWafaHistoryAmounts();
+          if(window.renderFeeTracking) window.renderFeeTracking();
+          if(window.refreshAdvancedAnalytics) setTimeout(window.refreshAdvancedAnalytics,50);
+          show('<span class="green">'+ops.length+' opération(s) importée(s) depuis '+file.name+' ✓</span>');
+          return;
+        }
+
+        if(!bestPos) throw new Error('Aucune structure Wafa Bourse reconnue dans ce fichier. Si ce CSV est un historique de transactions, vérifie qu’il contient au moins une colonne Date et une colonne Valeur/Titre.');
         const outRows=[];
-        best.data.slice(best.header+1).forEach(r=>{
-          const name=String(r[best.iName]??'').trim(); if(!name) return;
-          const qty=best.iQty>=0?parseNum(r[best.iQty]):NaN;
-          const cmp=best.iCmp>=0?parseNum(r[best.iCmp]):NaN;
-          const course=best.iCourse>=0?parseNum(r[best.iCourse]):NaN;
-          const val=best.iVal>=0?parseNum(r[best.iVal]):NaN;
+        bestPos.data.slice(bestPos.header+1).forEach(r=>{
+          const name=String(r[bestPos.iName]??'').trim(); if(!name) return;
+          const qty=bestPos.iQty>=0?parseNum(r[bestPos.iQty]):NaN;
+          const cmp=bestPos.iCmp>=0?parseNum(r[bestPos.iCmp]):NaN;
+          const course=bestPos.iCourse>=0?parseNum(r[bestPos.iCourse]):NaN;
+          const val=bestPos.iVal>=0?parseNum(r[bestPos.iVal]):NaN;
           if([qty,cmp,course,val].every(x=>Number.isNaN(x))) return;
           const pl=Number.isFinite(qty)&&Number.isFinite(cmp)&&Number.isFinite(course)?qty*(course-cmp):NaN;
           outRows.push({name,qty,cmp,course,val,pl});
         });
-        if(!outRows.length) throw new Error('Excel lu, mais aucune ligne de position exploitable.');
+        if(!outRows.length) throw new Error('Fichier lu, mais aucune ligne de position exploitable.');
         const body=document.querySelector('table:first-of-type tbody');
         if(!body) throw new Error('Tableau des positions introuvable.');
         body.innerHTML=outRows.map(r=>'<tr><td>'+r.name+'</td><td>'+(Number.isFinite(r.qty)?r.qty:'—')+'</td><td>'+(Number.isFinite(r.cmp)?r.cmp.toFixed(2):'—')+'</td><td>'+(Number.isFinite(r.course)?r.course.toFixed(2):'—')+'</td><td>'+(Number.isFinite(r.val)?r.val.toFixed(2):'—')+'</td><td class="'+(Number.isFinite(r.pl)&&r.pl<0?'red':'green')+'">'+(Number.isFinite(r.pl)?r.pl.toFixed(2):'—')+'</td></tr>').join('');
-        localStorage.setItem('wafaLastImport',JSON.stringify({source:file.name,sheet:best.sheetName,importedAt:new Date().toISOString(),rows:outRows}));
+        localStorage.setItem('wafaLastImport',JSON.stringify({source:file.name,sheet:bestPos.sheetName,importedAt:new Date().toISOString(),rows:outRows}));
         show('<span class="green">'+outRows.length+' position(s) importée(s) depuis '+file.name+' ✓</span>');
         if(window.refreshAdvancedAnalytics) setTimeout(window.refreshAdvancedAnalytics,50);
       }catch(err){
