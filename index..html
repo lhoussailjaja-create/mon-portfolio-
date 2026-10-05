@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mon Portfolio — Dashboard V24</title>
+<title>Mon Portfolio — Dashboard V25</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
 function norm(v){
  return String(v ?? '').trim().toLowerCase()
@@ -148,7 +148,7 @@ function parseWafaText(text,fileName){
 
 function exportBackup(){
  const data={
-   version:'V24',
+   version:'V25',
    portfolioId:document.getElementById('portfolioId').value,
    savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
    snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
@@ -292,7 +292,7 @@ function importBackup(event){
 <style>
 .install-card{margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--txt)}.install-card p{color:var(--muted)}
 .install-card button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer}
- cards{display:flex;flex-wrap:nowrap;gap:16px;overflow-x:auto}
+.cards{display:flex;flex-wrap:nowrap;gap:16px;overflow-x:auto}
 </style>
 
 
@@ -676,23 +676,6 @@ function importBackup(event){
 </tbody>
 </table>
 <div class="hint" style="margin-top:10px">Les montants connus des confirmations Wafa Bourse sont affichés. Les crédits/frais dont le montant source n’est pas disponible restent « À renseigner » jusqu’à import du relevé correspondant.</div>
-</div>
-
-
-<div class="section card" id="mainWafaPdfImporter">
-<h2>🔄 Importer depuis Wafa Bourse — PDF</h2>
-<div class="hint">
-Sélectionne directement le <b>PDF original Wafa Bourse</b>. Le dashboard le lit localement et ajoute les opérations au journal après détection automatique. Aucun identifiant ou mot de passe n'est demandé.
-</div>
-<div style="margin-top:12px">
-<input id="mainPdfFile" type="file" accept="application/pdf,.pdf"
-style="width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
-</div>
-<div style="margin-top:10px">
-<button type="button" onclick="importMainWafaPdf()">📥 Importer le PDF</button>
-</div>
-<div id="mainPdfMsg" class="hint" style="margin-top:10px"></div>
-<div id="mainPdfPreview" style="overflow:auto;margin-top:12px"></div>
 </div>
 
 
