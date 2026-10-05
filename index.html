@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mon Portfolio — Dashboard V24+</title>
+<title>Mon Portfolio — Dashboard V24</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
 function norm(v){
  return String(v ?? '').trim().toLowerCase()
@@ -1649,313 +1649,178 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 
 
-<div class="section card" id="wafaOperationsImport">
-  <h2>📥 Importer les opérations Wafa Bourse</h2>
-  <div class="hint">
-    Importe un relevé PDF ou un CSV/Excel contenant les opérations. Les achats et ventes reconnus
-    sont ajoutés automatiquement au Journal des opérations et sauvegardés localement.
-  </div>
-  <div style="margin-top:12px">
-    <input id="operationsFile" type="file" accept=".pdf,.csv,.xlsx,.xls"
-      style="width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-    <button onclick="importWafaOperations()">📥 Importer les opérations</button>
-    <button onclick="clearImportedOperations()" style="background:#ff646b">Effacer le journal importé</button>
-  </div>
-  <div id="operationsImportMsg" class="hint" style="margin-top:10px"></div>
-</div>
 
+<!-- ================= IMPORT PDF WAFA BOURSE — PEA / CTO ================= -->
+<section class="section card" id="pdfOpsImporter">
+  <h2>📥 Importer l'historique Wafa Bourse (PDF)</h2>
+  <div class="hint">
+    Sélectionne un relevé PDF Wafa Bourse. Le fichier est lu localement par le navigateur et les opérations détectées sont affichées avant validation.
+  </div>
+  <div class="form" style="margin-top:12px">
+    <div>
+      <div class="label">Compte</div>
+      <select id="pdfOpsAccount" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt);font-size:15px">
+        <option value="PEA">PEA</option>
+        <option value="CTO">CTO</option>
+      </select>
+    </div>
+    <div>
+      <div class="label">Fichier PDF</div>
+      <input id="pdfOpsFile" type="file" accept=".pdf">
+    </div>
+  </div>
+  <button style="margin-top:11px" onclick="readWafaPdfOperations()">🔎 Lire le PDF</button>
+  <div id="pdfOpsMsg" class="hint" style="margin-top:10px"></div>
+  <div id="pdfOpsPreview" style="overflow:auto;margin-top:12px"></div>
+  <div id="pdfOpsActions" style="display:none;margin-top:12px;gap:8px;flex-wrap:wrap">
+    <button onclick="validateWafaPdfOperations()">✅ Valider l'import</button>
+    <button onclick="clearWafaPdfPreview()" style="background:#27323d;color:#fff">Annuler</button>
+  </div>
+</section>
+
+<section class="section card" id="importedOpsSection">
+  <h2>🧾 Opérations importées</h2>
+  <div class="hint">PEA et CTO restent séparés. Les opérations validées sont conservées localement dans le navigateur.</div>
+  <div style="overflow:auto;margin-top:10px">
+    <table>
+      <thead><tr><th>Compte</th><th>Date</th><th>Type</th><th>Valeur</th><th>Qté</th><th>Cours</th><th>Montant net</th><th>Frais</th></tr></thead>
+      <tbody id="importedOpsBody"></tbody>
+    </table>
+  </div>
+</section>
 
 <script>
-/* ===== V24+ : Import automatique des opérations Wafa Bourse ===== */
-(function(){
-  const KEY = 'portfolioOperations';
+let wafaPdfPendingOperations=[];
 
-  function cleanText(v){
-    return String(v ?? '').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
-  }
+function pdfOpsNumber(v){
+  let s=String(v ?? '').trim().replace(/\s/g,'');
+  if(!s) return 0;
+  if(s.includes(',') && s.includes('.')){
+    if(s.lastIndexOf(',')>s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',','.');
+    else s=s.replace(/,/g,'');
+  }else if(s.includes(',')) s=s.replace(',','.');
+  return parseFloat(s) || 0;
+}
 
-  function toNumber(v){
-    let s=String(v ?? '').trim().replace(/\s/g,'');
-    if(!s) return NaN;
-    /* 1 234,56 / 1234,56 / 1234.56 */
-    if(s.includes(',') && s.includes('.')){
-      if(s.lastIndexOf(',') > s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',','.');
-      else s=s.replace(/,/g,'');
-    }else{
-      s=s.replace(',','.');
-    }
-    return parseFloat(s);
-  }
+function wafaPdfCleanName(s){
+  return String(s||'').replace(/\s+/g,' ').trim();
+}
 
-  function esc(v){
-    return String(v ?? '').replace(/[&<>"']/g, m => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-    }[m]));
-  }
-
-  function getOps(){
-    try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
-    catch(e){ return []; }
-  }
-
-  function saveOps(ops){
-    localStorage.setItem(KEY, JSON.stringify(ops));
-  }
-
-  function normalizeType(v){
-    const s=cleanText(v).toLowerCase();
-    if(/vente|sell|cession/.test(s)) return 'Vente';
-    if(/achat|buy|souscription/.test(s)) return 'Achat';
-    return cleanText(v);
-  }
-
-  function validDate(v){
-    const s=cleanText(v);
-    if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
-    if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
-      const [y,m,d]=s.split('-'); return d+'/'+m+'/'+y;
-    }
-    return s;
-  }
-
-  function addUniqueOps(rows){
-    const old=getOps();
-    const seen=new Set(old.map(o => [o.date,o.type,o.name,o.qty,o.price,o.fees].join('|')));
-    let added=0;
-    rows.forEach(o=>{
-      o.date=validDate(o.date);
-      o.type=normalizeType(o.type);
-      o.name=cleanText(o.name);
-      o.qty=Number(o.qty)||0;
-      o.price=Number(o.price)||0;
-      o.fees=Number(o.fees)||0;
-      if(!o.date || !o.name || !o.qty || !o.price) return;
-      const key=[o.date,o.type,o.name,o.qty,o.price,o.fees].join('|');
-      if(!seen.has(key)){
-        old.push(o); seen.add(key); added++;
-      }
+async function readWafaPdfText(file){
+  if(typeof pdfjsLib==='undefined') throw new Error('Le lecteur PDF n’est pas disponible. Ouvre la page avec Internet activé.');
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const content=await page.getTextContent();
+    const items=content.items.map(x=>({text:x.str||'',x:x.transform?.[4]||0,y:Math.round((x.transform?.[5]||0)*10)/10}));
+    const groups=[];
+    items.forEach(it=>{
+      let g=groups.find(z=>Math.abs(z.y-it.y)<2.5);
+      if(!g){g={y:it.y,items:[]};groups.push(g);}
+      g.items.push(it);
     });
-    old.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-    saveOps(old);
-    renderOperationJournal();
-    return added;
-  }
-
-  function parseCsv(text){
-    const lines=text.split(/\r?\n/).filter(x=>x.trim());
-    if(lines.length<2) return [];
-    const delimiter=(lines[0].includes(';')?';':',');
-    const split=line=>{
-      const out=[]; let cur='', quoted=false;
-      for(let i=0;i<line.length;i++){
-        const ch=line[i];
-        if(ch==='"'){ if(quoted && line[i+1]==='"'){cur+='"';i++;} else quoted=!quoted; }
-        else if(ch===delimiter && !quoted){out.push(cur);cur='';}
-        else cur+=ch;
-      }
-      out.push(cur); return out.map(x=>x.trim());
-    };
-    const headers=split(lines[0]).map(h=>cleanText(h).toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,''));
-    const find=(keys)=>headers.findIndex(h=>keys.some(k=>h.includes(k)));
-    const iDate=find(['date','jour']);
-    const iType=find(['operation','op','sens','type']);
-    const iName=find(['valeur','titre','instrument','nom']);
-    const iQty=find(['quantite','qte','qty']);
-    const iPrice=find(['prix unitaire','prix','cours','cours execution']);
-    const iFees=find(['frais','commission']);
-    if(iDate<0 || iName<0 || iQty<0 || iPrice<0) return [];
-    return lines.slice(1).map(line=>{
-      const r=split(line);
-      return {
-        date:r[iDate], type:iType>=0?r[iType]:'Achat',
-        name:r[iName], qty:toNumber(r[iQty]), price:toNumber(r[iPrice]),
-        fees:iFees>=0?(toNumber(r[iFees])||0):0
-      };
+    groups.sort((a,b)=>b.y-a.y);
+    groups.forEach(g=>{
+      g.items.sort((a,b)=>a.x-b.x);
+      const line=wafaPdfCleanName(g.items.map(x=>x.text).join(' '));
+      if(line) lines.push(line);
     });
   }
+  return lines;
+}
 
-  function parseRowsFromPdfText(text){
-    /* Fallback parser for plain PDF text. It deliberately uses the Wafa Bourse
-       column order: Date / Opération / Valeur / Quantité / Cours / Montant Net / frais... */
-    const rows=[];
-    const t=String(text||'').replace(/\u00a0/g,' ').replace(/\r/g,' ');
-    const dateRe=/(\d{2}\/\d{2}\/\d{4})(.*?)(?=\d{2}\/\d{2}\/\d{4}|$)/g;
-    let m;
-    const numberRe=/-?(?:\d{1,3}(?:[ \u00a0]\d{3})+|\d+)(?:[.,]\d+)?/g;
-    while((m=dateRe.exec(t))){
-      const date=m[1], seg=cleanText(m[2]);
-      const tm=seg.match(/\b(ACHAT|VENTE|BUY|SELL)\b/i);
-      if(!tm) continue;
-      const type=normalizeType(tm[1]);
-      const after=cleanText(seg.slice(tm.index+tm[0].length));
-      const nums=[];
-      let nm;
-      while((nm=numberRe.exec(after))){ nums.push({raw:nm[0],index:nm.index}); }
-      if(nums.length<2) continue;
-      const qty=toNumber(nums[0].raw), price=toNumber(nums[1].raw);
-      if(!Number.isFinite(qty)||!Number.isFinite(price)||qty<=0||price<=0) continue;
-      const name=cleanText(after.slice(0,nums[0].index)).replace(/^[|:;\-]+|[|:;\-]+$/g,'');
-      if(!name) continue;
-      /* If the PDF exposes commission/frais after the net amount, add them. */
-      let fees=0;
-      for(let i=3;i<Math.min(nums.length,8);i++){
-        const n=Math.abs(toNumber(nums[i].raw));
-        if(Number.isFinite(n)) fees+=n;
-      }
-      rows.push({date,type,name,qty,price,fees});
-    }
-    return rows;
+function parseWafaOperationLine(line){
+  const m=line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(.+)$/);
+  if(!m) return null;
+  const date=m[1];
+  const rest=m[2]+' '+m[3];
+  const typeMatch=rest.match(/\b(ACHAT|VENTE|Credit|Débit)\b/i);
+  if(!typeMatch) return null;
+  const type=typeMatch[1].toUpperCase()==='CREDIT'?'CREDIT':typeMatch[1].toUpperCase()==='DÉBIT'?'DEBIT':typeMatch[1].toUpperCase();
+  let after=rest.slice(typeMatch.index+typeMatch[0].length).trim();
+  const nums=after.match(/-?\d[\d\s]*(?:[.,]\d+)?/g)||[];
+  if(type==='CREDIT' || type==='DEBIT'){
+    const amount=nums.length?pdfOpsNumber(nums[nums.length-1]):0;
+    const value=after.replace(/-?\d[\d\s]*(?:[.,]\d+)?/g,' ').replace(/\s+/g,' ').trim();
+    return {date,type,value:value||'Mouvement espèces',qty:0,price:0,net:amount,fees:0};
   }
+  if(nums.length<3) return null;
+  // In Wafa Bourse history: Valeur ... Quantité Cours Montant Net Comm courtage Comm RL HT Comm BVC TVA
+  const qty=pdfOpsNumber(nums[nums.length-8] || nums[0]);
+  const price=pdfOpsNumber(nums[nums.length-7] || nums[1]);
+  const net=pdfOpsNumber(nums[nums.length-6] || nums[2]);
+  const fees=[nums[nums.length-5],nums[nums.length-4],nums[nums.length-3],nums[nums.length-2]].filter(Boolean).reduce((a,v)=>a+Math.abs(pdfOpsNumber(v)),0);
+  let value=after;
+  const cut=after.search(/-?\d[\d\s]*(?:[.,]\d+)?/);
+  if(cut>=0) value=after.slice(0,cut).trim();
+  return {date,type,value:value||'À identifier',qty,price,net,fees};
+}
 
-  async function parsePdfPages(file){
-    if(typeof pdfjsLib==='undefined') throw new Error('Lecteur PDF indisponible. Vérifie la connexion Internet.');
-    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
-    const rows=[];
-    const dateRe=/^\d{2}\/\d{2}\/\d{4}$/;
-    const typeRe=/^(ACHAT|VENTE|BUY|SELL)$/i;
-    const numberRe=/^-?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d+)?)$/;
-    for(let p=1;p<=pdf.numPages;p++){
-      const page=await pdf.getPage(p);
-      const content=await page.getTextContent();
-      const items=content.items.map(it=>({
-        str:cleanText(it.str), x:Number(it.transform?.[4]||0), y:Number(it.transform?.[5]||0)
-      })).filter(it=>it.str);
-      const groups=[];
-      for(const it of items){
-        let g=groups.find(q=>Math.abs(q.y-it.y)<2.5);
-        if(!g){g={y:it.y,items:[]};groups.push(g);}
-        g.items.push(it);
-      }
-      groups.sort((a,b)=>b.y-a.y);
-      for(const g of groups){
-        const a=g.items.sort((u,v)=>u.x-v.x);
-        const di=a.findIndex(x=>dateRe.test(x.str));
-        if(di<0) continue;
-        const ti=a.slice(di+1).findIndex(x=>typeRe.test(x.str));
-        if(ti<0) continue;
-        const tpos=di+1+ti, type=normalizeType(a[tpos].str);
-        const tail=a.slice(tpos+1);
-        const ni=tail.findIndex(x=>numberRe.test(x.str));
-        if(ni<0 || ni+1>=tail.length) continue;
-        const qty=toNumber(tail[ni].str), price=toNumber(tail[ni+1].str);
-        if(!Number.isFinite(qty)||!Number.isFinite(price)||qty<=0||price<=0) continue;
-        const name=cleanText(tail.slice(0,ni).map(x=>x.str).join(' '));
-        if(!name) continue;
-        const later=tail.slice(ni+2).filter(x=>numberRe.test(x.str));
-        let fees=0;
-        for(let i=1;i<Math.min(later.length,5);i++){
-          const n=Math.abs(toNumber(later[i].str));
-          if(Number.isFinite(n)) fees+=n;
-        }
-        rows.push({date:a[di].str,type,name,qty,price,fees});
-      }
+async function readWafaPdfOperations(){
+  const file=document.getElementById('pdfOpsFile').files[0];
+  const msg=document.getElementById('pdfOpsMsg');
+  const preview=document.getElementById('pdfOpsPreview');
+  if(!file){msg.innerHTML='<span class="red">Choisis d’abord un fichier PDF.</span>';return;}
+  try{
+    const lines=await readWafaPdfText(file);
+    const ops=[];
+    lines.forEach(line=>{
+      const op=parseWafaOperationLine(line);
+      if(op) ops.push(op);
+    });
+    // Remove obvious duplicates produced by PDF line layout.
+    const unique=[]; const seen=new Set();
+    ops.forEach(op=>{
+      const key=[op.date,op.type,op.value,op.qty,op.price,op.net].join('|');
+      if(!seen.has(key)){seen.add(key);unique.push(op);}
+    });
+    wafaPdfPendingOperations=unique;
+    if(!unique.length){
+      msg.innerHTML='<span class="red">Aucune opération reconnue dans ce PDF.</span>';
+      preview.innerHTML=''; document.getElementById('pdfOpsActions').style.display='none'; return;
     }
-    return rows;
+    const account=document.getElementById('pdfOpsAccount').value;
+    preview.innerHTML='<table><thead><tr><th>Compte</th><th>Date</th><th>Type</th><th>Valeur</th><th>Qté</th><th>Cours</th><th>Montant net</th><th>Frais</th></tr></thead><tbody>'+
+      unique.map(o=>'<tr><td>'+account+'</td><td>'+o.date+'</td><td>'+o.type+'</td><td>'+wafaPdfCleanName(o.value)+'</td><td>'+o.qty+'</td><td>'+o.price.toFixed(2)+'</td><td>'+o.net.toFixed(2)+' MAD</td><td>'+o.fees.toFixed(2)+' MAD</td></tr>').join('')+
+      '</tbody></table>';
+    msg.innerHTML='<span class="green">'+unique.length+' opération(s) détectée(s) ✓</span> Vérifie le tableau avant validation.';
+    document.getElementById('pdfOpsActions').style.display='flex';
+  }catch(e){
+    msg.innerHTML='<span class="red">Import impossible : '+e.message+'</span>';
+    preview.innerHTML=''; document.getElementById('pdfOpsActions').style.display='none';
   }
-  async function readFile(file){
-    const isPdf=/\.pdf$/i.test(file.name);
-    const isExcel=/\.(xlsx|xls)$/i.test(file.name);
-    if(isPdf){
-      if(typeof pdfjsLib==='undefined') throw new Error('Lecteur PDF indisponible. Vérifie la connexion Internet.');
-      const coordRows=await parsePdfPages(file);
-      if(coordRows.length) return coordRows;
-      const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
-      let text='';
-      for(let p=1;p<=pdf.numPages;p++){
-        const page=await pdf.getPage(p);
-        const content=await page.getTextContent();
-        text += content.items.map(x=>x.str).join(' ')+' ';
-      }
-      return parseRowsFromPdfText(text);
-    }
-    if(isExcel){
-      if(typeof XLSX==='undefined') throw new Error('Module Excel indisponible.');
-      const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      if(data.length<2) return [];
-      const headers=data[0].map(x=>cleanText(x).toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g,''));
-      const find=keys=>headers.findIndex(h=>keys.some(k=>h.includes(k)));
-      const iDate=find(['date','jour']), iType=find(['operation','op','sens','type']);
-      const iName=find(['valeur','titre','instrument','nom']), iQty=find(['quantite','qte','qty']);
-      const iPrice=find(['prix unitaire','prix','cours','cours execution']), iFees=find(['frais','commission']);
-      if(iDate<0 || iName<0 || iQty<0 || iPrice<0) return [];
-      return data.slice(1).map(r=>({
-        date:r[iDate], type:iType>=0?r[iType]:'Achat', name:r[iName],
-        qty:toNumber(r[iQty]), price:toNumber(r[iPrice]),
-        fees:iFees>=0?(toNumber(r[iFees])||0):0
-      }));
-    }
-    return parseCsv(await file.text());
-  }
+}
 
-  window.renderOperationJournal=function(){
-    const body=document.getElementById('journalBody');
-    if(!body) return;
-    const ops=getOps();
-    if(!ops.length){
-      body.innerHTML='<tr><td colspan="6">Aucune opération importée.</td></tr>';
-      return;
-    }
-    body.innerHTML=ops.map(o=>{
-      const amount=o.qty*o.price+(o.fees||0);
-      return '<tr><td>'+esc(o.date)+'</td><td>'+esc(o.type)+'</td><td>'+esc(o.name)+'</td>'+
-        '<td>'+o.qty+'</td><td>'+o.price.toFixed(2)+'</td><td>'+amount.toFixed(2)+' MAD</td></tr>';
-    }).join('');
-  };
+function validateWafaPdfOperations(){
+  if(!wafaPdfPendingOperations.length) return;
+  const account=document.getElementById('pdfOpsAccount').value;
+  const existing=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');
+  const source=document.getElementById('pdfOpsFile').files[0]?.name||'PDF Wafa Bourse';
+  const stamped=wafaPdfPendingOperations.map(o=>({...o,account,source,importedAt:new Date().toISOString()}));
+  const keys=new Set(existing.map(o=>[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|')));
+  const added=stamped.filter(o=>{const k=[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|'); if(keys.has(k)) return false; keys.add(k); return true;});
+  localStorage.setItem('portfolioOperations',JSON.stringify(existing.concat(added)));
+  document.getElementById('pdfOpsMsg').innerHTML='<span class="green">'+added.length+' opération(s) ajoutée(s) au '+account+' ✓</span>'+(added.length<stamped.length?' Les doublons ont été ignorés.':'');
+  renderImportedOperations();
+  clearWafaPdfPreview(false);
+}
 
-  window.importWafaOperations=async function(){
-    const file=document.getElementById('operationsFile').files[0];
-    const msg=document.getElementById('operationsImportMsg');
-    if(!file){msg.innerHTML='<span class="red">Choisis d’abord un PDF, CSV ou Excel.</span>';return;}
-    msg.innerHTML='<span>Lecture du fichier…</span>';
-    try{
-      const rows=await readFile(file);
-      if(!rows.length){
-        msg.innerHTML='<span class="red">Aucune opération Achat/Vente reconnue. Vérifie le format du relevé.</span>';
-        return;
-      }
-      const added=addUniqueOps(rows);
-      msg.innerHTML='<span class="green">'+added+' opération(s) ajoutée(s) depuis '+esc(file.name)+' ✓</span>'+(rows.length?' <span class="hint">('+rows.map(r=>esc(r.date+' '+r.type+' '+r.name)).slice(0,12).join(' • ')+(rows.length>12?' • …':'')+')</span>':'');
-    }catch(e){
-      msg.innerHTML='<span class="red">Import impossible : '+esc(e.message)+'</span>';
-    }
-  };
+function clearWafaPdfPreview(clearMsg=true){
+  wafaPdfPendingOperations=[];
+  const p=document.getElementById('pdfOpsPreview'); if(p)p.innerHTML='';
+  const a=document.getElementById('pdfOpsActions'); if(a)a.style.display='none';
+  if(clearMsg){const m=document.getElementById('pdfOpsMsg');if(m)m.innerHTML='';}
+}
 
-  window.clearImportedOperations=function(){
-    localStorage.removeItem(KEY);
-    renderOperationJournal();
-    const msg=document.getElementById('operationsImportMsg');
-    if(msg) msg.innerHTML='<span class="green">Journal importé effacé.</span>';
-  };
-
-  /* On remplace la fonction manuelle pour qu'elle soit elle aussi persistante. */
-  window.addOperation=function(){
-    const type=document.getElementById('opType').value;
-    const name=document.getElementById('opName').value.trim();
-    const qty=parseFloat(document.getElementById('opQty').value);
-    const price=parseFloat(document.getElementById('opPrice').value);
-    const fees=parseFloat(document.getElementById('opFees').value)||0;
-    const date=document.getElementById('opDate').value;
-    const msg=document.getElementById('opMsg');
-    if(!name || !qty || !price || !date){
-      msg.innerHTML='<span class="red">Remplis la valeur, la quantité, le prix et la date.</span>'; return;
-    }
-    const added=addUniqueOps([{date,type,name,qty,price,fees}]);
-    msg.innerHTML='<span class="'+(added?'green':'red')+'">'+
-      (added?'Opération ajoutée au journal ✓':'Cette opération existe déjà.')+'</span>';
-    document.getElementById('opName').value='';
-    document.getElementById('opQty').value='';
-    document.getElementById('opPrice').value='';
-    document.getElementById('opFees').value='0';
-  };
-
-  document.addEventListener('DOMContentLoaded',renderOperationJournal);
-})();
+function renderImportedOperations(){
+  const body=document.getElementById('importedOpsBody');
+  if(!body)return;
+  const ops=JSON.parse(localStorage.getItem('portfolioOperations')||'[]');
+  body.innerHTML=ops.map(o=>'<tr><td>'+o.account+'</td><td>'+o.date+'</td><td>'+o.type+'</td><td>'+wafaPdfCleanName(o.value)+'</td><td>'+o.qty+'</td><td>'+o.price.toFixed(2)+'</td><td>'+o.net.toFixed(2)+' MAD</td><td>'+o.fees.toFixed(2)+' MAD</td></tr>').join('');
+}
+renderImportedOperations();
 </script>
 
 </body>
