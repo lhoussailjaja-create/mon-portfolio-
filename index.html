@@ -4418,4 +4418,74 @@ function install(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
 })();
 </script>
+
+<!-- FINAL V60: replace the importer button node to remove ALL legacy event listeners -->
+<script id="FINAL_CTO_MULTI_PDF_IMPORT_V60">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const num=s=>{let x=String(s??'').replace(/\u00a0/g,' ').trim().replace(/%/g,'').replace(/\s/g,'');if(!x)return 0;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'');}else if(x.includes(','))x=x.replace(',','.');x=x.replace(/[^0-9.\-]/g,'');return Number(x)||0;};
+const readJSON=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};
+const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+async function pdfText(file){
+ if(typeof pdfjsLib==='undefined') throw new Error('Lecteur PDF indisponible. Recharge la page.');
+ const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise, pages=[];
+ for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p), c=await page.getTextContent(); pages.push(c.items.map(x=>x.str||'').join(' ').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim());}
+ return pages.filter(Boolean);
+}
+function kind(file,lines){
+ const n=String(file?.name||'').toLowerCase(), t=lines.join(' ').toLowerCase();
+ if(/fiscal/.test(n)||/tpcvm|etat des prélèvements|etat des prelevements/.test(t))return 'fiscalite';
+ if(/synth/.test(n)||/synthèse du portefeuille|synthese du portefeuille|total des avoirs/.test(t))return 'synthese';
+ if(/historique|mouvements/.test(n)||/historique du compte/.test(t))return 'historique';
+ if(/titres/.test(n)||/portefeuille titres/.test(t)||(/cours\/vl/.test(t)&&/prmp/.test(t)&&/poids/.test(t)))return 'titres';
+ return 'unknown';
+}
+function parseFiscal(lines){
+ const t=lines.join(' '), names=['TGCC','S2M','COLORADO','CIH','SONASID','PATRIMOINE OBLIGATIONS'], rows=[];
+ for(const name of names){const re=new RegExp('(?:^|\\s)'+name.replace(/ /g,'\\s+')+'\\s+(-?[\\d., ]+)\\s+(-?[\\d., ]+)','i');const m=t.match(re);if(m)rows.push({name,pl:num(m[1]),tpcvm:num(m[2])});}
+ const total=t.match(/Total\s+Actions\s+(-?[\d., ]+)\s+(-?[\d., ]+)/i), rest=t.match(/Total\s+Restitution\s+(-?[\d., ]+)/i);
+ return {account:'CTO',actions:rows,totalActions:total?num(total[1]):rows.reduce((a,r)=>a+r.pl,0),tpcvm:total?num(total[2]):rows.reduce((a,r)=>a+r.tpcvm,0),totalRestitution:rest?num(rest[1]):0};
+}
+function parseSynth(lines){const t=lines.join(' '),g=l=>{const m=t.match(new RegExp(l+'\\s+(-?[\\d., ]+)','i'));return m?num(m[1]):0};return {account:'CTO',soldeComptable:g('Solde comptable'),valorisationActions:g('Valorisation actions'),valorisationOPCVM:g('Valorisation OPCVM'),totalAvoirs:g('Total des avoirs'),latentes:g('\\+/-\\s*latentes'),realisees:g('\\+/-\\s*réalisées'),totalValues:g('\\+/-\\s*Values totales')};}
+function saveOps(ops,file){let a=readJSON('portfolioOperations',[]);const keys=new Set(a.map(o=>[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|')));let added=0;for(const o0 of ops){const o={...o0,account:'CTO'},k=[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|');if(!keys.has(k)){a.push(o);keys.add(k);added++;}}writeJSON('portfolioOperations',a);return added;}
+function refresh(){['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards','renderImportedUnified','renderUnifiedJournal','renderWafaHistoryAmounts','renderFeeTracking'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}});}
+async function run(e){
+ e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+ const input=$('mainPdfFile'),msg=$('mainPdfMsg'),preview=$('mainPdfPreview'),files=[...(input?.files||[])],account=$('mainPdfAccount')?.value==='CTO'?'CTO':'PEA';
+ if(!files.length){msg.innerHTML='<span class="red">Choisis les PDF à importer.</span>';return;}
+ try{
+  localStorage.setItem('currentAccount',account);const report=[];
+  for(const file of files){
+   const lines=await pdfText(file),k=kind(file,lines);
+   if(k==='fiscalite'){
+    if(account!=='CTO')throw new Error('Fiscalité importée uniquement dans CTO.');
+    const d=parseFiscal(lines);writeJSON('ctoFiscaliteV1',{...d,source:file.name,importedAt:new Date().toISOString()});report.push('Fiscalité ✓');
+   }else if(k==='synthese'){
+    if(account!=='CTO')throw new Error('Synthèse importée uniquement dans CTO.');
+    const d=parseSynth(lines);writeJSON('ctoSyntheseV1',{...d,source:file.name,importedAt:new Date().toISOString()});
+    const by=readJSON('portfolioStateByAccountV1',{PEA:{},CTO:{}});by.CTO={...(by.CTO||{}),synthese:d,cash:d.soldeComptable,totalAvoirs:d.totalAvoirs,valuation:d.totalAvoirs};writeJSON('portfolioStateByAccountV1',by);writeJSON('portfolioStateV1',by.CTO);report.push('Synthèse ✓');
+   }else if(k==='historique'){
+    if(typeof window.parseHistory!=='function')throw new Error('Moteur Historique indisponible.');
+    const ops=window.parseHistory(lines,account,file)||[];if(!ops.length)throw new Error('Historique détecté mais aucune opération reconnue : '+file.name);const added=saveOps(ops,file);report.push('Historique '+ops.length+' opérations / '+added+' nouvelles ✓');
+   }else if(k==='titres'){
+    if(typeof window.__V44_PORTFOLIO_RUN!=='function')throw new Error('Moteur Titres indisponible.');
+    await window.__V44_PORTFOLIO_RUN(file,msg,preview);report.push('Titres / positions ✓');
+   }else throw new Error('Type de PDF non reconnu : '+file.name);
+  }
+  msg.innerHTML='<span class="green"><b>Import automatique terminé ✓</b></span><div style="margin-top:8px">'+report.map(x=>'<div>• '+esc(x)+'</div>').join('')+'</div>';refresh();
+ }catch(err){msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(err.message||err)+'</span>';if(preview)preview.innerHTML='';}
+}
+function install(){
+ const sec=$('mainWafaPdfImporter'),old=sec&&[...sec.querySelectorAll('button')].find(b=>/importer automatiquement/i.test(b.textContent||''));
+ if(!old||old.dataset.v60Installed)return;
+ const btn=old.cloneNode(true);btn.dataset.v60Installed='1';btn.removeAttribute('onclick');old.replaceWith(btn);btn.addEventListener('click',run,false);
+ const input=$('mainPdfFile');if(input)input.setAttribute('multiple','multiple');window.importMainWafaPdf=run;
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
+setTimeout(install,100);setTimeout(install,500);
+})();
+</script>
+
 </html>
