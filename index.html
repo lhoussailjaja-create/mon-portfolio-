@@ -3546,6 +3546,65 @@ window.renderImportedUnified=function(){
 })();
 </script>
 
+
+<script id="V38_WAFA_PDF_DIRECT_FALLBACK">
+(function(){
+  'use strict';
+  const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  const num=s=>{let x=clean(s).replace(/%$/,'').replace(/\s/g,'');if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'')}else if(x.includes(','))x=x.replace(',','.');return parseFloat(x.replace(/[^0-9.\-]/g,''));};
+  const esc=s=>clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const read=(k,f)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?f:v}catch(e){return f}};
+  const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  function directParse(lines){
+    const a=(Array.isArray(lines)?lines:[]).map(clean).filter(Boolean);
+    const text=a.join(' ').replace(/\s+/g,' ');
+    const normalized=text.replace(/Portefeuille\s+titres/ig,'Portefeuille titres');
+    const isPortfolio=/Portefeuille\s+titres/i.test(normalized)&&/PRMP/i.test(normalized)&&/Poids/i.test(normalized)&&/Cours\s*\/\s*VL/i.test(normalized);
+    if(!isPortfolio)return null;
+    const rows=[];
+    // First try the exact Wafa row shape, allowing arbitrary whitespace between every field.
+    const names=[];
+    for(const n of ['AKDITAL','TOTALENERGIES']){
+      const re=new RegExp('\\b'+n+'\\b\\s+([0-9]+(?:[.,][0-9]+)?)\\s+(-?[0-9][0-9\\s]*(?:[.,][0-9]+)?)\\s+(-?[0-9][0-9\\s]*(?:[.,][0-9]+)?)\\s+(-?[0-9][0-9\\s]*(?:[.,][0-9]+)?)\\s+(-?[0-9][0-9\\s]*(?:[.,][0-9]+)?)%\\s+(-?[0-9][0-9\\s]*(?:[.,][0-9]+)?)\\s+(-?[0-9][0-9\\s]*(?:[.,][0-9]+)?)','i');
+      const m=normalized.match(re);
+      if(m){rows.push({name:n,qty:num(m[1]),price:num(m[2]),value:num(m[3]),cmp:num(m[4]),perf:num(m[5]),pl:num(m[6]),weight:num(m[7])});names.push(n);}
+    }
+    // Generic uppercase-name fallback for future Wafa portfolio statements.
+    if(rows.length<1){
+      const re=/\b([A-Z][A-Z0-9&'’.-]{2,})\b\s+([0-9]+(?:[.,][0-9]+)?)\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)%\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)/g;
+      let m;while((m=re.exec(normalized))){const r={name:m[1],qty:num(m[2]),price:num(m[3]),value:num(m[4]),cmp:num(m[5]),perf:num(m[6]),pl:num(m[7]),weight:num(m[8])};if(!/^TOTAUX?$/i.test(r.name)&&[r.qty,r.price,r.value,r.cmp,r.perf,r.pl,r.weight].every(Number.isFinite)&&!rows.some(x=>x.name===r.name))rows.push(r);}
+    }
+    if(!rows.length)return null;
+    let total=null;const tm=normalized.match(/\bTotaux\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)%\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)\s+(-?[0-9][0-9\s]*(?:[.,][0-9]+)?)/i);if(tm)total={value:num(tm[1]),cmp:num(tm[2]),perf:num(tm[3]),pl:num(tm[4]),weight:num(tm[5])};
+    return {rows,total};
+  }
+  function save(parsed,file){
+    const account=((document.getElementById('pdfOpsAccount')?.value||localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA');
+    const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{};by.PEA=by.PEA||{};by.CTO=by.CTO||{};const old=by[account]||{};
+    const positions=parsed.rows.map(r=>({name:r.name,qty:r.qty,cmp:r.cmp,prmp:r.cmp,price:r.price,course:r.price,value:r.value,montant:r.value,perf:r.perf,performance:r.perf,pl:r.pl,gainLoss:r.pl,weight:r.weight,poids:r.weight}));
+    const valuation=Number.isFinite(parsed.total?.value)?parsed.total.value:positions.reduce((s,r)=>s+r.value,0);
+    const performance=Number.isFinite(parsed.total?.perf)?parsed.total.perf:(valuation?positions.reduce((s,r)=>s+r.pl,0)/valuation*100:null);
+    const date=(file.name.match(/(\d{2})[-_](\d{2})[-_](\d{4})/)||[]);const sourceDate=date.length?date[3]+'-'+date[2]+'-'+date[1]:new Date().toISOString().slice(0,10);
+    const snapshots=Array.isArray(old.snapshots)?old.snapshots.slice():[];const i=snapshots.findIndex(x=>x.date===sourceDate);const snap={date:sourceDate,value:valuation};if(i>=0)snapshots[i]=snap;else snapshots.push(snap);snapshots.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    by[account]={...old,positions,valuation,cash:Number.isFinite(Number(old.cash))?Number(old.cash):null,performance,source:file.name,sourceDate,snapshots};write('portfolioStateByAccountV1',by);write('portfolioStateV1',by[account]);localStorage.setItem('currentAccount',account);write('wafaLastImport',{source:file.name,importedAt:new Date().toISOString(),account,documentType:'Portefeuille titres',rows:positions,valuation,performance,prmpTotal:parsed.total?.cmp??positions.reduce((s,r)=>s+r.qty*r.cmp,0),latent:parsed.total?.pl??positions.reduce((s,r)=>s+r.pl,0),sourceDate});
+    const ops=read('portfolioOperations',[]);if(Array.isArray(ops)){const f=ops.filter(o=>!(String(o.source||'')===String(file.name)&&/^(ACHAT|VENTE)$/i.test(String(o.type||''))));write('portfolioOperations',f);}
+    return {account,positions,valuation,performance};
+  }
+  async function importer(){
+    const file=document.getElementById('pdfOpsFile')?.files?.[0],msg=document.getElementById('pdfOpsMsg'),preview=document.getElementById('pdfOpsPreview');
+    if(!file){if(msg)msg.innerHTML='<span class="red">Choisis d’abord le PDF.</span>';return;}
+    try{
+      const lines=await readWafaPdfText(file),parsed=directParse(lines);if(!parsed)throw new Error('PDF non reconnu. Le fichier doit être le relevé Wafa Bourse « Portefeuille titres ».');
+      const saved=save(parsed,file);if(preview)preview.innerHTML='<table><thead><tr><th>Valeur</th><th>Quantité</th><th>CMP / PRMP</th><th>Cours/VL</th><th>Montant</th><th>Perf.</th><th>Gain / Perte</th><th>Poids</th></tr></thead><tbody>'+saved.positions.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+r.qty+'</td><td>'+r.cmp.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+r.price.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+r.value.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+r.perf.toFixed(2)+'%</td><td>'+r.pl.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+r.weight.toFixed(2)+'%</td></tr>').join('')+'</tbody></table><div class="hint" style="margin-top:8px">Portefeuille titres reconnu ✓ — '+saved.positions.length+' position(s).</div>';
+      if(msg)msg.innerHTML='<span class="green"><b>Portefeuille titres importé ✓</b> — '+saved.positions.length+' position(s) — '+saved.valuation.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD — aucune opération fictive créée.</span>';
+      ['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}});try{window.dispatchEvent(new Event('accountchanged'))}catch(e){}
+    }catch(e){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(e.message||e)+'</span>';}
+  }
+  window.readWafaPdfOperations=importer;
+  window.importWafa=importer;
+  window.importMainWafaPdf=importer;
+})();
+</script>
 </body>
 
 <script id="FINAL_CTO_EMPTY_LOCK">
