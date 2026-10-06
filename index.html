@@ -3197,6 +3197,70 @@ window.renderImportedUnified=function(){
 })();
 </script>
 </body>
+
+<script id="FINAL_CTO_EMPTY_LOCK">
+(function(){
+  const BY='portfolioStateByAccountV1';
+  const read=(k,fb)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?fb:v}catch(e){return fb}};
+  const isCTO=()=>String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO';
+  function ctoEmpty(){
+    if(!isCTO()) return false;
+    const by=read(BY,{CTO:{}})||{}, s=by.CTO||{};
+    return !(Array.isArray(s.positions)&&s.positions.length) && !(Number(s.valuation)>0) && !(Number(s.cash)>0);
+  }
+  const dataSections=[
+    'Objectif d\'allocation','Résumé','Évolution du portefeuille','Positions','Alertes personnelles',
+    'Allocation cible','Fiscalité / TPCVM','Avis de confirmation','Analyse des transactions',
+    'État des titres après les opérations visibles','Coût d’achat moyen des opérations','Contrôle de cohérence',
+    'Concentration','Points à surveiller','Fiche rapide de la situation','Suivi par snapshots',
+    'Comparaison des snapshots','Suivi des frais','Source Wafa Bourse','Centre d’analyse avancée',
+    'Analyse des positions','Stress tests','Analyse position par position','Drawdown observé',
+    'Contrôles de qualité des données','Résumé automatique','Distribution des bénéfices','Calendrier du portefeuille'
+  ];
+  function findSection(title){
+    return [...document.querySelectorAll('.section.card')].find(x=>(x.querySelector('h2')?.textContent||'').toLowerCase().includes(title.toLowerCase()));
+  }
+  function lock(){
+    if(!ctoEmpty()) return;
+    // Main KPI cards: never show PEA numbers while CTO has no import.
+    document.querySelectorAll('.cards .card').forEach(card=>{
+      const label=(card.querySelector('.label')?.textContent||'').trim().toUpperCase();
+      const n=card.querySelector('.num'), h=card.querySelector('.hint');
+      if(!n) return;
+      if(/VALORISATION TOTALE|CASH DISPONIBLE|GAIN \/ PERTE LATENT|PLUS GROSSE PERTE|CONCENTRATION/.test(label)) n.textContent='0,00 MAD';
+      else if(/PERFORMANCE/.test(label)) n.textContent='0,00%';
+      else if(/PLUS GROSSE POSITION/.test(label)) n.textContent='Aucune';
+      else if(/NIVEAU DE RISQUE/.test(label)) n.textContent='—';
+      if(h && /PLUS GROSSE|CONCENTRATION|NIVEAU DE RISQUE/.test(label)) h.textContent='Aucune donnée CTO importée.';
+    });
+    // Any section that contains portfolio/account-derived PEA information is blanked.
+    dataSections.forEach(title=>{
+      const sec=findSection(title); if(!sec) return;
+      sec.querySelectorAll('.item b,.num').forEach(el=>el.textContent='0,00 MAD');
+      sec.querySelectorAll('.hint').forEach(el=>el.textContent='Aucune donnée CTO importée.');
+      // Keep the heading but remove tables, lists, and explanatory PEA-derived content.
+      sec.querySelectorAll('table tbody').forEach(tb=>{tb.innerHTML='<tr><td colspan="20">Aucune donnée CTO importée.</td></tr>';});
+      sec.querySelectorAll('input').forEach(i=>{ if(i.type==='number'||i.type==='text') i.value=''; });
+    });
+    const alloc=findSection("Objectif d'allocation");
+    if(alloc){alloc.querySelectorAll('.item b').forEach(b=>b.textContent='0,00 MAD');}
+    const summary=findSection('Résumé');
+    if(summary){summary.querySelectorAll('.item b').forEach(b=>b.textContent='0,00 MAD');}
+    // Clear calculator fields/results until a CTO position exists.
+    ['cmp','qty','newPrice','newQty','goalCurrent','snapValue'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+    // Remove stale PEA text from generic hints anywhere on the page.
+    document.querySelectorAll('.hint').forEach(h=>{
+      const t=h.textContent||'';
+      if(/7 ?445,54|7 ?307,43|4 ?567,43|2 ?740,00|138,11|-477,17|-144,68|-33,25|-6,13|TOTALENERGIES|ATTIJARI DIVIDEND|ATTIJARI ACTIONS|WG LOW VOLATILITY/i.test(t)) h.textContent='Aucune donnée CTO importée.';
+    });
+  }
+  function run(){try{lock()}catch(e){}}
+  document.addEventListener('DOMContentLoaded',()=>{run();setTimeout(run,100);setTimeout(run,500);setTimeout(run,1200);});
+  window.addEventListener('load',()=>{run();setTimeout(run,250);setTimeout(run,1000);});
+  setInterval(run,700);
+  window.addEventListener('storage',run);
+})();
+</script>
 </html>
 
 <script id="finalAccountIsolationPatch">
@@ -3383,5 +3447,68 @@ window.renderImportedUnified=function(){
   document.addEventListener('DOMContentLoaded',()=>{setTimeout(render,100);setTimeout(render,400);});
   window.addEventListener('load',()=>setTimeout(render,100));
   window.renderUltimateCtoIsolation=render;
+})();
+</script>
+
+<script id="FINAL_CTO_EMPTY_V3">
+(function(){
+  const BY='portfolioStateByAccountV1';
+  const read=(k,fb)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?fb:v}catch(e){return fb}};
+  const account=()=>String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+  const ctoState=()=>{const by=read(BY,{PEA:{},CTO:{}})||{};const s=by.CTO||{};return {positions:Array.isArray(s.positions)?s.positions:[],valuation:Number(s.valuation)||0,cash:Number(s.cash)||0,source:s.source||null};};
+  const hasData=()=>{const s=ctoState();return s.positions.length>0||s.valuation>0||s.cash>0||!!s.source;};
+  const KEEP=['Importer l\'historique Wafa Bourse','Comptes PEA / CTO','Sauvegarde','Alertes personnelles','Allocation cible','Watchlist personnelle','Recherche & filtres','Dividendes — saisie manuelle'];
+  const keep=(el)=>{const h=el.querySelector(':scope > h2');const t=(h?.textContent||'').trim();return KEEP.some(x=>t.includes(x))||el.id==='pdfOpsImporter'||el.id==='accountSelector';};
+  const allDataCards=()=>[...document.querySelectorAll('.section.card, .grid.section > .card')];
+  function blankCard(el){
+    if(el.dataset.ctoEmptyV3==='1') return;
+    if(keep(el)) return;
+    const h=el.querySelector(':scope > h2'); if(!h)return;
+    const msg=document.createElement('div');
+    msg.className='cto-empty-v3 hint';
+    msg.style.cssText='padding:18px;margin-top:10px;border:1px dashed var(--line);border-radius:10px;text-align:center';
+    msg.innerHTML='<b>CTO — aucune donnée importée</b><br><span>حمّل ملفات CTO باش تبان البيانات هنا.</span>';
+    [...el.children].forEach(ch=>{if(ch!==h){ch.dataset.ctoOldV3=ch.style.display;ch.style.display='none';}});
+    el.appendChild(msg);el.dataset.ctoEmptyV3='1';
+  }
+  function restore(){
+    document.querySelectorAll('[data-cto-empty-v3="1"]').forEach(el=>{
+      const msg=el.querySelector(':scope > .cto-empty-v3');if(msg)msg.remove();
+      [...el.children].forEach(ch=>{if(ch.dataset&&ch.dataset.ctoOldV3!==undefined){ch.style.display=ch.dataset.ctoOldV3;delete ch.dataset.ctoOldV3;}});
+      delete el.dataset.ctoEmptyV3;
+    });
+  }
+  function zeroObjective(){
+    const card=[...document.querySelectorAll('.card')].find(c=>(c.querySelector(':scope > h2')?.textContent||'').includes("Objectif d'allocation"));
+    if(card)card.querySelectorAll('.item b').forEach(b=>b.textContent='0,00 MAD');
+  }
+  function zeroSummary(){
+    const card=[...document.querySelectorAll('.card')].find(c=>(c.querySelector(':scope > h2')?.textContent||'').includes('Résumé'));
+    if(card)card.querySelectorAll('.item b').forEach(b=>b.textContent='0,00 MAD');
+  }
+  function zeroTop(){
+    document.querySelectorAll('.cards .card').forEach(c=>{
+      const l=(c.querySelector('.label')?.textContent||'').toUpperCase(),n=c.querySelector('.num');if(!n)return;
+      if(l.includes('PLUS GROSSE POSITION'))n.textContent='Aucune';
+      else if(l.includes('NIVEAU DE RISQUE'))n.textContent='—';
+      else n.textContent='0,00 MAD';
+      const h=c.querySelector('.hint');if(h)h.textContent='Aucune donnée CTO importée.';
+    });
+  }
+  function render(){
+    if(account()!=='CTO'){restore();return;}
+    if(!hasData()){
+      zeroTop();
+      allDataCards().forEach(blankCard);
+      zeroObjective();zeroSummary();
+      const t=document.getElementById('selectedAccountTitle');if(t)t.textContent='Compte CTO';
+    }else restore();
+  }
+  window.renderFinalCtoEmpty=render;
+  const oldSelect=window.selectPortfolioAccount;
+  window.selectPortfolioAccount=function(a){try{if(typeof oldSelect==='function')oldSelect(a)}catch(e){}localStorage.setItem('currentAccount',a==='CTO'?'CTO':'PEA');setTimeout(render,0);setTimeout(render,150);setTimeout(render,500);};
+  document.addEventListener('DOMContentLoaded',()=>{render();setTimeout(render,150);setTimeout(render,600);});
+  window.addEventListener('load',()=>{render();setTimeout(render,250);});
+  setTimeout(render,1000);
 })();
 </script>
