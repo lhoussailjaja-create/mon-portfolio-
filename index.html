@@ -2805,5 +2805,105 @@ window.renderImportedUnified=function(){
 })();
 </script>
 
+
+<style id="accountDashboardPatch">
+.account-card.account-active,.mini-account.account-active{outline:2px solid #18c5ad;box-shadow:0 0 0 2px rgba(24,197,173,.18);}
+</style>
+<script>
+/* ================= ACCOUNT-SPECIFIC DASHBOARD PATCH =================
+   PEA and CTO use independent portfolio states. Never reuse PEA numbers for CTO. */
+(function(){
+  const STATE='portfolioStateV1', BY='portfolioStateByAccountV1';
+  const money=v=>Number.isFinite(Number(v))?Number(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD':'Non disponible';
+  const signed=v=>Number.isFinite(Number(v))?(Number(v)>=0?'+':'−')+Math.abs(Number(v)).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD':'—';
+  const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const n=v=>{let s=String(v??'').trim().replace(/\u00a0/g,' ').replace(/\s/g,'');if(!s)return NaN;if(s.includes(',')&&s.includes('.')){if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'')}else if(s.includes(','))s=s.replace(',','.');return parseFloat(s)};
+  function read(k,fb){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(fb))}catch(e){return fb}}
+  function write(k,v){localStorage.setItem(k,JSON.stringify(v))}
+  function normalize(st){st=st&&typeof st==='object'?st:{};return {positions:Array.isArray(st.positions)?st.positions:[],valuation:Number.isFinite(Number(st.valuation))?Number(st.valuation):null,cash:Number.isFinite(Number(st.cash))?Number(st.cash):null,performance:Number.isFinite(Number(st.performance))?Number(st.performance):null,realized:Number.isFinite(Number(st.realized))?Number(st.realized):null,source:st.source||null,sourceDate:st.sourceDate||null,snapshots:Array.isArray(st.snapshots)?st.snapshots:[]}}
+  function migrate(){
+    let by=read(BY,null);
+    if(!by||typeof by!=='object'||Array.isArray(by)){
+      const legacy=normalize(read(STATE,{}));
+      by={PEA:legacy,CTO:normalize({})};
+      write(BY,by);
+    }else{by.PEA=normalize(by.PEA);by.CTO=normalize(by.CTO);write(BY,by)}
+    return by;
+  }
+  function getAccount(){return (localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA'}
+  function setAccount(a){a=a==='CTO'?'CTO':'PEA';localStorage.setItem('currentAccount',a);return a}
+  function getState(a){const by=migrate();return normalize(by[a||getAccount()])}
+  function setState(a,st){const by=migrate();by[a]=normalize(st);write(BY,by)}
+  function accountPositions(a){return getState(a).positions}
+
+  window.getPortfolioAccountState=getState;
+  window.setPortfolioAccountState=setState;
+
+  function renderAccountDashboard(){
+    const a=getAccount(),st=getState(a),ps=accountPositions(a);
+    const val=Number(st.valuation), cash=Number(st.cash), lat=ps.reduce((x,p)=>x+(Number(p.pl)||0),0);
+    const assets=(Number.isFinite(val)?val:0)+(Number.isFinite(cash)?cash:0);
+    let max=ps.length?ps.reduce((x,p)=>!x||Number(p.value)>Number(x.value)?p:x,null):null;
+    let worst=ps.length?ps.reduce((x,p)=>!x||Number(p.pl)<Number(x.pl)?p:x,null):null;
+    document.querySelectorAll('.cards .card').forEach(c=>{
+      const l=(c.querySelector('.label')?.textContent||'').trim(), el=c.querySelector('.num'), h=c.querySelector('.hint'); if(!el)return;
+      if(l.includes('Valorisation totale')) el.textContent=Number.isFinite(val)?money(val):'0,00 MAD';
+      else if(l.includes('CASH DISPONIBLE')||l.includes('Cash disponible')) el.textContent=Number.isFinite(cash)?money(cash):'0,00 MAD';
+      else if(l.includes('GAIN / PERTE LATENT')){el.textContent=ps.length?signed(lat):'0,00 MAD';el.className='num '+(lat>=0?'green':'red')}
+      else if(l.includes('PERFORMANCE')){el.textContent=Number.isFinite(Number(st.performance))?Number(st.performance).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%':(ps.length?'Non disponible':'0,00%');el.className='num '+(Number(st.performance)>=0?'green':'red')}
+      else if(l.includes('PLUS GROSSE POSITION')){el.textContent=max?max.name:'Aucune';if(h)h.textContent=max&&assets?(Number(max.value)/assets*100).toFixed(1)+'% du portefeuille':'0% du portefeuille'}
+      else if(l.includes('PLUS GROSSE PERTE')){el.textContent=worst?signed(worst.pl):'0,00 MAD';el.className='num '+(worst&&Number(worst.pl)>=0?'green':'red');if(h)h.textContent=worst?worst.name:'Aucune'}
+      else if(l.includes('CONCENTRATION'))el.textContent=max&&assets?(Number(max.value)/assets*100).toFixed(1)+'%':'0,0%';
+      else if(l.includes('NIVEAU DE RISQUE')){el.textContent=max&&assets&&Number(max.value)/assets>.35?'Élevé':'Modéré';if(h)h.textContent=ps.length?'À surveiller : concentration':'Aucune position'}
+    });
+    const title=document.getElementById('selectedAccountTitle');if(title)title.textContent='Compte '+a;
+    document.querySelectorAll('.account-card').forEach(b=>{const on=b.dataset.account===a;b.classList.toggle('account-active',on);b.setAttribute('aria-pressed',on?'true':'false')});
+    document.querySelectorAll('.mini-account').forEach(b=>b.classList.toggle('account-active',b.textContent.trim()===a));
+    const posBody=document.querySelector('table:first-of-type tbody');
+    if(posBody){posBody.innerHTML=ps.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+Number(p.qty||0).toLocaleString('fr-FR',{maximumFractionDigits:3})+'</td><td>'+money(p.cmp)+'</td><td>'+money(p.price)+'</td><td>'+money(p.value)+'</td><td class="'+(Number(p.pl)>=0?'green':'red')+'">'+signed(p.pl)+'</td></tr>').join('')||'<tr><td colspan="6">Aucune position pour le compte '+a+'.</td></tr>'}
+    refreshAccountCards();
+  }
+
+  const oldRefresh=window.refreshAccountCards;
+  window.refreshAccountCards=function(){
+    let ops=read('portfolioOperations',[]);if(!Array.isArray(ops))ops=[];
+    const count=a=>ops.filter(o=>String(o.account||'').toUpperCase()===a).length;
+    const p=document.getElementById('peaAccountSummary'),c=document.getElementById('ctoAccountSummary');
+    if(p)p.textContent=count('PEA')+' opération'+(count('PEA')===1?'':'s');
+    if(c)c.textContent=count('CTO')+' opération'+(count('CTO')===1?'':'s');
+  };
+
+  const oldSelect=window.selectPortfolioAccount;
+  window.selectPortfolioAccount=function(account){
+    const a=setAccount(account);
+    // Keep the existing operation filter behaviour, but never use it as the portfolio source.
+    const f=document.getElementById('importedAccountFilter');if(f){f.value=a;f.dispatchEvent(new Event('change',{bubbles:true}))}
+    document.querySelectorAll('.account-card').forEach(btn=>{const on=btn.dataset.account===a;btn.classList.toggle('account-active',on);btn.setAttribute('aria-pressed',on?'true':'false')});
+    renderAccountDashboard();
+    // Do not force-scroll: switching accounts should feel like changing tabs, not navigating away.
+  };
+
+  // Capture the portfolio state produced by the existing Wafa importer into the selected account.
+  function captureSharedState(account){
+    const shared=read(STATE,null);if(!shared||!Array.isArray(shared.positions))return;
+    setState(account,shared);
+  }
+  const oldMain=window.importMainWafaPdf;
+  window.importMainWafaPdf=async function(){
+    const a=getAccount();
+    const result=await oldMain?.();
+    captureSharedState(a);
+    renderAccountDashboard();
+    return result;
+  };
+  const oldWafa=window.importWafa;
+  if(oldWafa)window.importWafa=async function(){const a=getAccount();const r=await oldWafa?.();captureSharedState(a);renderAccountDashboard();return r};
+
+  // When the dedicated PDF importer succeeds, its detected operations are already tagged with account.
+  // If a full portfolio state exists for that account, use it. Otherwise CTO remains independent/empty.
+  document.addEventListener('DOMContentLoaded',function(){migrate();setAccount(localStorage.getItem('currentAccount')||'PEA');renderAccountDashboard();});
+})();
+</script>
+
 </body>
 </html>
