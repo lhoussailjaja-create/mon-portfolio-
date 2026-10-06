@@ -3708,3 +3708,40 @@ window.renderImportedUnified=function(){
   setTimeout(moveImporter,100);
 })();
 </script>
+
+<script id="FINAL_STRESS_ACCOUNT_LOCK_V31">
+(function(){
+  function isCTO(){return String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO';}
+  function ctoHasData(){
+    try{
+      const by=JSON.parse(localStorage.getItem('portfolioStateByAccountV1')||'{}')||{};
+      const s=by.CTO||{};
+      return (Array.isArray(s.positions)&&s.positions.length>0) || Number(s.valuation)>0 || Number(s.cash)>0;
+    }catch(e){return false;}
+  }
+  function lock(){
+    if(!isCTO() || ctoHasData()) return;
+    const sections=[...document.querySelectorAll('.section, .section.card, .grid.section > .card')];
+    sections.forEach(sec=>{
+      const h=sec.querySelector(':scope > h2');
+      if(!h || !/stress tests/i.test(h.textContent||'')) return;
+      sec.querySelectorAll('#anStress5,#anStress10,#anStress20').forEach(e=>e.textContent='—');
+      sec.querySelectorAll('.item b').forEach(e=>e.textContent='—');
+      let hint=sec.querySelector(':scope > .stress-empty-v31');
+      if(!hint){
+        hint=document.createElement('div');
+        hint.className='stress-empty-v31 hint';
+        hint.style.cssText='margin-top:10px';
+        sec.appendChild(hint);
+      }
+      hint.textContent='Aucune donnée CTO importée.';
+    });
+  }
+  function run(){try{lock()}catch(e){}}
+  document.addEventListener('DOMContentLoaded',run);
+  window.addEventListener('load',run);
+  window.addEventListener('accountchanged',run);
+  setTimeout(run,50);setTimeout(run,200);setTimeout(run,500);setTimeout(run,1000);setTimeout(run,2000);
+  setInterval(run,500);
+})();
+</script>
