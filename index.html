@@ -4853,3 +4853,118 @@ window.importMainWafaPdf=function(){const e=document.getElementById('mainPdfAcco
 window.readWafaPdfOperations=function(){const e=document.getElementById('pdfOpsAccount');if(e)localStorage.setItem('currentAccount',e.value==='CTO'?'CTO':'PEA');return run(document.getElementById('pdfOpsFile')?.files?.[0],document.getElementById('pdfOpsMsg'),document.getElementById('pdfOpsPreview'))};window.importWafa=window.readWafaPdfOperations;
 })();
 </script>
+
+<script id="V44_CTO_PDF_FINAL_COLUMN_FALLBACK">
+(function(){
+'use strict';
+const BY='portfolioStateByAccountV1',STATE='portfolioStateV1';
+const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+const esc=s=>clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const read=(k,f)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?f:v}catch(e){return f}};
+const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+function num(s){
+ let x=clean(s).replace(/%/g,'').replace(/\s/g,''); if(!x)return NaN;
+ if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'');}
+ else if(x.includes(',')){const p=x.split(',');x=(p.length===2&&p[1].length===3&&p[0].length<=3)?p[0]+p[1]:x.replace(',','.');}
+ return Number(x.replace(/[^0-9.\-]/g,''));
+}
+function acct(){const e=document.getElementById('mainPdfAccount')||document.getElementById('pdfOpsAccount');return String(e?.value||localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';}
+function dateFrom(items){const t=items.map(x=>x.t).join(' ');let m=t.match(/\b(\d{2})[\/.-](\d{2})[\/.-](\d{4})\b/);return m?`${m[3]}-${m[2]}-${m[1]}`:new Date().toISOString().slice(0,10);}
+async function raw(file){
+ if(typeof pdfjsLib==='undefined')throw new Error('Le lecteur PDF n’est pas chargé.');
+ const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise, out=[];
+ for(let p=1;p<=pdf.numPages;p++){
+  const page=await pdf.getPage(p),c=await page.getTextContent();
+  for(const it of c.items||[]){const t=clean(it.str||'');if(!t)continue;const tr=it.transform||[];out.push({p,x:Number(tr[4]||0),y:Number(tr[5]||0),w:Number(it.width||0),t});}
+ }
+ return out;
+}
+function norm(s){return clean(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();}
+function isNumText(s){const t=clean(s).replace(/%/g,'').replace(/\s/g,'');return /^[-+]?\d+(?:[.,]\d+)?$/.test(t)||/^[-+]?\d{1,3}(?:[.,]\d{3})+$/.test(t);}
+function findHeaderXs(pageItems){
+ const wanted=['VALEUR','QUANT','COURS/VL','COURS','MONTANT','PRMP','PERF','VALUES LATENTES','LATENTES','POIDS'];
+ const found={};
+ for(const it of pageItems){const n=norm(it.t);for(const w of wanted){if(!found[w] && (n===w||n.includes(w)))found[w]=it.x;}}
+ const xs=[found.VALEUR,found.QUANT,found['COURS/VL']||found.COURS,found.MONTANT,found.PRMP,found.PERF,found['VALUES LATENTES']||found.LATENTES,found.POIDS].filter(x=>Number.isFinite(x));
+ return xs.length>=4?xs:null;
+}
+function parsePage(pageItems){
+ const headers=findHeaderXs(pageItems); if(!headers)return [];
+ const hy=Math.max(...pageItems.filter(it=>headers.some(x=>Math.abs(x-it.x)<3)&&/VALEUR|QUANT|COURS|MONTANT|PRMP|PERF|POIDS|LATENTES/i.test(norm(it.t))).map(it=>it.y));
+ const candidates=pageItems.filter(it=>it.y < hy-4 && it.y > hy-320);
+ const groups=[];
+ for(const it of candidates){let g=groups.find(z=>Math.abs(z.y-it.y)<=8);if(!g){g={y:it.y,items:[]};groups.push(g)}g.items.push(it)}
+ groups.sort((a,b)=>b.y-a.y);
+ const rows=[];
+ for(const g of groups){
+  const its=g.items.slice().sort((a,b)=>a.x-b.x);
+  // A row is valid if it contains a plausible security name and at least 6 numeric fields.
+  const nameParts=[];const nums=[];
+  for(const it of its){
+   if(isNumText(it.t)) nums.push({x:it.x,v:num(it.t),raw:it.t});
+   else if(!/^(VALEUR|QUANTITE?|COURS\/VL|COURS|MONTANT|PRMP|PERF\.?|\+\/-?\s*VALUES?\s*LATENTES?|POIDS|TOTAUX?)$/i.test(norm(it.t))) nameParts.push(it.t);
+  }
+  if(nums.length<6)continue;
+  // Remove obvious page/header numbers by taking the first 7 numeric fields after the name.
+  let nv=nums.map(n=>n.v);
+  if(nv.length>7) nv=nv.slice(0,7);
+  if(nv.length<7)continue;
+  let name=clean(nameParts.join(' '));
+  name=name.replace(/^(?:Actions?|OPCVM|Titres?)\s+/i,'').trim();
+  if(!name || /^(TOTAL|TOTAUX|PORTEFEUILLE|COMPTE|DATE|PAGE)/i.test(name))continue;
+  // Require a sensible quantity and market value. This filters unrelated text blocks.
+  if(!Number.isFinite(nv[0])||nv[0]<=0||!Number.isFinite(nv[2])||nv[2]<=0)continue;
+  rows.push({name,qty:nv[0],price:nv[1],value:nv[2],cmp:nv[3],perf:nv[4],pl:nv[5],weight:nv[6],p:g.y});
+ }
+ return rows;
+}
+function fallbackTokenRows(items){
+ const rows=[];
+ const pages=[...new Set(items.map(x=>x.p))];
+ for(const p of pages){
+  const pi=items.filter(x=>x.p===p);
+  const groups=[];
+  for(const it of pi){let g=groups.find(z=>Math.abs(z.y-it.y)<=12);if(!g){g={y:it.y,items:[]};groups.push(g)}g.items.push(it)}
+  for(const g of groups){
+   const its=g.items.sort((a,b)=>a.x-b.x);let ni=its.findIndex(i=>/^(AKDITAL|TOTALENERGIES|CIH|S2M|HPS|IAM|COSUMAR|TGCC|BCP|BMCI|BOA|CDM|CFG|LAFARGE|MANAGEM|TAQA|ALLIANCES|ADDOHA|RISMA|SNEP|SONASID|DARI|M2M|CMGP|JET|MUTANDIS|UNIMER|ATLANTA|AFMA|EQDOM|WAFA)/i.test(clean(i.t)));
+   if(ni<0)continue;
+   const name=clean(its[ni].t);const ns=[];
+   for(const it of its.slice(ni+1)){if(isNumText(it.t))ns.push(num(it.t));}
+   if(ns.length<7)continue;const v=ns.slice(0,7);if(v[0]>0&&v[2]>0)rows.push({name,qty:v[0],price:v[1],value:v[2],cmp:v[3],perf:v[4],pl:v[5],weight:v[6],p:g.y});
+  }
+ }
+ return rows;
+}
+function parse(items){
+ const pages=[...new Set(items.map(x=>x.p))];let rows=[];
+ for(const p of pages)rows.push(...parsePage(items.filter(x=>x.p===p)));
+ if(!rows.length)rows=fallbackTokenRows(items);
+ // De-duplicate by page/name/quantity/value.
+ const seen=new Set();rows=rows.filter(r=>{const k=[r.p,norm(r.name),r.qty,r.value].join('|');if(seen.has(k))return false;seen.add(k);return true;});
+ if(!rows.length)return null;
+ const text=items.map(x=>x.t).join(' ');let total=null;
+ const tm=text.match(/\bTotaux?\s+(-?[\d\s.,]+)\s+(-?[\d\s.,]+)\s+(-?[\d\s.,]+)\s*%?\s+(-?[\d\s.,]+)\s+(-?[\d\s.,]+)/i);
+ if(tm)total={value:num(tm[1]),cmp:num(tm[2]),perf:num(tm[3]),pl:num(tm[4]),weight:num(tm[5])};
+ return {rows,total,sourceDate:dateFrom(items)};
+}
+function save(parsed,file){
+ const a=acct(),by=read(BY,{PEA:{},CTO:{}})||{};by.PEA=by.PEA||{};by.CTO=by.CTO||{};const old=by[a]||{};
+ const positions=parsed.rows.map(r=>({name:r.name,qty:r.qty,cmp:r.cmp,prmp:r.cmp,price:r.price,course:r.price,value:r.value,montant:r.value,perf:r.perf,performance:r.perf,pl:r.pl,gainLoss:r.pl,weight:r.weight,poids:r.weight}));
+ const valuation=Number.isFinite(parsed.total?.value)?parsed.total.value:positions.reduce((s,p)=>s+p.value,0);
+ const performance=Number.isFinite(parsed.total?.perf)?parsed.total.perf:(valuation?positions.reduce((s,p)=>s+p.pl,0)/valuation*100:null);
+ const d=parsed.sourceDate||new Date().toISOString().slice(0,10);let snaps=Array.isArray(old.snapshots)?old.snapshots.slice():[];const i=snaps.findIndex(x=>x.date===d);const snap={date:d,value:valuation};if(i>=0)snaps[i]=snap;else snaps.push(snap);
+ const next={...old,positions,valuation,cash:Number.isFinite(Number(old.cash))?Number(old.cash):null,performance,source:file.name,sourceDate:d,snapshots:snaps.sort((x,y)=>String(x.date).localeCompare(String(y.date)))};
+ by[a]=next;write(BY,by);write(STATE,next);localStorage.setItem('currentAccount',a);write('wafaLastImport',{source:file.name,importedAt:new Date().toISOString(),account:a,documentType:'Portefeuille titres',rows:positions,valuation,performance,sourceDate:d});
+ return {account:a,positions,valuation,performance};
+}
+function refresh(){['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}});try{window.dispatchEvent(new CustomEvent('accountdataupdated',{detail:{account:acct()}}));window.dispatchEvent(new Event('accountchanged'))}catch(e){}}
+async function run(file,msg,preview){
+ if(!file){if(msg)msg.innerHTML='<span class="red">Choisis d’abord le PDF original Wafa Bourse.</span>';return;}
+ try{const items=await raw(file),parsed=parse(items);if(!parsed)throw new Error('PDF lu, mais aucune ligne du tableau « Portefeuille titres » n’a été reconnue.');const r=save(parsed,file);if(preview)preview.innerHTML='<table><thead><tr><th>Valeur</th><th>Quantité</th><th>Cours/VL</th><th>Montant</th><th>PRMP</th><th>Perf.</th><th>+/- latent</th><th>Poids</th></tr></thead><tbody>'+r.positions.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+p.qty+'</td><td>'+p.price.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+p.value.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+p.cmp.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+p.perf.toFixed(2)+'%</td><td>'+p.pl.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+p.weight.toFixed(2)+'%</td></tr>').join('')+'</tbody></table>';if(msg)msg.innerHTML='<span class="green"><b>PDF importé ✓</b> — '+r.positions.length+' position(s) dans le compte '+r.account+' — '+r.valuation.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD.</span>';refresh();}
+ catch(e){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(e.message||e)+'</span>';if(preview)preview.innerHTML='';}
+}
+window.importMainWafaPdf=function(){const e=document.getElementById('mainPdfAccount');if(e)localStorage.setItem('currentAccount',e.value==='CTO'?'CTO':'PEA');return run(document.getElementById('mainPdfFile')?.files?.[0],document.getElementById('mainPdfMsg'),document.getElementById('mainPdfPreview'));};
+window.readWafaPdfOperations=function(){const e=document.getElementById('pdfOpsAccount');if(e)localStorage.setItem('currentAccount',e.value==='CTO'?'CTO':'PEA');return run(document.getElementById('pdfOpsFile')?.files?.[0],document.getElementById('pdfOpsMsg'),document.getElementById('pdfOpsPreview'));};
+window.importWafa=window.readWafaPdfOperations;
+})();
+</script>
