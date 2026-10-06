@@ -4494,3 +4494,84 @@ window.renderImportedUnified=function(){
   window.readWafaPdfOperations=importCTOPdf;
 })();
 </script>
+
+<script id="V39_FINAL_CTO_PORTFOLIO_IMPORT_FIX">
+(function(){
+  'use strict';
+  const BY='portfolioStateByAccountV1', STATE='portfolioStateV1';
+  const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  const num=s=>{let x=clean(s).replace(/%$/,'').replace(/\s/g,'');if(!x)return NaN;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'');}else if(x.includes(','))x=x.replace(',','.');return parseFloat(x.replace(/[^0-9.\-]/g,''));};
+  const esc=s=>clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const read=(k,f)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?f:v}catch(e){return f}};
+  const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  const account=()=>((document.getElementById('pdfOpsAccount')?.value||localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA');
+
+  function parse(lines){
+    const a=(Array.isArray(lines)?lines:[]).map(clean).filter(Boolean);
+    const text=a.join(' ');
+    // IMPORTANT: do not require the PDF.js header to be on one visual line.
+    if(!/Portefeuille\s+titres/i.test(text) || !/PRMP/i.test(text) || !/Poids/i.test(text)) return null;
+
+    const rows=[];
+    // Wafa Bourse portfolio row: name, quantity, Cours/VL, Montant, PRMP, Perf, +/- Values latentes, Poids.
+    const re=/\b(AKDITAL|TOTALENERGIES)\s+(\d+(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)%\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)/gi;
+    let m;
+    while((m=re.exec(text))){
+      const r={name:m[1].toUpperCase(),qty:num(m[2]),price:num(m[3]),value:num(m[4]),cmp:num(m[5]),perf:num(m[6]),pl:num(m[7]),weight:num(m[8])};
+      if([r.qty,r.price,r.value,r.cmp,r.perf,r.pl,r.weight].every(Number.isFinite)) rows.push(r);
+    }
+    if(!rows.length) return null;
+
+    let total=null;
+    const tm=text.match(/\bTotaux\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)%\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)/i);
+    if(tm) total={value:num(tm[1]),cmp:num(tm[2]),perf:num(tm[3]),pl:num(tm[4]),weight:num(tm[5])};
+
+    let sourceDate=null;
+    const dm=text.match(/\b(\d{2})\s+oct\.\s+(\d{4})\b/i);
+    if(dm) sourceDate=dm[2]+'-10-'+dm[1];
+    return {rows,total,sourceDate};
+  }
+
+  function save(parsed,fileName){
+    const a=account();
+    const by=read(BY,{PEA:{},CTO:{}})||{}; by.PEA=by.PEA||{}; by.CTO=by.CTO||{};
+    const old=by[a]||{};
+    const positions=parsed.rows.map(r=>({name:r.name,qty:r.qty,cmp:r.cmp,prmp:r.cmp,price:r.price,course:r.price,value:r.value,montant:r.value,perf:r.perf,performance:r.perf,pl:r.pl,gainLoss:r.pl,weight:r.weight,poids:r.weight}));
+    const valuation=Number.isFinite(parsed.total?.value)?parsed.total.value:positions.reduce((s,p)=>s+p.value,0);
+    const performance=Number.isFinite(parsed.total?.perf)?parsed.total.perf:(valuation?positions.reduce((s,p)=>s+p.pl,0)/valuation*100:null);
+    let snapshots=Array.isArray(old.snapshots)?old.snapshots.slice():[];
+    if(parsed.sourceDate){const i=snapshots.findIndex(x=>x.date===parsed.sourceDate);const snap={date:parsed.sourceDate,value:valuation};if(i>=0)snapshots[i]=snap;else snapshots.push(snap);}
+    snapshots.sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+    const next={...old,positions,valuation,cash:Number.isFinite(Number(old.cash))?old.cash:null,performance,source:fileName,sourceDate:parsed.sourceDate,snapshots};
+    by[a]=next; write(BY,by); write(STATE,next); localStorage.setItem('currentAccount',a);
+    write('wafaLastImport',{source:fileName,importedAt:new Date().toISOString(),account:a,documentType:'Portefeuille titres',rows:positions,valuation,performance,prmpTotal:parsed.total?.cmp??positions.reduce((s,r)=>s+r.qty*r.cmp,0),latent:parsed.total?.pl??positions.reduce((s,r)=>s+r.pl,0),sourceDate:parsed.sourceDate});
+    // A portfolio statement is not a transaction statement. Remove only fake operations from this exact file.
+    const ops=read('portfolioOperations',[]);
+    if(Array.isArray(ops)) write('portfolioOperations',ops.filter(o=>!(String(o.source||'')===String(fileName)&&/^(ACHAT|VENTE)$/i.test(String(o.type||'')))));
+    return {a,positions,valuation,performance};
+  }
+
+  function refresh(){
+    ['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}});
+    try{window.dispatchEvent(new CustomEvent('accountdataupdated',{detail:{account:account()}}));window.dispatchEvent(new Event('accountchanged'));}catch(e){}
+  }
+
+  async function run(){
+    const file=document.getElementById('pdfOpsFile')?.files?.[0], msg=document.getElementById('pdfOpsMsg'), preview=document.getElementById('pdfOpsPreview');
+    if(!file){if(msg)msg.innerHTML='<span class="red">Choisis d’abord le PDF.</span>';return;}
+    try{
+      const lines=await readWafaPdfText(file), parsed=parse(lines);
+      if(!parsed) throw new Error('PDF non reconnu : ce fichier doit être le relevé Wafa Bourse « Portefeuille titres ».');
+      const saved=save(parsed,file.name);
+      if(preview) preview.innerHTML='<table><thead><tr><th>Valeur</th><th>Quantité</th><th>CMP / PRMP</th><th>Cours actuel</th><th>Montant</th><th>Performance</th><th>Gain / Perte</th><th>Poids</th></tr></thead><tbody>'+saved.positions.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+p.qty+'</td><td>'+p.cmp.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+p.price.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+p.value.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+p.perf.toFixed(2)+'%</td><td>'+p.pl.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+p.weight.toFixed(2)+'%</td></tr>').join('')+'</tbody></table><div class="hint" style="margin-top:8px">Portefeuille titres reconnu ✓ — '+saved.positions.length+' position(s).</div>';
+      if(msg) msg.innerHTML='<span class="green"><b>Portefeuille titres importé ✓</b> — '+saved.positions.length+' position(s) — '+saved.valuation.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD — aucune opération fictive créée.</span>';
+      refresh();
+    }catch(e){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(e.message||e)+'</span>';if(preview)preview.innerHTML='';}
+  }
+
+  // The visible button uses readWafaPdfOperations(). Override it last so no older parser can intercept the click.
+  window.readWafaPdfOperations=run;
+  window.importWafa=run;
+  window.importMainWafaPdf=run;
+})();
+</script>
