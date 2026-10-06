@@ -754,9 +754,19 @@ function importBackup(event){
 <div class="hint">
 Sélectionne directement le <b>PDF original Wafa Bourse</b>. Le dashboard le lit localement et ajoute les opérations au journal après détection automatique. Aucun identifiant ou mot de passe n'est demandé.
 </div>
-<div style="margin-top:12px">
+<div class="form" style="margin-top:12px;grid-template-columns:180px 1fr">
+<div>
+<div class="label">Compte à importer</div>
+<select id="mainPdfAccount" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt);font-size:15px">
+<option value="PEA">PEA</option>
+<option value="CTO">CTO</option>
+</select>
+</div>
+<div>
+<div class="label">Fichier PDF</div>
 <input id="mainPdfFile" type="file" accept="application/pdf,.pdf"
 style="width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
+</div>
 </div>
 <div style="margin-top:10px">
 <button type="button" onclick="importMainWafaPdf()">📥 Importer le PDF</button>
@@ -3257,7 +3267,7 @@ window.renderImportedUnified=function(){
   window.addEventListener('accountchanged',clear);window.addEventListener('storage',clear);
 })();
 </script>
-</body>
+\n<script id="TOP_IMPORTER_BOTH_ACCOUNTS_V30">\n(function(){\n  function currentAccount(){\n    return (localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';\n  }\n  function syncTopImporter(){\n    const a=currentAccount();\n    const sel=document.getElementById('mainPdfAccount');\n    if(sel){\n      sel.value=a;\n      sel.onchange=function(){\n        const v=this.value==='CTO'?'CTO':'PEA';\n        localStorage.setItem('currentAccount',v);\n        if(typeof window.selectPortfolioAccount==='function') window.selectPortfolioAccount(v);\n      };\n    }\n  }\n  function moveImporterTop(){\n    const imp=document.getElementById('mainWafaPdfImporter');\n    const bar=document.getElementById('selectedAccountBar');\n    if(imp&&bar&&bar.parentNode){\n      bar.parentNode.insertBefore(imp,bar.nextSibling);\n      imp.style.display='block';\n      imp.style.marginTop='12px';\n    }\n    syncTopImporter();\n  }\n  document.addEventListener('DOMContentLoaded',moveImporterTop);\n  window.addEventListener('load',moveImporterTop);\n  window.addEventListener('accountchanged',syncTopImporter);\n})();\n</script>\n</body>
 
 <script id="FINAL_CTO_EMPTY_LOCK">
 (function(){
@@ -3673,5 +3683,28 @@ window.renderImportedUnified=function(){
   }
   document.addEventListener('DOMContentLoaded',bind);
   window.addEventListener('load',bind);
+})();
+</script>
+
+<script id="FINAL_IMPORTER_POSITION_V29">
+(function(){
+  function moveImporter(){
+    const bar=document.getElementById('selectedAccountBar');
+    const imp=document.getElementById('pdfOpsImporter');
+    if(!bar||!imp) return;
+    // Put the real Wafa Bourse importer immediately under the selected account,
+    // so CTO has an obvious place to load its own data.
+    bar.insertAdjacentElement('afterend',imp);
+    const title=imp.querySelector('h2');
+    if(title) title.textContent='📥 Charger les données Wafa Bourse — PEA / CTO';
+    const hint=imp.querySelector('.hint');
+    if(hint) hint.innerHTML='Choisis le compte <b>PEA</b> ou <b>CTO</b>, puis sélectionne le relevé PDF Wafa Bourse. Les données sont enregistrées uniquement dans le compte sélectionné.';
+    const sel=document.getElementById('pdfOpsAccount');
+    const a=(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+    if(sel) sel.value=a;
+  }
+  document.addEventListener('DOMContentLoaded',moveImporter);
+  window.addEventListener('load',moveImporter);
+  setTimeout(moveImporter,100);
 })();
 </script>
