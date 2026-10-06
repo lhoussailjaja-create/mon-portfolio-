@@ -2494,7 +2494,8 @@ async function importMainWafaPdf(){
 </script>
 
 <style id="v30FinalPatch">
-  #importedOpsSection,#pdfOpsImporter{display:none!important}
+  #importedOpsSection{display:none!important}
+  #pdfOpsImporter{display:block!important}
   .v30-hidden{display:none!important}
   #journalBody td,#journalBody th{white-space:nowrap}
 </style>
@@ -2885,8 +2886,18 @@ window.renderImportedUnified=function(){
   const oldMain=window.importMainWafaPdf;
   window.importMainWafaPdf=async function(){
     const a=getAccount();
+    // Never copy the previously selected account into the new account.
+    // Only capture a portfolio state when this exact PDF import produced it.
+    const file=document.getElementById('mainPdfFile')?.files?.[0];
+    const before=read(STATE,null);
     const result=await oldMain?.();
-    captureSharedState(a);
+    const after=read(STATE,null);
+    const importedSource=String(after?.source||'');
+    const fileName=String(file?.name||'');
+    const changed=JSON.stringify(before||null)!==JSON.stringify(after||null);
+    if(after&&Array.isArray(after.positions)&&after.positions.length&&changed&&(!fileName||importedSource===fileName)){
+      setState(a,after);
+    }
     renderAccountDashboard();
     return result;
   };
@@ -3043,7 +3054,9 @@ window.renderImportedUnified=function(){
       const a=account(), before=read('portfolioOperations',[]);
       const r=await old.apply(this,arguments);
       const shared=read('portfolioStateV1',null);
-      if(shared&&Array.isArray(shared.positions))setState(a,shared);
+      const sourceName=String(shared?.source||'');
+      const importedFile=String(document.getElementById('mainPdfFile')?.files?.[0]?.name||'');
+      if(shared&&Array.isArray(shared.positions)&&shared.positions.length&&(!importedFile||sourceName===importedFile))setState(a,shared);
       let after=read('portfolioOperations',[]); if(Array.isArray(after)){
         const oldKeys=new Set((Array.isArray(before)?before:[]).map(o=>[o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|')));
         after=after.map(o=>{const k=[o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|');return oldKeys.has(k)?o:{...o,account:a}});
@@ -3194,6 +3207,54 @@ window.renderImportedUnified=function(){
     const old=window[name];if(typeof old!=='function')return;
     window[name]=async function(){const a=account();const r=await old.apply(this,arguments);localStorage.setItem('currentAccount',a);setTimeout(render,50);setTimeout(render,300);return r}
   });
+})();
+</script>
+<script id="CTO_FINAL_ZERO_ALL_DERIVED">
+(function(){
+  const BY='portfolioStateByAccountV1';
+  function read(k,fb){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?fb:v}catch(e){return fb}}
+  function ctoEmpty(){
+    if(String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()!=='CTO') return false;
+    const by=read(BY,{CTO:{}})||{}, s=by.CTO||{};
+    return !(Array.isArray(s.positions)&&s.positions.length) && !(Number(s.valuation)>0) && !(Number(s.cash)>0);
+  }
+  function clear(){
+    if(!ctoEmpty()) return;
+    // These two blocks are .section (not .section.card), so previous isolation patches missed them.
+    const alloc=document.getElementById('anAlloc');
+    if(alloc) alloc.innerHTML='<div class="hint">Aucune donnée CTO importée.</div>';
+    ['anStress5','anStress10','anStress20'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent='—'});
+    // Any allocation/current-analysis values must be empty until CTO import.
+    document.querySelectorAll('[id^="anAlloc"], [id^="anStress"]').forEach(e=>{
+      if(e.id==='anAlloc') e.innerHTML='<div class="hint">Aucune donnée CTO importée.</div>';
+      else e.textContent='—';
+    });
+    // Blank allocation target/result values that are outside .section.card.
+    document.querySelectorAll('.section').forEach(sec=>{
+      const title=(sec.querySelector('h2')?.textContent||'').trim().toLowerCase();
+      if(title.includes('allocation actuelle') || title.includes('stress tests')){
+        sec.querySelectorAll('.item b,.num').forEach(e=>e.textContent='—');
+        sec.querySelectorAll('[id^="anStress"]').forEach(e=>e.textContent='—');
+        const a=sec.querySelector('#anAlloc'); if(a)a.innerHTML='<div class="hint">Aucune donnée CTO importée.</div>';
+      }
+    });
+    // Remove remaining visible PEA-derived percentages/amounts from allocation analysis.
+    document.querySelectorAll('.section').forEach(sec=>{
+      const t=(sec.textContent||'');
+      if(/61\.3%|36\.8%|1\.9%|-365\.37|-730\.74|-1461\.49/.test(t)){
+        const h=sec.querySelector('h2');
+        if(h && /allocation actuelle|stress tests/i.test(h.textContent||'')){
+          sec.querySelectorAll('b').forEach(e=>e.textContent='—');
+          const a=sec.querySelector('#anAlloc'); if(a)a.innerHTML='<div class="hint">Aucune donnée CTO importée.</div>';
+          ['anStress5','anStress10','anStress20'].forEach(id=>{const e=sec.querySelector('#'+id);if(e)e.textContent='—'});
+        }
+      }
+    });
+  }
+  document.addEventListener('DOMContentLoaded',clear);
+  window.addEventListener('load',clear);
+  setTimeout(clear,100);setTimeout(clear,500);setTimeout(clear,1200);setInterval(clear,500);
+  window.addEventListener('accountchanged',clear);window.addEventListener('storage',clear);
 })();
 </script>
 </body>
@@ -3506,9 +3567,55 @@ window.renderImportedUnified=function(){
   }
   window.renderFinalCtoEmpty=render;
   const oldSelect=window.selectPortfolioAccount;
-  window.selectPortfolioAccount=function(a){try{if(typeof oldSelect==='function')oldSelect(a)}catch(e){}localStorage.setItem('currentAccount',a==='CTO'?'CTO':'PEA');setTimeout(render,0);setTimeout(render,150);setTimeout(render,500);};
-  document.addEventListener('DOMContentLoaded',()=>{render();setTimeout(render,150);setTimeout(render,600);});
+  window.selectPortfolioAccount=function(a){a=(a==='CTO'?'CTO':'PEA');try{if(typeof oldSelect==='function')oldSelect(a)}catch(e){}localStorage.setItem('currentAccount',a);const sel=document.getElementById('pdfOpsAccount');if(sel)sel.value=a;setTimeout(render,0);setTimeout(render,150);setTimeout(render,500);};
+  document.addEventListener('DOMContentLoaded',()=>{const sel=document.getElementById('pdfOpsAccount');if(sel)sel.value=(String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA');render();setTimeout(render,150);setTimeout(render,600);});
   window.addEventListener('load',()=>{render();setTimeout(render,250);});
   setTimeout(render,1000);
 })();
 </script>
+
+<script id="FINAL_CTO_EMPTY_ANALYSIS_LOCK_V22">
+(function(){
+  function isCTO(){return String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO';}
+  function readState(){try{return JSON.parse(localStorage.getItem('portfolioStateByAccountV1')||'{}').CTO||{}}catch(e){return {}}}
+  function emptyCTO(){
+    if(!isCTO()) return false;
+    const s=readState();
+    return !(Array.isArray(s.positions)&&s.positions.length) && !(Number(s.valuation)>0) && !(Number(s.cash)>0);
+  }
+  function sectionByHeading(words){
+    return [...document.querySelectorAll('.section, .section.card')].filter(sec=>{
+      const h=sec.querySelector('h2'); if(!h) return false;
+      const t=(h.textContent||'').toLowerCase();
+      return words.some(w=>t.includes(w));
+    });
+  }
+  function clear(){
+    if(!emptyCTO()) return;
+    // Only the two remaining areas visible in CTO: Stress tests + position analysis.
+    sectionByHeading(['stress tests']).forEach(sec=>{
+      sec.querySelectorAll('#anStress5,#anStress10,#anStress20').forEach(e=>e.textContent='—');
+      sec.querySelectorAll('.item b').forEach(e=>e.textContent='—');
+      const hint=sec.querySelector('.hint'); if(hint) hint.textContent='Aucune donnée CTO importée.';
+    });
+    sectionByHeading(['analyse position par position']).forEach(sec=>{
+      const body=sec.querySelector('#anPositionBody');
+      if(body) body.innerHTML='<tr><td colspan="6" style="padding:12px">Aucune donnée CTO importée.</td></tr>';
+    });
+    // Also clear any generic analysis table that still contains known PEA assets.
+    document.querySelectorAll('#anPositionBody tr').forEach(tr=>{
+      if(/TOTALENERGIES|ATTIJARI|WG LOW VOLATILITY/i.test(tr.textContent||'')){
+        const b=document.getElementById('anPositionBody');
+        if(b) b.innerHTML='<tr><td colspan="6" style="padding:12px">Aucune donnée CTO importée.</td></tr>';
+      }
+    });
+  }
+  function run(){try{clear()}catch(e){}}
+  document.addEventListener('DOMContentLoaded',run);
+  window.addEventListener('load',run);
+  window.addEventListener('accountchanged',run);
+  setTimeout(run,50);setTimeout(run,150);setTimeout(run,400);setTimeout(run,1000);setTimeout(run,2000);
+  setInterval(run,250);
+})();
+</script>
+\n<script id="FINAL_ACCOUNT_SWITCH_V25">\n(function(){\n  // Authoritative account switch: PEA and CTO are independent.\n  // Reloading after changing the selected account prevents any old PEA/CTO DOM\n  // values from surviving the switch.\n  window.switchPortfolioAccountHard=function(account){\n    const a=String(account||'').toUpperCase()==='CTO'?'CTO':'PEA';\n    localStorage.setItem('currentAccount',a);\n    const sel=document.getElementById('pdfOpsAccount');\n    if(sel) sel.value=a;\n    const f=document.getElementById('importedAccountFilter');\n    if(f) f.value=a;\n    window.location.reload();\n  };\n  function bind(){\n    document.querySelectorAll('.account-card[data-account], .mini-account').forEach(btn=>{\n      const a=btn.getAttribute('data-account') || btn.textContent.trim();\n      if(a!=='PEA' && a!=='CTO') return;\n      btn.onclick=function(e){\n        e.preventDefault();\n        e.stopImmediatePropagation();\n        window.switchPortfolioAccountHard(a);\n        return false;\n      };\n    });\n    const a=(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';\n    const sel=document.getElementById('pdfOpsAccount'); if(sel)sel.value=a;\n    const f=document.getElementById('importedAccountFilter'); if(f)f.value=a;\n  }\n  document.addEventListener('DOMContentLoaded',bind);\n  window.addEventListener('load',bind);\n})();\n</script>\n
