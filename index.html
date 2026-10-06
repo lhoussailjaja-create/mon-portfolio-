@@ -2769,7 +2769,7 @@ function refreshAccountCards(){
   if(p)p.textContent=pea+' opération'+(pea===1?'':'s');
   if(c)c.textContent=cto+' opération'+(cto===1?'':'s');
 }
-document.addEventListener('DOMContentLoaded',function(){refreshAccountCards();selectPortfolioAccount('PEA');});
+document.addEventListener('DOMContentLoaded',function(){refreshAccountCards();selectPortfolioAccount((localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA');});
 const _oldRenderImportedUnified=window.renderImportedUnified;
 window.renderImportedUnified=function(){
   if(typeof _oldRenderImportedUnified==='function') _oldRenderImportedUnified();
@@ -3320,6 +3320,28 @@ window.renderImportedUnified=function(){
   window.addEventListener('load',()=>{run();setTimeout(run,250);setTimeout(run,1000);});
   setInterval(run,700);
   window.addEventListener('storage',run);
+})();
+</script>
+
+<script id="FINAL_ACCOUNT_SWITCH_V28">
+(function(){
+  function normalize(a){ return String(a||'').toUpperCase()==='CTO' ? 'CTO' : 'PEA'; }
+  function go(a){
+    a=normalize(a);
+    localStorage.setItem('currentAccount',a);
+    var sel=document.getElementById('pdfOpsAccount'); if(sel) sel.value=a;
+    var f=document.getElementById('importedAccountFilter'); if(f) f.value=a;
+    // Keep the currently selected account after reload.
+    window.location.reload();
+  }
+  document.addEventListener('click',function(e){
+    var el=e.target && e.target.closest ? e.target.closest('.account-card[data-account], .mini-account[data-account], .mini-account') : null;
+    if(!el) return;
+    var a=el.getAttribute('data-account') || el.textContent;
+    if(!/^(PEA|CTO)$/i.test(String(a).trim())) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    go(a.trim());
+  },true);
 })();
 </script>
 </html>
