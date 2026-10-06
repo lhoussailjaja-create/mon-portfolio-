@@ -3267,7 +3267,145 @@ window.renderImportedUnified=function(){
   window.addEventListener('accountchanged',clear);window.addEventListener('storage',clear);
 })();
 </script>
-\n<script id="TOP_IMPORTER_BOTH_ACCOUNTS_V30">\n(function(){\n  function currentAccount(){\n    return (localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';\n  }\n  function syncTopImporter(){\n    const a=currentAccount();\n    const sel=document.getElementById('mainPdfAccount');\n    if(sel){\n      sel.value=a;\n      sel.onchange=function(){\n        const v=this.value==='CTO'?'CTO':'PEA';\n        localStorage.setItem('currentAccount',v);\n        if(typeof window.selectPortfolioAccount==='function') window.selectPortfolioAccount(v);\n      };\n    }\n  }\n  function moveImporterTop(){\n    const imp=document.getElementById('mainWafaPdfImporter');\n    const bar=document.getElementById('selectedAccountBar');\n    if(imp&&bar&&bar.parentNode){\n      bar.parentNode.insertBefore(imp,bar.nextSibling);\n      imp.style.display='block';\n      imp.style.marginTop='12px';\n    }\n    syncTopImporter();\n  }\n  document.addEventListener('DOMContentLoaded',moveImporterTop);\n  window.addEventListener('load',moveImporterTop);\n  window.addEventListener('accountchanged',syncTopImporter);\n})();\n</script>\n</body>
+\n<script id="TOP_IMPORTER_BOTH_ACCOUNTS_V30">\n(function(){\n  function currentAccount(){\n    return (localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';\n  }\n  function syncTopImporter(){\n    const a=currentAccount();\n    const sel=document.getElementById('mainPdfAccount');\n    if(sel){\n      sel.value=a;\n      sel.onchange=function(){\n        const v=this.value==='CTO'?'CTO':'PEA';\n        localStorage.setItem('currentAccount',v);\n        if(typeof window.selectPortfolioAccount==='function') window.selectPortfolioAccount(v);\n      };\n    }\n  }\n  function moveImporterTop(){\n    const imp=document.getElementById('mainWafaPdfImporter');\n    const bar=document.getElementById('selectedAccountBar');\n    if(imp&&bar&&bar.parentNode){\n      bar.parentNode.insertBefore(imp,bar.nextSibling);\n      imp.style.display='block';\n      imp.style.marginTop='12px';\n    }\n    syncTopImporter();\n  }\n  document.addEventListener('DOMContentLoaded',moveImporterTop);\n  window.addEventListener('load',moveImporterTop);\n  window.addEventListener('accountchanged',syncTopImporter);\n})();\n</script>\n
+<!-- ================= V35 FIX: ROBUST WAFA PORTFOLIO HEADER/ROWS ================= -->
+<script id="V35_WAFA_PORTFOLIO_IMPORT_FIX">
+(function(){
+  'use strict';
+  const BY='portfolioStateByAccountV1', STATE='portfolioStateV1';
+  const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  const num=v=>{
+    let s=clean(v).replace(/%$/,'').replace(/\s/g,'');
+    if(s.includes(',')&&s.includes('.')){
+      if(s.lastIndexOf(',')>s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',','.');
+      else s=s.replace(/,/g,'');
+    }else if(s.includes(',')) s=s.replace(',','.');
+    return parseFloat(s.replace(/[^0-9.\-]/g,''));
+  };
+  const esc=s=>clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const read=(k,fb)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?fb:v}catch(e){return fb}};
+  const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  const account=()=>String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+
+  function parsePortfolioV35(lines){
+    const a=(Array.isArray(lines)?lines:[]).map(clean).filter(Boolean);
+    const joined=a.join(' ');
+    // The PDF header is split over two visual lines in PDF.js, so recognition
+    // is based on the complete extracted page, not on one header line.
+    const isPortfolio=/Portefeuille\s+titres/i.test(joined) &&
+      /Quantit(?:é|e|\u00e9)?/i.test(joined) &&
+      /Cours\s*\/\s*VL/i.test(joined) && /PRMP/i.test(joined) &&
+      /Poids/i.test(joined);
+    if(!isPortfolio) return null;
+
+    const rows=[];
+    const rowRe=/^(.*?)\s+(\d+(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)%\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s*$/i;
+    for(const line of a){
+      if(/^Avertissement\b/i.test(line)) break;
+      const m=line.match(rowRe);
+      if(!m) continue;
+      const r={name:clean(m[1]),qty:num(m[2]),course:num(m[3]),value:num(m[4]),cmp:num(m[5]),perf:num(m[6]),pl:num(m[7]),weight:num(m[8])};
+      if(r.name && !/^totaux?$/i.test(r.name) && [r.qty,r.course,r.value,r.cmp,r.perf,r.pl,r.weight].every(Number.isFinite)) rows.push(r);
+    }
+
+    // Coordinate-free fallback for layouts where the whole row is split into
+    // several extracted lines. These are the actual security names in Wafa's
+    // portfolio statement; the generic fallback below also accepts other names.
+    if(!rows.length){
+      const names=['AKDITAL','TOTALENERGIES'];
+      for(const name of names){
+        const re=new RegExp('\\b'+name+'\\s+(\\d+(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s\\u00a0]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s\\u00a0]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s\\u00a0]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s\\u00a0]*(?:[.,]\\d+)?)%\\s+(-?\\d[\\d\\s\\u00a0]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s\\u00a0]*(?:[.,]\\d+)?)','i');
+        const m=joined.match(re);
+        if(m){
+          const r={name,qty:num(m[1]),course:num(m[2]),value:num(m[3]),cmp:num(m[4]),perf:num(m[5]),pl:num(m[6]),weight:num(m[7])};
+          if([r.qty,r.course,r.value,r.cmp,r.perf,r.pl,r.weight].every(Number.isFinite)) rows.push(r);
+        }
+      }
+    }
+
+    if(!rows.length){
+      // Generic fallback: capture a capitalized security name immediately
+      // followed by the 7 numeric portfolio fields.
+      const re=/\b([A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ0-9 &'’.-]{2,})\s+(\d+(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)%\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)/g;
+      let m;
+      while((m=re.exec(joined))){
+        const r={name:clean(m[1]),qty:num(m[2]),course:num(m[3]),value:num(m[4]),cmp:num(m[5]),perf:num(m[6]),pl:num(m[7]),weight:num(m[8])};
+        if(!/^totaux?$/i.test(r.name) && [r.qty,r.course,r.value,r.cmp,r.perf,r.pl,r.weight].every(Number.isFinite)) rows.push(r);
+      }
+    }
+
+    let total=null;
+    for(const line of a){
+      const m=line.match(/^Totaux\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)%\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)$/i);
+      if(m){total={value:num(m[1]),cmp:num(m[2]),perf:num(m[3]),pl:num(m[4]),weight:num(m[5])};break;}
+    }
+    if(!total){
+      const m=joined.match(/\bTotaux\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)%\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)/i);
+      if(m) total={value:num(m[1]),cmp:num(m[2]),perf:num(m[3]),pl:num(m[4]),weight:num(m[5])};
+    }
+    return rows.length?{rows,total}:null;
+  }
+
+  function savePortfolio(parsed,fileName,lines){
+    const a=account();
+    const by=read(BY,{PEA:{},CTO:{}})||{}; by.PEA=by.PEA||{}; by.CTO=by.CTO||{};
+    const old=by[a]||{};
+    const joined=lines.join(' ');
+    const dm=joined.match(/\b(\d{2})\s+([A-Za-zéû.]+)\s+(\d{4})\b/i);
+    const months={jan:1,fév:2,fev:2,mar:3,avr:4,mai:5,juin:6,juil:7,aou:8,sep:9,oct:10,nov:11,dec:12};
+    let sourceDate=null;
+    if(dm){const mm=months[clean(dm[2]).normalize('NFD').replace(/[\u0300-\u036f]/g,'').slice(0,3).toLowerCase()];if(mm)sourceDate=dm[3]+'-'+String(mm).padStart(2,'0')+'-'+dm[1];}
+    const positions=parsed.rows.map(r=>({name:r.name,qty:r.qty,cmp:r.cmp,price:r.course,value:r.value,pl:r.pl,weight:r.weight,perf:r.perf,course:r.course,montant:r.value,prmp:r.cmp,performance:r.perf,gainLoss:r.pl,poids:r.weight}));
+    const valuation=Number.isFinite(parsed.total?.value)?parsed.total.value:positions.reduce((s,p)=>s+p.value,0);
+    const performance=Number.isFinite(parsed.total?.perf)?parsed.total.perf:null;
+    let snapshots=Array.isArray(old.snapshots)?old.snapshots.slice():[];
+    if(sourceDate&&valuation>0){const i=snapshots.findIndex(x=>x.date===sourceDate);const snap={date:sourceDate,value:valuation};if(i>=0)snapshots[i]=snap;else snapshots.push(snap);snapshots.sort((x,y)=>String(x.date).localeCompare(String(y.date)));}
+    const next={...old,positions,valuation,cash:Number.isFinite(Number(old.cash))?Number(old.cash):null,performance,realized:Number.isFinite(Number(old.realized))?Number(old.realized):0,source:fileName,sourceDate,snapshots};
+    by[a]=next; write(BY,by); write(STATE,next);
+    write('wafaLastImport',{source:fileName,importedAt:new Date().toISOString(),sourceDate,account:a,rows:positions,total:parsed.total||{value:valuation,perf:performance}});
+    // Remove only fake operations that were generated from this exact portfolio statement.
+    const ops=read('portfolioOperations',[]);
+    if(Array.isArray(ops)){
+      const cleaned=ops.filter(o=>!(String(o.source||'')===String(fileName) && /^(ACHAT|VENTE)$/i.test(String(o.type||''))));
+      if(cleaned.length!==ops.length) write('portfolioOperations',cleaned);
+    }
+    return {account:a,positions,valuation,performance,sourceDate};
+  }
+
+  function refresh(saved){
+    ['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}});
+    try{window.dispatchEvent(new CustomEvent('accountdataupdated',{detail:{account:saved.account}}))}catch(e){}
+    setTimeout(()=>{try{if(typeof window.refreshAdvancedAnalytics==='function')window.refreshAdvancedAnalytics()}catch(e){};try{if(typeof window.renderAccountDashboard==='function')window.renderAccountDashboard()}catch(e){}},200);
+    setTimeout(()=>{try{if(typeof window.refreshAdvancedAnalytics==='function')window.refreshAdvancedAnalytics()}catch(e){}},600);
+  }
+
+  async function doImport(file,msg,preview){
+    if(!file){if(msg)msg.innerHTML='<span class="red">Choisis d’abord le PDF original Wafa Bourse.</span>';return;}
+    try{
+      if(typeof readWafaPdfText!=='function') throw new Error('Lecteur PDF Wafa indisponible.');
+      const lines=await readWafaPdfText(file);
+      const parsed=parsePortfolioV35(lines);
+      if(!parsed) throw new Error('PDF Wafa Bourse non reconnu. Vérifie que c’est bien le relevé « Portefeuille titres ».');
+      const saved=savePortfolio(parsed,file.name,lines);
+      if(preview){preview.innerHTML='<table><thead><tr><th>Valeur</th><th>Quantité</th><th>CMP / PRMP</th><th>Cours actuel</th><th>Montant</th><th>Perf.</th><th>Gain / Perte</th><th>Poids</th></tr></thead><tbody>'+saved.positions.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+p.qty+'</td><td>'+num(p.cmp).toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+num(p.course).toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+num(p.value).toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+num(p.perf).toLocaleString('fr-FR',{minimumFractionDigits:2})+'%</td><td>'+num(p.pl).toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+num(p.weight).toLocaleString('fr-FR',{minimumFractionDigits:2})+'%</td></tr>').join('')+'</tbody></table>';}
+      if(msg)msg.innerHTML='<span class="green"><b>'+saved.positions.length+' position(s) importée(s) ✓</b> — Compte '+saved.account+' — Valorisation '+saved.valuation.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD — aucune opération fictive créée.</span>';
+      refresh(saved);
+    }catch(e){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(e.message||e)+'</span>';if(preview)preview.innerHTML='';}
+  }
+
+  // The visible button in the screenshot calls this function.
+  window.readWafaPdfOperations=async function(){
+    const file=document.getElementById('pdfOpsFile')?.files?.[0];
+    await doImport(file,document.getElementById('pdfOpsMsg'),document.getElementById('pdfOpsPreview'));
+  };
+  window.importMainWafaPdf=async function(){
+    const file=document.getElementById('mainPdfFile')?.files?.[0];
+    await doImport(file,document.getElementById('mainPdfMsg'),document.getElementById('mainPdfPreview'));
+  };
+})();
+</script>
+
+</body>
 
 <script id="FINAL_CTO_EMPTY_LOCK">
 (function(){
