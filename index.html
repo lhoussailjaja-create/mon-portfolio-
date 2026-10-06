@@ -416,6 +416,20 @@ function importBackup(event){
 <button onclick="window.print()">Exporter / Imprimer</button>
 </header>
 
+<!-- ================= COMPTES PEA / CTO ================= -->
+<section class="section card" id="accountsSwitcher" style="margin-top:0">
+  <h2>💼 Mes comptes</h2>
+  <div class="hint">PEA et CTO sont séparés. Clique sur un compte pour afficher uniquement ses opérations.</div>
+  <div class="cards" style="margin-top:12px">
+    <button type="button" class="card account-card" data-account="PEA" onclick="selectPortfolioAccount('PEA')" style="text-align:left;background:var(--card);color:var(--txt);border:1px solid var(--line)">
+      <div class="label">Compte</div><div class="num">PEA</div><div class="hint" id="peaAccountSummary">0 opération</div>
+    </button>
+    <button type="button" class="card account-card" data-account="CTO" onclick="selectPortfolioAccount('CTO')" style="text-align:left;background:var(--card);color:var(--txt);border:1px solid var(--line)">
+      <div class="label">Compte</div><div class="num">CTO</div><div class="hint" id="ctoAccountSummary">0 opération</div>
+    </button>
+  </div>
+</section>
+
 <div class="cards">
 
   <div class="card">
@@ -2674,6 +2688,29 @@ async function importMainWafaPdf(){
   // Do not allow the old six-column placeholder to come back on load.
   document.addEventListener('DOMContentLoaded',function(){renderImportedUnified();renderUnifiedJournal();});
 })();
+</script>
+
+<script>
+function selectPortfolioAccount(account){
+  const f=document.getElementById('importedAccountFilter');
+  if(f){f.value=account; f.dispatchEvent(new Event('change'));}
+  document.getElementById('importedOpsSection')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function refreshAccountCards(){
+  let ops=[];
+  try{ops=JSON.parse(localStorage.getItem('portfolioOperations')||'[]')}catch(e){}
+  const count=a=>ops.filter(o=>String(o.account||'').toUpperCase()===a).length;
+  const pea=count('PEA'), cto=count('CTO');
+  const p=document.getElementById('peaAccountSummary'), c=document.getElementById('ctoAccountSummary');
+  if(p)p.textContent=pea+' opération'+(pea===1?'':'s');
+  if(c)c.textContent=cto+' opération'+(cto===1?'':'s');
+}
+document.addEventListener('DOMContentLoaded',refreshAccountCards);
+const _oldRenderImportedUnified=window.renderImportedUnified;
+window.renderImportedUnified=function(){
+  if(typeof _oldRenderImportedUnified==='function') _oldRenderImportedUnified();
+  refreshAccountCards();
+};
 </script>
 
 </body>
