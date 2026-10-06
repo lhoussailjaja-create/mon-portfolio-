@@ -2513,5 +2513,61 @@ async function importMainWafaPdf(){
   window.addEventListener('resize',drawChart);
 })();
 </script>
+
+<script id="finalRepairStep1">
+(function(){
+  const LS='portfolioStateV1';
+  const PS=[
+    {name:'ATTIJARI AL MOUCHARAKA',qty:.565,cmp:1415.73,price:1300.61,value:734.84,pl:-65.04},
+    {name:'ATTIJARI DIVIDEND FUND',qty:1.777,cmp:1124.96,price:1043.54,value:1854.37,pl:-144.68},
+    {name:'ATTIJARI ACTIONS',qty:1,cmp:945.73,price:879.10,value:879.10,pl:-66.63},
+    {name:'TOTALENERGIES',qty:2,cmp:1420.02,price:1370,value:2740,pl:-100.04},
+    {name:'WG LOW VOLATILITY FACTOR FUND',qty:7.538,cmp:159.18,price:145.81,value:1099.12,pl:-100.78}
+  ];
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const money=v=>Number.isFinite(Number(v))?Number(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD':'Non disponible';
+  const signed=v=>Number.isFinite(Number(v))?(Number(v)>=0?'+':'−')+Math.abs(Number(v)).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD':'—';
+  const cls=v=>Number(v)>=0?'green':'red';
+  function get(){try{return JSON.parse(localStorage.getItem(LS))||{};}catch(e){return {};}}
+  function put(st){localStorage.setItem(LS,JSON.stringify(st));}
+  function positions(){const st=get();return Array.isArray(st.positions)?st.positions:[];}
+  function ensureState(){
+    let st=get();
+    if(!positions().length){
+      put({positions:PS,valuation:7307.43,cash:138.11,source:'Wafa Bourse — relevé 03/10/2026',sourceDate:'2026-10-03',snapshots:[{date:'2026-10-03',value:7307.43}],realized:-33.25});
+    }
+  }
+  function render(){
+    ensureState();
+    const st=get(),ps=positions(),val=Number(st.valuation)||ps.reduce((a,p)=>a+(Number(p.value)||0),0),cash=Number(st.cash),assets=val+(Number.isFinite(cash)?cash:0),lat=ps.reduce((a,p)=>a+(Number(p.pl)||0),0);
+    const table=document.querySelector('table:first-of-type tbody');
+    if(table) table.innerHTML=ps.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+Number(p.qty).toLocaleString('fr-FR',{maximumFractionDigits:3})+'</td><td>'+money(p.cmp)+'</td><td>'+money(p.price)+'</td><td>'+money(p.value)+'</td><td class="'+cls(p.pl)+'">'+signed(p.pl)+'</td></tr>').join('');
+    document.querySelectorAll('.cards .card').forEach(c=>{
+      const l=(c.querySelector('.label')?.textContent||'').trim(),n=c.querySelector('.num'),h=c.querySelector('.hint'); if(!n)return;
+      if(l.includes('Valorisation totale')) n.textContent=money(val);
+      else if(l.includes('CASH DISPONIBLE')||l.includes('Cash disponible')) n.textContent=Number.isFinite(cash)?money(cash):'Non disponible';
+      else if(l.includes('GAIN / PERTE LATENT')){n.textContent=signed(lat);n.className='num '+cls(lat);}
+      else if(l.includes('PLUS GROSSE POSITION')){const x=ps.reduce((a,b)=>!a||b.value>a.value?b:a,null);if(x){n.textContent=x.name;if(h)h.textContent=(assets?x.value/assets*100:0).toFixed(1)+'% du portefeuille';}}
+      else if(l.includes('PLUS GROSSE PERTE')){const x=ps.reduce((a,b)=>!a||b.pl<a.pl?b:a,null);if(x){n.textContent=signed(x.pl);n.className='num '+cls(x.pl);if(h)h.textContent=x.name;}}
+      else if(l.includes('CONCENTRATION')){const x=ps.reduce((a,b)=>!a||b.value>a.value?b:a,null);if(x)n.textContent=(assets?x.value/assets*100:0).toFixed(1)+'%';}
+    });
+    draw();
+  }
+  function draw(){
+    const c=document.getElementById('chart');if(!c)return;
+    let st=get(),snaps=Array.isArray(st.snapshots)?st.snapshots.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))):[];
+    const rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1,w=Math.max(280,Math.floor(rect.width)),h=230;c.width=w*dpr;c.height=h*dpr;c.style.height=h+'px';
+    const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);x.fillStyle='#9ba7b4';x.font='12px Arial';
+    if(!snaps.length){x.fillText('Aucun Snapshot — importe un PDF Wafa Bourse.',20,30);return;}
+    if(snaps.length===1){const s=snaps[0];x.fillText('1 Snapshot',20,25);x.fillText(String(s.date)+' — '+money(s.value),20,52);x.beginPath();x.arc(w/2,115,4,0,Math.PI*2);x.fill();return;}
+    const vals=snaps.map(s=>Number(s.value)),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
+    x.strokeStyle='#18c5ad';x.lineWidth=3;x.beginPath();snaps.forEach((s,i)=>{const px=25+i*(w-50)/(snaps.length-1),py=35+(max-Number(s.value))/range*(h-75);i?x.lineTo(px,py):x.moveTo(px,py);});x.stroke();
+  }
+  window.renderEvolutionChart=draw;
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else render();
+  window.addEventListener('resize',draw);
+})();
+</script>
+
 </body>
 </html>
