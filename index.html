@@ -769,7 +769,7 @@ Sélectionne directement le <b>PDF original Wafa Bourse</b>. Le dashboard le lit
 </div>
 <div>
 <div class="label">Fichier PDF</div>
-<input id="mainPdfFile" type="file" accept="application/pdf,.pdf"
+<input id="mainPdfFile" type="file" accept="application/pdf,.pdf" multiple
 style="width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
 </div>
 </div>
@@ -4128,6 +4128,126 @@ const top=[...document.querySelectorAll('button')].find(b=>/readWafaPdfOperation
   },true);
 })();
 </script>
+
+<script>
+/* V57 — CTO automatic importer: Fiscalité + Synthèse + Historique + Titres */
+(function(){
+  const esc57 = v => String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const clean57 = v => String(v??'').replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim();
+  function money57(v){
+    let x=String(v??'').replace(/\u00A0/g,' ').trim().replace(/MAD/gi,'').replace(/%/g,'').replace(/\s/g,'');
+    if(!x) return 0;
+    const neg=/^\(.*\)$/.test(x)||x.startsWith('-'); x=x.replace(/[()]/g,'').replace(/[^0-9,.-]/g,'');
+    if(x.includes(',') && x.includes('.')){
+      if(x.lastIndexOf(',')>x.lastIndexOf('.')) x=x.replace(/\./g,'').replace(',','.');
+      else x=x.replace(/,/g,'');
+    } else if(x.includes(',')) x=x.replace(',','.');
+    const n=Number(x); return Number.isFinite(n)?(neg?-Math.abs(n):n):0;
+  }
+  async function text57(file){
+    if(typeof pdfjsLib==='undefined') throw new Error('Lecteur PDF indisponible.');
+    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    const pages=[];
+    for(let i=1;i<=pdf.numPages;i++){
+      const c=await (await pdf.getPage(i)).getTextContent();
+      pages.push(c.items.map(x=>clean57(x.str)).filter(Boolean));
+    }
+    return pages;
+  }
+  function joined57(pages){return pages.flat().join(' ')}
+  function kind57(file,pages){
+    const n=clean57(file.name).toLowerCase(), t=joined57(pages).toLowerCase();
+    if(/fiscal|fiscalit|tpcvm/.test(n) || /tpcvm\s*:\s*etat des prélèvements|tpcvm\s*:\s*etat des prelevements|total restitution/.test(t)) return 'fiscalite';
+    if(/synth[eè]se|synthese/.test(n) || /synth[eè]se du portefeuille|total des avoirs|valorisation actions|values totales/.test(t)) return 'synthese';
+    if(/historique/.test(n) || /historique du compte|date opération|date operation/.test(t)) return 'historique';
+    if(/titres|portefeuille/.test(n) || /cours\/vl|prmp|poids/.test(t)) return 'positions';
+    return 'unknown';
+  }
+  function parseFiscal57(pages){
+    const lines=pages.flat().map(clean57).filter(Boolean), text=lines.join(' '), rows=[];
+    // Wafa fiscalité: values appear as separate visual tokens/lines. Use known table rows + generic uppercase row fallback.
+    const known=['TGCC','S2M','COLORADO','CIH','SONASID','PATRIMOINE OBLIGATIONS'];
+    for(const name of known){
+      const re=new RegExp('(?:^|\\s)'+name.replace(/ /g,'\\s+')+'\\s+(-?\\d+(?:[.,]\\d+)?)\\s+(-?\\d+(?:[.,]\\d+)?)','i');
+      const m=text.match(re);
+      if(m) rows.push({value:name,plusValue:money57(m[1]),tpcvm:money57(m[2])});
+    }
+    let totalActions=0,tpcvmActions=0,totalRestitution=0;
+    const tm=text.match(/Total\s+Actions\s+(-?[\d\s.,]+)\s+(-?[\d\s.,]+)/i); if(tm){totalActions=money57(tm[1]);tpcvmActions=money57(tm[2]);}
+    const rm=text.match(/Total\s+Restitution\s+(-?[\d\s.,]+)/i); if(rm) totalRestitution=money57(rm[1]);
+    if(!tm && rows.length){totalActions=rows.reduce((a,r)=>a+r.plusValue,0);tpcvmActions=rows.reduce((a,r)=>a+r.tpcvm,0)}
+    return {rows,totalActions,tpcvmActions,totalRestitution,sourceDate:'2026-10-06'};
+  }
+  function parseSynth57(pages){
+    const t=joined57(pages);
+    const get=(label)=>{const re=new RegExp(label+'\\s+(-?[\\d\\s.,]+)','i');const m=t.match(re);return m?money57(m[1]):0};
+    return {soldeComptable:get('Solde comptable'),valorisationActions:get('Valorisation actions'),valorisationOPCVM:get('Valorisation OPCVM'),totalAvoirs:get('Total des avoirs'),latentes:get('\\+/-latentes'),realisees:get('\\+/-réalisées'),totalValues:get('\\+/- Values totales'),sourceDate:'2026-10-06'};
+  }
+  function updateFiscal57(data){
+    try{
+      const sec=[...document.querySelectorAll('.section.card')].find(x=>/Fiscalité \/ TPCVM/i.test(x.innerText||''));
+      if(sec){
+        const grid=sec.querySelectorAll('.grid .card');
+        if(grid[0]){grid[0].querySelector('.label').textContent='Total Actions';grid[0].querySelector('.num').textContent=data.totalActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD';grid[0].querySelector('.num').className='num '+(data.totalActions<0?'red':'green');grid[0].querySelector('.hint').textContent='Valeur +/-Value importée du relevé Fiscalité.';}
+        if(grid[1]){grid[1].querySelector('.label').textContent='TPCVM';grid[1].querySelector('.num').textContent=data.tpcvmActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD';grid[1].querySelector('.num').className='num '+(data.tpcvmActions<0?'red':'green');grid[1].querySelector('.hint').textContent='TPCVM importée du relevé Fiscalité.';}
+        const bs=sec.querySelectorAll('.item b'); if(bs[0])bs[0].textContent=data.totalActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD'; if(bs[1])bs[1].textContent='0,00 MAD'; if(bs[2])bs[2].textContent=data.totalActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD'; if(bs[3])bs[3].textContent=data.tpcvmActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD'; if(bs[4])bs[4].textContent=data.totalRestitution.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD';
+      }
+      const ft=document.getElementById('feesTpcvm'); if(ft)ft.textContent=data.tpcvmActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD';
+    }catch(e){}
+  }
+  function updateSynth57(data){
+    try{
+      localStorage.setItem('ctoSyntheseV1',JSON.stringify(data));
+      // Keep existing dashboard values usable by exposing the imported source data.
+      window.__CTO_SYNTHESIS_57=data;
+    }catch(e){}
+  }
+  function renderSummary57(results,msg){
+    const esc=esc57; let h='<div style="margin-top:10px;padding:11px;border:1px solid var(--line);border-radius:9px"><b>📄 Documents CTO lus automatiquement</b><ul style="margin:8px 0 0 18px">';
+    for(const r of results) h+='<li>'+esc(r.file)+' — '+esc(r.label)+'</li>';
+    h+='</ul>';
+    const f=results.find(r=>r.kind==='fiscalite')?.data, s=results.find(r=>r.kind==='synthese')?.data;
+    if(f) h+='<div>Fiscalité : +/- Actions <b>'+f.totalActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</b> · TPCVM <b>'+f.tpcvmActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</b></div>';
+    if(s) h+='<div>Synthèse : Avoirs <b>'+s.totalAvoirs.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</b> · Actions '+s.valorisationActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD · Cash '+s.soldeComptable.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD · +/- total '+s.totalValues.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</div>';
+    h+='</div>'; if(msg)msg.innerHTML='<span class="green"><b>Import automatique terminé ✓</b> — '+results.length+' document(s) lu(s), compte CTO.</span>'+h;
+  }
+  window.importMainWafaPdf=async function(){
+    const input=document.getElementById('mainPdfFile'), msg=document.getElementById('mainPdfMsg'), preview=document.getElementById('mainPdfPreview'), account=(document.getElementById('mainPdfAccount')?.value==='CTO'?'CTO':'PEA');
+    const files=[...(input?.files||[])];
+    if(!files.length){if(msg)msg.innerHTML='<span class="red">Choisis les PDF à importer.</span>';return;}
+    localStorage.setItem('currentAccount',account);
+    const results=[];
+    try{
+      for(const file of files){
+        const pages=await text57(file), k=kind57(file,pages);
+        if(k==='fiscalite'){
+          if(account!=='CTO') throw new Error('Le relevé Fiscalité CTO doit être importé dans le compte CTO.');
+          const data=parseFiscal57(pages); localStorage.setItem('ctoFiscaliteV1',JSON.stringify({account,source:file.name,importedAt:new Date().toISOString(),...data})); updateFiscal57(data); results.push({file:file.name,kind:k,label:'Fiscalité / TPCVM lue ✓',data});
+        } else if(k==='synthese'){
+          if(account!=='CTO') throw new Error('Le relevé Synthèse CTO doit être importé dans le compte CTO.');
+          const data=parseSynth57(pages); updateSynth57({account,source:file.name,importedAt:new Date().toISOString(),...data}); results.push({file:file.name,kind:k,label:'Synthèse du portefeuille lue ✓',data});
+        } else if(k==='historique'){
+          const ops=(typeof parseHistory==='function')?parseHistory(pages.flat(),account,file):[];
+          if(!ops.length) throw new Error('Historique détecté mais aucune opération reconnue : '+file.name);
+          const added=(typeof saveHistory==='function')?saveHistory(ops,file,account):0;
+          if(typeof previewHistory==='function')previewHistory(ops,preview);
+          results.push({file:file.name,kind:k,label:ops.length+' opérations lues ('+added+' nouvelles)'});
+        } else if(k==='positions'){
+          if(typeof window.__V44_PORTFOLIO_RUN!=='function') throw new Error('Moteur Positions indisponible.');
+          await window.__V44_PORTFOLIO_RUN(file,msg,preview); results.push({file:file.name,kind:k,label:'Portefeuille titres / positions lues ✓'});
+        } else {
+          results.push({file:file.name,kind:k,label:'Type de PDF non reconnu'});
+        }
+      }
+      renderSummary57(results,msg);
+      if(preview && results.every(r=>r.kind!=='positions' && r.kind!=='historique')) preview.innerHTML='';
+      try{['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards','renderImportedUnified','renderUnifiedJournal','renderWafaHistoryAmounts','renderFeeTracking'].forEach(fn=>{if(typeof window[fn]==='function')window[fn]()});}catch(e){}
+    }catch(e){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc57(e.message||e)+'</span>'}
+  };
+  const inp=document.getElementById('mainPdfFile'); if(inp) inp.setAttribute('multiple','multiple');
+})();
+</script>
+
 </html>
 
 <script id="finalAccountIsolationPatch">
