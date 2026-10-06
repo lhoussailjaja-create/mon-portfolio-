@@ -3745,3 +3745,55 @@ window.renderImportedUnified=function(){
   setInterval(run,500);
 })();
 </script>
+
+<script id="FINAL_STRESS_ACCOUNT_ISOLATION_V32">
+(function(){
+  function account(){return String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';}
+  function ctoEmpty(){
+    try{
+      const by=JSON.parse(localStorage.getItem('portfolioStateByAccountV1')||'{}')||{};
+      const s=by.CTO||{};
+      return !(Array.isArray(s.positions)&&s.positions.length) && !(Number(s.valuation)>0) && !(Number(s.cash)>0);
+    }catch(e){return true;}
+  }
+  function clearStress(){
+    document.querySelectorAll('#anStress5,#anStress10,#anStress20').forEach(function(e){e.textContent='—';});
+    document.querySelectorAll('#anStress5,#anStress10,#anStress20').forEach(function(e){
+      const row=e.closest('.item');
+      if(row) row.querySelectorAll('b').forEach(function(b){b.textContent='—';});
+    });
+  }
+  function clearPositionAnalysis(){
+    const body=document.getElementById('anPositionBody');
+    if(body) body.innerHTML='<tr><td colspan="6" style="padding:12px">Aucune donnée CTO importée.</td></tr>';
+  }
+  function apply(){
+    if(account()!=='CTO') return;
+    if(ctoEmpty()){
+      clearStress();
+      clearPositionAnalysis();
+    }
+  }
+  const oldRenderAnalytics=window.renderAnalytics;
+  window.renderAnalytics=function(){
+    if(account()==='CTO' && ctoEmpty()){
+      clearStress();
+      clearPositionAnalysis();
+      return;
+    }
+    if(typeof oldRenderAnalytics==='function') oldRenderAnalytics.apply(this,arguments);
+    apply();
+  };
+  document.addEventListener('DOMContentLoaded',apply);
+  window.addEventListener('load',apply);
+  window.addEventListener('accountchanged',apply);
+  const obs=new MutationObserver(function(){apply();});
+  function start(){
+    const sec=[...document.querySelectorAll('.section,.section.card,.grid')].find(function(x){return /stress tests/i.test(x.textContent||'')});
+    if(sec) obs.observe(sec,{childList:true,subtree:true,characterData:true});
+    apply();
+  }
+  document.addEventListener('DOMContentLoaded',start);
+  setTimeout(start,100);setTimeout(start,500);setTimeout(start,1200);
+})();
+</script>
