@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mon Portfolio — Dashboard V25</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
+<title>Mon Portfolio — Dashboard V27</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
 function norm(v){
  return String(v ?? '').trim().toLowerCase()
    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -148,7 +150,7 @@ function parseWafaText(text,fileName){
 
 function exportBackup(){
  const data={
-   version:'V25',
+   version:'V27',
    portfolioId:document.getElementById('portfolioId').value,
    savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
    snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
@@ -184,6 +186,14 @@ function importBackup(event){
  reader.readAsText(file);
 }
 
+</script>
+<script>
+// Stable shared state for the manual position/snapshot tools.
+window.__portfolioStateInit = true;
+let snapshots = [];
+let savedPositions = [];
+try { snapshots = JSON.parse(localStorage.getItem('portfolioSnapshots') || '[]'); } catch(e) { snapshots = []; }
+try { savedPositions = JSON.parse(localStorage.getItem('savedPositions') || '[]'); } catch(e) { savedPositions = []; }
 </script>
 <style>
 :root{--bg:#070a0f;--card:#111820;--line:#27323d;--txt:#f4f7fa;--muted:#9ba7b4;--green:#18c5ad;--red:#ff646b;--gold:#f0ad18}
@@ -203,86 +213,6 @@ canvas{width:100%;height:230px;background:#0b1016;border-radius:10px}
 .note{color:var(--muted);font-size:12px;line-height:1.5;margin-top:16px}
 @media(max-width:760px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.wrap{width:100%;max-width:none;padding:14px}.form{grid-template-columns:1fr}header{gap:10px;align-items:flex-start}header button{white-space:nowrap}.card{min-width:0}table{font-size:12px}th,td{padding:9px}.num{font-size:21px}}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script>
-async function importWafa(){
- const file=document.getElementById('wafaImport').files[0];
- const msg=document.getElementById('wafaImportMsg');
- if(!file){msg.innerHTML='<span class="red">Choisis un fichier PDF ou CSV.</span>';return;}
- try{
-   let text='';
-   if(file.name.toLowerCase().endsWith('.pdf')){
-     if(typeof pdfjsLib==='undefined') throw new Error('Le lecteur PDF n’est pas disponible. Active Internet puis réessaie.');
-     const buf=await file.arrayBuffer();
-     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-     for(let p=1;p<=pdf.numPages;p++){
-       const page=await pdf.getPage(p);
-       const content=await page.getTextContent();
-       text += content.items.map(x=>x.str).join(' ')+' ';
-     }
-   }else{text=await file.text();}
-   parseWafaText(text,file.name);
- }catch(e){msg.innerHTML='<span class="red">Import impossible : '+e.message+'</span>';}
-}
-function num(s){return parseFloat(String(s).replace(/\s/g,'').replace(',','.').replace(/%$/,''));}
-function parseWafaText(text,fileName){
- const msg=document.getElementById('wafaImportMsg');
- const names=['ATTIJARI AL MOUCHARAKA','ATTIJARI DIVIDEND FUND','ATTIJARI ACTIONS','TOTALENERGIES','WG LOW VOLATILITY FACTOR FUND'];
- const patterns=[
-  /ATTIJARI AL MOUCHARAKA\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
-  /ATTIJARI DIVIDEND FUND\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
-  /ATTIJARI ACTIONS\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
-  /TOTALENERGIES\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
-  /WG LOW VOLATILITY FACTOR FUND\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i
- ];
- const rows=[];
- patterns.forEach((re,i)=>{const m=text.match(re);if(m)rows.push({name:names[i],qty:m[1],course:m[2],value:m[3],cmp:m[4],perf:m[5],pl:m[6],weight:m[7]});});
- if(!rows.length){msg.innerHTML='<span class="red">Aucune position reconnue. Utilise le PDF « Portefeuille titres » ou un CSV avec Valeur/Quantité/Cours/VL/Montant/PRMP.</span>';return;}
- const body=document.querySelector('table:first-of-type tbody');
- if(body) body.innerHTML=rows.map(r=>'<tr><td>'+r.name+'</td><td>'+r.qty+'</td><td>'+r.cmp+'</td><td>'+r.course+'</td><td>'+r.value+'</td><td class="'+(r.pl.includes('-')?'red':'green')+'">'+r.pl+'</td></tr>').join('');
- localStorage.setItem('wafaLastImport',JSON.stringify({source:fileName,importedAt:new Date().toISOString(),rows:rows}));
- msg.innerHTML='<span class="green">'+rows.length+' positions importées depuis '+fileName+' ✓</span>';
-}
-
-
-function exportBackup(){
- const data={
-   version:'V24',
-   portfolioId:document.getElementById('portfolioId').value,
-   savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
-   snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
-   wafaLastImport:JSON.parse(localStorage.getItem('wafaLastImport')||'null'),
-   exportedAt:new Date().toISOString()
- };
- const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
- const a=document.createElement('a');
- a.href=URL.createObjectURL(blob);
- a.download='mon_portfolio_backup.json';
- a.click();
- URL.revokeObjectURL(a.href);
- document.getElementById('backupMsg').innerHTML='<span class="green">Backup exporté ✓</span>';
-}
-function importBackup(event){
- const file=event.target.files[0];
- if(!file)return;
- const reader=new FileReader();
- reader.onload=function(){
-  try{
-   const d=JSON.parse(reader.result);
-   if(d.savedPositions)localStorage.setItem('savedPositions',JSON.stringify(d.savedPositions));
-   if(d.snapshots)localStorage.setItem('portfolioSnapshots',JSON.stringify(d.snapshots));
-   if(d.wafaLastImport)localStorage.setItem('wafaLastImport',JSON.stringify(d.wafaLastImport));
-   if(d.portfolioId)document.getElementById('portfolioId').value=d.portfolioId;
-   document.getElementById('backupMsg').innerHTML='<span class="green">Backup importé ✓</span>';
-   if(typeof renderPositions==='function') renderPositions();
-   if(typeof renderSnapshots==='function') renderSnapshots();
-  }catch(e){
-   document.getElementById('backupMsg').innerHTML='<span class="red">Backup invalide.</span>';
-  }
- };
- reader.readAsText(file);
-}
-
-</script>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
@@ -292,7 +222,7 @@ function importBackup(event){
 <style>
 .install-card{margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--txt)}.install-card p{color:var(--muted)}
 .install-card button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer}
-.cards{display:flex;flex-wrap:nowrap;gap:16px;overflow-x:auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px}
 </style>
 
 
@@ -466,6 +396,7 @@ function importBackup(event){
     <div class="hint">À surveiller : concentration</div>
   </div>
 
+</div><!-- /cards -->
 
 <div class="grid section">
 <div class="card">
@@ -907,8 +838,7 @@ Montants calculés comme quantité × cours affiché. Ils sont des montants brut
       <div class="hint" id="anConcText">—</div>
     </div>
     <div class="card">
-      <di
-      v class="label">Perte potentielle à -10%</div>
+      <div class="label">Perte potentielle à -10%</div>
       <div class="num red" id="anShock10">—</div>
       <div class="hint">Simulation sur les actifs risqués saisis</div>
     </div>
@@ -918,40 +848,7 @@ Montants calculés comme quantité × cours affiché. Ils sont des montants brut
       <div class="hint">Cash actuel vs minimum configuré</div>
     </div>
   </div>
-div class="card" style="margin-top:12px">
-
-  <h2>📊 Analyse des positions</h2>
-
-  <div style="overflow-x:auto">
-
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-
-      <thead>
-
-        <tr>
-
-          <th style="text-align:left;padding:8px">Actif</th>
-
-          <th>CMP</th>
-
-          <th>Cours actuel</th>
-
-          <th>Gain / Perte</th>
-
-          <th>Poids</th>
-
-          <th>Risque</th>
-
-          <th>Concentration</th>
-
-          <th>Évolution</th>
-
-        </tr>
-
-      </thead>
-
-      <tbody id="positionAnalysis"
-  <div class="grid section">
+<div class="grid section">
     <div class="card">
       <h2>🎯 Allocation actuelle</h2>
       <div id="anAlloc"></div>
@@ -1023,7 +920,7 @@ div class="card" style="margin-top:12px">
 }
 #analyticsCenter .bar > span{display:block;height:100%;background:var(--green)}
 </style>
-section class="section card" style="margin-top:16px">
+<section class="section card" style="margin-top:16px">
 
   <h2>💰 Distribution des bénéfices</h2>
 
@@ -1079,7 +976,7 @@ section class="section card" style="margin-top:16px">
 
   function classify(p){
     const n=p.name.toUpperCase();
-    if(n.includes('TOTAL') || n.includes('AKDITAL') || n.includes('CIH') || n.includes('S2M')) return 'Actions';
+    if(n.includes('TOTAL') || n.includes('TOTALENERGIES') || n.includes('AKDITAL') || n.includes('CIH') || n.includes('S2M') || n.includes('ATTIJARI ACTIONS')) return 'Actions';
     if(n.includes('MONETAIRE') || n.includes('TRESORERIE') || n.includes('OBLIGATION') || n.includes('PATRIMOINE')) return 'Obligations / Monétaire';
     return 'OPCVM / Fonds';
   }
@@ -1087,6 +984,7 @@ section class="section card" style="margin-top:16px">
   function refreshAdvancedAnalytics(){
     const ps=getPositions();
     const total=ps.reduce((s,p)=>s+p.value,0);
+    if(!document.getElementById('anPositionBody')) return;
     const cash=138.11;
     const totalWithCash=total+cash;
 
@@ -1191,7 +1089,7 @@ section class="section card" style="margin-top:16px">
   document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAdvancedAnalytics,100));
 })();
 </script>
-<!-- ================= FIN V23 ================= -->
+<!-- ================= FIN V27 ================= -->
 
 
 <div class="note">Les chiffres principaux ont été vérifiés sur le relevé PDF Wafa Bourse du 03/10/2026. Le calculateur fonctionne localement dans cette page. Le graphique historique ne peut pas être rempli sans anciennes valeurs de portefeuille.</div>
@@ -1337,186 +1235,6 @@ function checkAlerts(){
  document.getElementById('alertResult').innerHTML=out.join('');
 }
 
-
-function norm(v){
- return String(v ?? '').trim().toLowerCase()
-   .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-}
-function breakEven(){
- const cmp=parseFloat(document.getElementById('beCmp').value)||0;
- const fees=parseFloat(document.getElementById('beFees').value)||0;
- const gain=parseFloat(document.getElementById('beGain').value)||0;
- const qty=parseFloat(document.getElementById('beQty').value)||0;
- const target=cmp*(1+gain/100)/(1-fees/100);
- document.getElementById('beResult').innerHTML=
- '<div class="item"><span>Prix de vente cible</span><b>'+target.toFixed(2)+' MAD</b></div>'+
- '<div class="item"><span>Montant brut</span><b>'+(target*qty).toFixed(2)+' MAD</b></div>';
-}
-
-
-function goalCalc(){
- const current=parseFloat(document.getElementById('goalCurrent').value)||0;
- const target=parseFloat(document.getElementById('goalTarget').value)||0;
- const monthly=parseFloat(document.getElementById('goalMonthly').value)||0;
- const annual=parseFloat(document.getElementById('goalRate').value)||0;
- let balance=current, months=0;
- if(target<=current){
-   document.getElementById('goalResult').innerHTML=
-    '<div class="item"><span>Écart à l’objectif</span><b class="green">Objectif déjà atteint</b></div>';
-   return;
- }
- if(monthly<=0 && annual<=0){
-   document.getElementById('goalResult').innerHTML=
-    '<div class="item"><span>Écart à l’objectif</span><b>'+(target-current).toFixed(2)+' MAD</b></div>'+
-    '<div class="item"><span>Durée estimée</span><b>Apport mensuel requis</b></div>';
-   return;
- }
- const r=Math.pow(1+annual/100,1/12)-1;
- while(balance<target && months<600){
-   balance=balance*(1+r)+monthly;
-   months++;
- }
- document.getElementById('goalResult').innerHTML=
-  '<div class="item"><span>Écart à l’objectif</span><b>'+(target-current).toFixed(2)+' MAD</b></div>'+
-  '<div class="item"><span>Durée estimée</span><b>'+(months<600?months+' mois':'Plus de 50 ans')+'</b></div>';
-}
-
-
-let 
-function renderSnapshots(){
- const body=document.getElementById('snapBody');
- body.innerHTML='';
- snapshots.sort((a,b)=>a.date.localeCompare(b.date));
- snapshots.forEach((s,i)=>{
-   const prev=i>0?snapshots[i-1].value:null;
-   const diff=prev===null?null:s.value-prev;
-   const pct=prev===null?null:(diff/prev*100);
-   const cls=diff===null?'':(diff>=0?'green':'red');
-   const tr=document.createElement('tr');
-   tr.innerHTML='<td>'+s.date+'</td><td>'+s.value.toFixed(2)+' MAD</td>'+
-     '<td class="'+cls+'">'+(diff===null?'—':(diff>=0?'+':'')+diff.toFixed(2)+' MAD')+'</td>'+
-     '<td class="'+cls+'">'+(pct===null?'—':(pct>=0?'+':'')+pct.toFixed(2)+'%')+'</td>';
-   body.appendChild(tr);
- });
-}
-function addSnapshot(){
- const date=document.getElementById('snapDate').value;
- const value=parseFloat(document.getElementById('snapValue').value);
- const msg=document.getElementById('snapResult');
- if(!date || !value){msg.innerHTML='<span class="red">Remplis la date et la valorisation.</span>';return;}
- snapshots.push({date,value});
- localStorage.setItem('portfolioSnapshots',JSON.stringify(snapshots));
-  msg.innerHTML='<span class="green">Snapshot enregistré.</span>';
-}
-
-
-function renderPositions(){
- const body=document.getElementById('savedPosBody');
- body.innerHTML='';
- savedPositions.forEach((p,i)=>{
-   const market=p.qty*p.price, pl=p.qty*(p.price-p.cmp);
-   const tr=document.createElement('tr');
-   tr.innerHTML='<td>'+p.name+'</td><td>'+p.qty+'</td><td>'+p.cmp.toFixed(2)+'</td><td>'+
-     p.price.toFixed(2)+'</td><td>'+market.toFixed(2)+' MAD</td><td class="'+
-     (pl<0?'red':'green')+'">'+(pl>=0?'+':'')+pl.toFixed(2)+' MAD</td>';
-   body.appendChild(tr);
- });
-}
-function savePosition(){
- const name=document.getElementById('posName').value.trim();
- const qty=parseFloat(document.getElementById('posQty').value);
- const cmp=parseFloat(document.getElementById('posCmp').value);
- const price=parseFloat(document.getElementById('posPrice').value);
- const msg=document.getElementById('posMsg');
- if(!name || !qty || !cmp || !price){
-   msg.innerHTML='<span class="red">Remplis tous les champs.</span>'; return;
- }
- const idx=savedPositions.findIndex(x=>x.name.toLowerCase()===name.toLowerCase());
- const item={name,qty,cmp,price};
- if(idx>=0) savedPositions[idx]=item; else savedPositions.push(item);
- localStorage.setItem('savedPositions',JSON.stringify(savedPositions));
-  msg.innerHTML='<span class="green">Position enregistrée ✓</span>';
-}
-
-
-async function importWafa(){
- const file=document.getElementById('wafaImport').files[0];
- const msg=document.getElementById('wafaImportMsg');
- if(!file){msg.innerHTML='<span class="red">Choisis un fichier PDF ou CSV.</span>';return;}
- try{
-   let text='';
-   if(file.name.toLowerCase().endsWith('.pdf')){
-     if(typeof pdfjsLib==='undefined') throw new Error('Le lecteur PDF n’est pas disponible. Active Internet puis réessaie.');
-     const buf=await file.arrayBuffer();
-     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-     for(let p=1;p<=pdf.numPages;p++){
-       const page=await pdf.getPage(p);
-       const content=await page.getTextContent();
-       text += content.items.map(x=>x.str).join(' ')+' ';
-     }
-   }else{text=await file.text();}
-   parseWafaText(text,file.name);
- }catch(e){msg.innerHTML='<span class="red">Import impossible : '+e.message+'</span>';}
-}
-function num(s){return parseFloat(String(s).replace(/\s/g,'').replace(',','.').replace(/%$/,''));}
-function parseWafaText(text,fileName){
- const msg=document.getElementById('wafaImportMsg');
- const names=['ATTIJARI AL MOUCHARAKA','ATTIJARI DIVIDEND FUND','ATTIJARI ACTIONS','TOTALENERGIES','WG LOW VOLATILITY FACTOR FUND'];
- const patterns=[
-  /ATTIJARI AL MOUCHARAKA\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
-  /ATTIJARI DIVIDEND FUND\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
-  /ATTIJARI ACTIONS\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
-  /TOTALENERGIES\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i,
-  /WG LOW VOLATILITY FACTOR FUND\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+([0-9.,]+)\s+(-?[0-9.,]+)%\s+(-?[0-9.,]+)\s+([0-9.,]+)/i
- ];
- const rows=[];
- patterns.forEach((re,i)=>{const m=text.match(re);if(m)rows.push({name:names[i],qty:m[1],course:m[2],value:m[3],cmp:m[4],perf:m[5],pl:m[6],weight:m[7]});});
- if(!rows.length){msg.innerHTML='<span class="red">Aucune position reconnue. Utilise le PDF « Portefeuille titres » ou un CSV avec Valeur/Quantité/Cours/VL/Montant/PRMP.</span>';return;}
- const body=document.querySelector('table:first-of-type tbody');
- if(body) body.innerHTML=rows.map(r=>'<tr><td>'+r.name+'</td><td>'+r.qty+'</td><td>'+r.cmp+'</td><td>'+r.course+'</td><td>'+r.value+'</td><td class="'+(r.pl.includes('-')?'red':'green')+'">'+r.pl+'</td></tr>').join('');
- localStorage.setItem('wafaLastImport',JSON.stringify({source:fileName,importedAt:new Date().toISOString(),rows:rows}));
- msg.innerHTML='<span class="green">'+rows.length+' positions importées depuis '+fileName+' ✓</span>';
-}
-
-
-function exportBackup(){
- const data={
-   version:'V24',
-   portfolioId:document.getElementById('portfolioId').value,
-   savedPositions:JSON.parse(localStorage.getItem('savedPositions')||'[]'),
-   snapshots:JSON.parse(localStorage.getItem('portfolioSnapshots')||'[]'),
-   wafaLastImport:JSON.parse(localStorage.getItem('wafaLastImport')||'null'),
-   exportedAt:new Date().toISOString()
- };
- const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
- const a=document.createElement('a');
- a.href=URL.createObjectURL(blob);
- a.download='mon_portfolio_backup.json';
- a.click();
- URL.revokeObjectURL(a.href);
- document.getElementById('backupMsg').innerHTML='<span class="green">Backup exporté ✓</span>';
-}
-function importBackup(event){
- const file=event.target.files[0];
- if(!file)return;
- const reader=new FileReader();
- reader.onload=function(){
-  try{
-   const d=JSON.parse(reader.result);
-   if(d.savedPositions)localStorage.setItem('savedPositions',JSON.stringify(d.savedPositions));
-   if(d.snapshots)localStorage.setItem('portfolioSnapshots',JSON.stringify(d.snapshots));
-   if(d.wafaLastImport)localStorage.setItem('wafaLastImport',JSON.stringify(d.wafaLastImport));
-   if(d.portfolioId)document.getElementById('portfolioId').value=d.portfolioId;
-   document.getElementById('backupMsg').innerHTML='<span class="green">Backup importé ✓</span>';
-   if(typeof renderPositions==='function') renderPositions();
-   if(typeof renderSnapshots==='function') renderSnapshots();
-  }catch(e){
-   document.getElementById('backupMsg').innerHTML='<span class="red">Backup invalide.</span>';
-  }
- };
- reader.readAsText(file);
-}
-
 </script>
 
 <script>
@@ -1590,6 +1308,8 @@ document.addEventListener('DOMContentLoaded', function(){
 
 
 <!-- ================= IMPORT PDF WAFA BOURSE — PEA / CTO ================= -->
+</section>
+
 <section class="section card" id="pdfOpsImporter">
   <h2>📥 Importer l'historique Wafa Bourse (PDF)</h2>
   <div class="hint">
@@ -2224,7 +1944,7 @@ async function importMainWafaPdf(){
   };
 
   window.saveData=function(){
-    const data={version:'V24',lossAlert:document.getElementById('lossAlert')?.value||'',cashMin:document.getElementById('cashMin')?.value||'',watchlist:document.getElementById('watchList')?.innerHTML||'',portfolioOperations:safeJSON('portfolioOperations',[]),savedPositions:safeJSON('savedPositions',[]),snapshots:safeJSON('portfolioSnapshots',[]),wafaLastImport:safeJSON('wafaLastImport',null),savedAt:new Date().toISOString()};
+    const data={version:'V27',lossAlert:document.getElementById('lossAlert')?.value||'',cashMin:document.getElementById('cashMin')?.value||'',watchlist:document.getElementById('watchList')?.innerHTML||'',portfolioOperations:safeJSON('portfolioOperations',[]),savedPositions:safeJSON('savedPositions',[]),snapshots:safeJSON('portfolioSnapshots',[]),wafaLastImport:safeJSON('wafaLastImport',null),savedAt:new Date().toISOString()};
     localStorage.setItem('myPortfolioDashboard',JSON.stringify(data));
     const st=document.getElementById('saveStatus');if(st)st.textContent='Sauvegardé ✓';
   };
@@ -2283,6 +2003,6 @@ async function importMainWafaPdf(){
 })();
 </script>
 
-
+</div><!-- /wrap -->
 </body>
 </html>
