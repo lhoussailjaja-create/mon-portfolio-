@@ -4041,6 +4041,82 @@ const top=[...document.querySelectorAll('button')].find(b=>/readWafaPdfOperation
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',wire); else wire();
 })();
 </script>
+<script id="FINAL_CTO_AUTO_IMPORT_V58">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+const esc=s=>clean(s).replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));
+const account=()=>String($('mainPdfAccount')?.value||localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+const readJSON=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};
+const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+function n(v){let x=clean(v).replace(/%/g,'').replace(/\s/g,'');if(!x)return 0;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'');}else if(x.includes(','))x=x.replace(',','.');x=x.replace(/[^0-9.\-]/g,'');return Number(x)||0;}
+async function pdfLines(file){
+ if(typeof pdfjsLib==='undefined')throw new Error('Lecteur PDF indisponible. Recharge la page avec Internet actif.');
+ const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise, out=[];
+ for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p);const c=await page.getTextContent();out.push(c.items.map(x=>x.str||'').join(' '));}
+ return out.map(clean).filter(Boolean);
+}
+function kind(file,lines){
+ const name=String(file?.name||'').toLowerCase(), t=lines.join(' ').toLowerCase();
+ if(/fiscal/.test(name)||/tpcvm|etat des prélèvements|etat des prelevements/.test(t))return 'fiscalite';
+ if(/synth/.test(name)||/synthèse du portefeuille|synthese du portefeuille|synthèse compte/.test(t))return 'synthese';
+ if(/historique|mouvements/.test(name)||/historique du compte/.test(t))return 'historique';
+ if(/titres|portefeuille/.test(name)||/portefeuille titres/.test(t)||/cours\/vl/.test(t)&&/prmp/.test(t))return 'titres';
+ return 'unknown';
+}
+function parseFiscal(lines){
+ const t=lines.join(' '), rows=[];
+ const known=['TGCC','S2M','COLORADO','CIH','SONASID','PATRIMOINE OBLIGATIONS'];
+ for(const name of known){const re=new RegExp('\\b'+name.replace(/ /g,'\\s+')+'\\s+(-?[\\d.,]+)\\s+(-?[\\d.,]+)','i');const m=t.match(re);if(m)rows.push({name,pl:n(m[1]),tpcvm:n(m[2])});}
+ const total=t.match(/Total\s+Actions\s+(-?[\d.,]+)\s+(-?[\d.,]+)/i);
+ const rest=t.match(/Total\s+Restitution\s+(-?[\d.,]+)/i);
+ return {account:account(),sourceDate:'2026-10-06',actions:rows,totalActions:total?n(total[1]):rows.reduce((a,r)=>a+r.pl,0),tpcvm:total?n(total[2]):rows.reduce((a,r)=>a+r.tpcvm,0),totalRestitution:rest?n(rest[1]):0};
+}
+function parseSynth(lines){const t=lines.join(' '),g=(re)=>{const m=t.match(re);return m?n(m[1]):0};return {account:account(),sourceDate:'2026-10-06',soldeComptable:g(/Solde\s+comptable\s+(-?[\d .]+(?:,[\d]+)?)/i),valorisationActions:g(/Valorisation\s+actions\s+(-?[\d .]+(?:,[\d]+)?)/i),valorisationOPCVM:g(/Valorisation\s+OPCVM\s+(-?[\d .]+(?:,[\d]+)?)/i),totalAvoirs:g(/Total\s+des\s+avoirs\s+(-?[\d .]+(?:,[\d]+)?)/i),latentes:g(/\+\/-\s*latentes\s+(-?[\d .]+(?:,[\d]+)?)/i),realisees:g(/\+\/-\s*réalisées\s+(-?[\d .]+(?:,[\d]+)?)/i),totalValues:g(/\+\/-\s*Values\s+totales\s+(-?[\d .]+(?:,[\d]+)?)/i)};}
+function saveBatch(batch){
+ const by=readJSON('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{};by.PEA=by.PEA||{};by.CTO=by.CTO||{};const a=account();const old=by[a]||{};
+ if(batch.synthese)by[a]={...old,synthese:batch.synthese,cash:batch.synthese.soldeComptable,valuation:batch.synthese.valorisationActions+batch.synthese.valorisationOPCVM,sourceDate:batch.synthese.sourceDate};
+ if(batch.fiscalite)by[a]={...(by[a]||old),fiscalite:batch.fiscalite};
+ if(batch.titres && Array.isArray(batch.titres.positions))by[a]={...(by[a]||old),positions:batch.titres.positions,valuation:batch.titres.valuation??(by[a]?.valuation??null),source:batch.titres.source,sourceDate:batch.titres.sourceDate};
+ writeJSON('portfolioStateByAccountV1',by);writeJSON('portfolioStateV1',by[a]||{});localStorage.setItem('currentAccount',a);
+ if(batch.history){const oldOps=readJSON('portfolioOperations',[]);const keys=new Set(oldOps.map(o=>[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|')));for(const o of batch.history){const k=[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|');if(!keys.has(k)){oldOps.push(o);keys.add(k);}}writeJSON('portfolioOperations',oldOps);}
+}
+async function importAuto(e){
+ if(e){e.preventDefault();e.stopImmediatePropagation();}
+ const input=$('mainPdfFile'),msg=$('mainPdfMsg'),preview=$('mainPdfPreview'),files=[...(input?.files||[])];
+ if(!files.length){if(msg)msg.innerHTML='<span class="red">Choisis les PDF CTO : Fiscalité, Synthèse, Historique et Titres.</span>';return;}
+ if(account()!=='CTO'){if(msg)msg.innerHTML='<span class="red">Sélectionne le compte CTO avant l’import.</span>';return;}
+ localStorage.setItem('currentAccount','CTO');const batch={},report=[];
+ try{
+  for(const file of files){const lines=await pdfLines(file), k=kind(file,lines);
+   if(k==='fiscalite'){batch.fiscalite=parseFiscal(lines);writeJSON('ctoFiscaliteV1',{account:'CTO',source:file.name,importedAt:new Date().toISOString(),...batch.fiscalite});report.push('Fiscalité ✓');}
+   else if(k==='synthese'){batch.synthese=parseSynth(lines);writeJSON('ctoSyntheseV1',{account:'CTO',source:file.name,importedAt:new Date().toISOString(),...batch.synthese});report.push('Synthèse ✓');}
+   else if(k==='historique'){if(typeof window.parseHistory!=='function')throw new Error('Moteur Historique indisponible.');const ops=window.parseHistory(lines,'CTO',file)||[];if(!ops.length)throw new Error('Historique détecté mais aucune opération reconnue.');batch.history=ops.map(o=>({...o,account:'CTO'}));report.push('Historique '+ops.length+' opérations ✓');}
+   else if(k==='titres'){
+     if(typeof window.__V44_PORTFOLIO_RUN==='function'){const before=readJSON('portfolioStateByAccountV1',{CTO:{}}).CTO||{};await window.__V44_PORTFOLIO_RUN(file,msg,preview);const after=readJSON('portfolioStateByAccountV1',{CTO:{}}).CTO||{};batch.titres={positions:after.positions||[],valuation:after.valuation,source:file.name,sourceDate:after.sourceDate||'2026-10-06'};if(!(batch.titres.positions||[]).length&&!(Number(batch.titres.valuation)>0))throw new Error('PDF Titres détecté mais aucune position reconnue.');report.push('Titres ✓');}
+     else throw new Error('Moteur Titres indisponible.');
+   } else report.push(file.name+' : non reconnu');
+  }
+  saveBatch(batch);
+  const f=batch.fiscalite,s=batch.synthese;
+  let h='<div style="margin-top:10px;padding:11px;border:1px solid var(--line);border-radius:9px"><b>📄 Documents CTO lus automatiquement</b><ul style="margin:8px 0 0 18px">'+report.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>';
+  if(f)h+='<div>Fiscalité : +/- Actions <b>'+f.totalActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</b> · TPCVM <b>'+f.tpcvm.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</b></div>';
+  if(s)h+='<div>Synthèse : Avoirs <b>'+s.totalAvoirs.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</b> · Actions '+s.valorisationActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD · Cash '+s.soldeComptable.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</div>';
+  h+='</div>';if(msg)msg.innerHTML='<span class="green"><b>Import automatique CTO terminé ✓</b></span>'+h;
+  if(preview && !batch.titres)preview.innerHTML='';
+  ['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards','renderImportedUnified','renderUnifiedJournal','renderWafaHistoryAmounts','renderFeeTracking'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(x){}});
+ }catch(err){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(err.message||err)+'</span>';}
+}
+function wire(){
+ const input=$('mainPdfFile');if(input)input.setAttribute('multiple','multiple');
+ const sec=$('mainWafaPdfImporter');const btn=sec&&[...sec.querySelectorAll('button')].find(b=>/importer automatiquement/i.test(b.textContent||''));
+ if(btn){btn.onclick=null;btn.removeAttribute('onclick');btn.addEventListener('click',importAuto,true);}
+ window.importMainWafaPdf=importAuto;
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire);else wire();
+})();
+</script>
 </body>
 
 <script id="FINAL_CTO_EMPTY_LOCK">
