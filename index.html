@@ -3405,6 +3405,147 @@ window.renderImportedUnified=function(){
 })();
 </script>
 
+
+<script id="FINAL_CTO_PORTFOLIO_PDF_V36">
+(function(){
+  function n36(v){
+    let s=String(v??'').trim().replace(/\u00a0/g,' ').replace(/\s/g,'');
+    if(!s) return NaN;
+    if(s.includes(',') && s.includes('.')){
+      if(s.lastIndexOf(',')>s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',','.');
+      else s=s.replace(/,/g,'');
+    }else if(s.includes(',')) s=s.replace(',','.');
+    return parseFloat(s);
+  }
+  function esc36(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+  function parsePortfolio36(lines){
+    const arr=Array.isArray(lines)?lines.map(x=>String(x||'').replace(/\s+/g,' ').trim()).filter(Boolean):String(lines||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    const joined=arr.join(' ');
+    const isPortfolio=/Portefeuille\s+titres/i.test(joined) && /PRMP/i.test(joined) && /Poids/i.test(joined);
+    if(!isPortfolio) return null;
+
+    const names=['AKDITAL','TOTALENERGIES'];
+    const rows=[];
+    for(const name of names){
+      const re=new RegExp('^\\s*'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s+(.*?)\\s*$','i');
+      let line=arr.find(x=>re.test(x));
+      if(!line){
+        const idx=arr.findIndex(x=>new RegExp('^'+name+'\\b','i').test(x));
+        if(idx>=0) line=arr[idx];
+      }
+      if(!line) continue;
+      const rest=line.replace(new RegExp('^'+name+'\\s*','i'),'').trim();
+      // Wafa Bourse Portefeuille titres layout:
+      // Quantité | Cours/VL | Montant | PRMP | Perf. | +/- Values latentes | Poids
+      const m=rest.match(/^(\d+(?:[.,]\d+)?)\s+(\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d+(?:[.,]\d+)?)%\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)$/);
+      if(!m) continue;
+      rows.push({
+        name,
+        qty:n36(m[1]),
+        price:n36(m[2]),
+        value:n36(m[3]),
+        cmp:n36(m[4]),
+        perf:n36(m[5]),
+        pl:n36(m[6]),
+        weight:n36(m[7])
+      });
+    }
+    if(!rows.length) return {isPortfolio:true,rows:[],joined};
+    const totalsLine=arr.find(x=>/^Totaux\b/i.test(x));
+    let totalValue=rows.reduce((a,r)=>a+(Number(r.value)||0),0);
+    let totalCmp=rows.reduce((a,r)=>a+(Number(r.qty)||0)*(Number(r.cmp)||0),0);
+    let totalPerf=rows.reduce((a,r)=>a+(Number(r.pl)||0),0);
+    if(totalsLine){
+      const tm=totalsLine.match(/^Totaux\s+(\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(-?\d+(?:[.,]\d+)?)%\s+(-?\d[\d\s\u00a0]*(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)$/i);
+      if(tm){
+        totalValue=n36(tm[1]);
+        totalCmp=n36(tm[2]);
+        totalPerf=n36(tm[3]);
+        totalPerf = Number.isFinite(totalPerf)?totalPerf:null;
+        totalCmp = Number.isFinite(totalCmp)?totalCmp:null;
+        totalPerfLoss=n36(tm[4]);
+      }
+    }
+    const dateMatch=joined.match(/\b(\d{2})\s+oct\.\s+(\d{4})\b/i);
+    const sourceDate=dateMatch?`${dateMatch[2]}-10-${dateMatch[1]}`:null;
+    return {isPortfolio:true,rows,totalValue,totalCmp,totalPerf,totalPerfLoss:Number.isFinite(totalPerfLoss)?totalPerfLoss:totalPerf,sourceDate,joined};
+  }
+
+  async function importPortfolio36(){
+    const file=document.getElementById('mainPdfFile')?.files?.[0];
+    const msg=document.getElementById('mainPdfMsg');
+    const preview=document.getElementById('mainPdfPreview');
+    const account=(document.getElementById('mainPdfAccount')?.value||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+    if(!file){if(msg)msg.innerHTML='<span class="red">Choisis d’abord le PDF original Wafa Bourse.</span>';return;}
+    try{
+      const lines=await readWafaPdfText(file);
+      const parsed=parsePortfolio36(lines);
+      if(!parsed || !parsed.isPortfolio){
+        // For a genuine Historique du compte PDF, keep the existing importer.
+        const old=window.__importMainWafaPdfV35;
+        if(typeof old==='function') return old();
+        throw new Error('PDF Wafa Bourse non reconnu.');
+      }
+      if(!parsed.rows.length) throw new Error('Le PDF est bien un « Portefeuille titres », mais aucune ligne de position n’a été reconnue.');
+
+      const by=(()=>{try{return JSON.parse(localStorage.getItem('portfolioStateByAccountV1')||'{}')}catch(e){return {}}})();
+      by.PEA=by.PEA&&typeof by.PEA==='object'?by.PEA:{};
+      by.CTO=by.CTO&&typeof by.CTO==='object'?by.CTO:{};
+      const old=by[account]||{};
+      const snaps=Array.isArray(old.snapshots)?old.snapshots.slice():[];
+      const date=parsed.sourceDate || new Date().toISOString().slice(0,10);
+      const snap={date,value:parsed.totalValue};
+      const si=snaps.findIndex(s=>s.date===date);
+      if(si>=0) snaps[si]=snap; else snaps.push(snap);
+      snaps.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+
+      by[account]={
+        ...old,
+        positions:parsed.rows.map(r=>({
+          name:r.name,qty:r.qty,cmp:r.cmp,price:r.price,value:r.value,
+          pl:r.pl,weight:r.weight,perf:r.perf
+        })),
+        valuation:parsed.totalValue,
+        // The Portefeuille titres PDF does not contain cash. Never copy PEA cash into CTO.
+        cash:Number.isFinite(Number(old.cash))?Number(old.cash):null,
+        performance:Number.isFinite(Number(parsed.totalPerf))?parsed.totalPerf:null,
+        source:file.name,
+        sourceDate:date,
+        snapshots:snaps
+      };
+      localStorage.setItem('portfolioStateByAccountV1',JSON.stringify(by));
+      localStorage.setItem('currentAccount',account);
+      localStorage.setItem('wafaLastImport',JSON.stringify({
+        source:file.name,importedAt:new Date().toISOString(),account,
+        documentType:'Portefeuille titres',rows:parsed.rows,
+        valuation:parsed.totalValue,prmpTotal:parsed.totalCmp,
+        performance:parsed.totalPerf,latent:parsed.totalPerfLoss,sourceDate:date
+      }));
+
+      if(preview){
+        preview.innerHTML='<table><thead><tr><th>Valeur</th><th>Quantité</th><th>CMP/PRMP</th><th>Cours/VL</th><th>Montant</th><th>Perf.</th><th>Gain/Perte</th><th>Poids</th></tr></thead><tbody>'+
+          parsed.rows.map(r=>'<tr><td>'+esc36(r.name)+'</td><td>'+r.qty+'</td><td>'+r.cmp.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+r.price.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+r.value.toLocaleString('fr-FR',{minimumFractionDigits:2})+'</td><td>'+r.perf.toFixed(2)+'%</td><td>'+r.pl.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</td><td>'+r.weight.toFixed(2)+'%</td></tr>').join('')+
+          '</tbody></table><div class="hint" style="margin-top:8px">Portefeuille titres reconnu ✓ — '+parsed.rows.length+' position(s).</div>';
+      }
+      try{window.dispatchEvent(new Event('accountchanged'));}catch(e){}
+      try{if(typeof window.renderAccountDashboard==='function')window.renderAccountDashboard();}catch(e){}
+      try{if(typeof window.refreshAdvancedAnalytics==='function')window.refreshAdvancedAnalytics();}catch(e){}
+      try{if(typeof window.renderAll==='function')window.renderAll();}catch(e){}
+      try{if(typeof window.refreshAccountCards==='function')window.refreshAccountCards();}catch(e){}
+      if(msg)msg.innerHTML='<span class="green"><b>Portefeuille titres importé ✓</b> — '+parsed.rows.length+' position(s) — '+parsed.totalValue.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD</span>';
+    }catch(e){
+      if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc36(e.message)+'</span>';
+      if(preview)preview.innerHTML='';
+    }
+  }
+
+  // Preserve the previous importer for Historique du compte PDFs.
+  window.__importMainWafaPdfV35=window.importMainWafaPdf;
+  window.importMainWafaPdf=importPortfolio36;
+})();
+</script>
+
 </body>
 
 <script id="FINAL_CTO_EMPTY_LOCK">
