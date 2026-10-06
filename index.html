@@ -429,7 +429,7 @@ function importBackup(event){
 <div class="wrap">
 <header>
 <div><h1>Mon Portfolio</h1><div class="sub">PEA • Dashboard personnel • MAD</div></div>
-<button onclick="window.print()">Exporter / Imprimer</button>
+
 </header>
 
 <!-- ================= COMPTES PEA / CTO ================= -->
@@ -458,7 +458,7 @@ function importBackup(event){
       <h2>⚙️ Réglages principaux</h2>
       <div class="hint">Tout ce qui sert au suivi quotidien est regroupé ici.</div>
     </div>
-    <button type="button" onclick="checkAlerts()">🔔 Vérifier</button>
+    
   </div>
   <div class="main-control-grid">
     <div class="control-box">
@@ -476,13 +476,7 @@ function importBackup(event){
       <div class="label">Cash minimum (MAD)</div>
       <input id="mainCashMin" type="number" value="500" step="10" oninput="document.getElementById('cashMin').value=this.value">
     </div>
-    <div class="control-box control-actions">
-      <div class="label">Actions</div>
-      <div class="action-row">
-        <button type="button" onclick="saveData()">💾 Sauver</button>
-        <button type="button" onclick="loadData()">↩ Restaurer</button>
-        <button type="button" onclick="window.print()">🖨 Imprimer</button>
-      </div>
+    
     </div>
   </div>
   <div id="mainControlMsg" class="hint" style="margin-top:9px"></div>
@@ -698,7 +692,7 @@ function importBackup(event){
 <h2>📤 Export</h2>
 <div class="form">
 <button onclick="exportCSV()">Exporter les positions CSV</button>
-<button onclick="window.print()">Imprimer / PDF</button>
+
 </div>
 <div class="hint" id="exportMsg" style="margin-top:10px"></div>
 </div>
@@ -716,7 +710,7 @@ function importBackup(event){
 <div class="label">Actions</div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
 <button onclick="saveData()">Sauvegarder</button>
-<button onclick="loadData()">Restaurer</button>
+
 <button onclick="clearData()" style="background:#ff646b">Effacer</button>
 </div>
 </div>
@@ -3071,6 +3065,59 @@ window.renderImportedUnified=function(){
 
   document.addEventListener('DOMContentLoaded',function(){ensure();render()});
   window.addEventListener('load',render);
+})();
+</script>
+
+<script id="finalCTOOnlyPatch">
+(function(){
+  const BY='portfolioStateByAccountV1';
+  const read=(k,fb)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?fb:v}catch(e){return fb}};
+  const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
+  const money=v=>num(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';
+  const signed=v=>(num(v)>=0?'+':'−')+Math.abs(num(v)).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  function account(){return (localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA'}
+  function state(){const by=read(BY,{PEA:{},CTO:{}});const s=by[account()]||{};return {positions:Array.isArray(s.positions)?s.positions:[],valuation:num(s.valuation),cash:num(s.cash),performance:Number.isFinite(Number(s.performance))?Number(s.performance):null,realized:Number.isFinite(Number(s.realized))?Number(s.realized):0,snapshots:Array.isArray(s.snapshots)?s.snapshots:[]}}
+  function ops(){return read('portfolioOperations',[]).filter(o=>String(o.account||'').toUpperCase()===account())}
+  function section(title){return [...document.querySelectorAll('.section.card')].find(x=>(x.querySelector('h2')?.textContent||'').includes(title))}
+  function setB(sec,i,val,cls){const b=sec?.querySelectorAll('.item b')?.[i];if(b){b.textContent=val;if(cls)b.className=cls}}
+  function setNum(sec,i,val,cls){const n=sec?.querySelectorAll('.num')?.[i];if(n){n.textContent=val;if(cls)n.className='num '+cls}}
+  function renderCTOOnly(){
+    if(account()!=='CTO') return;
+    const s=state(), ps=s.positions, os=ops(), val=num(s.valuation), cash=num(s.cash), lat=ps.reduce((a,p)=>a+num(p.pl),0), real=num(s.realized);
+    const buys=os.filter(o=>/ACHAT/i.test(o.type||'')), sells=os.filter(o=>/VENTE/i.test(o.type||''));
+    const buyGross=buys.reduce((a,o)=>a+num(o.qty)*num(o.price),0), sellGross=sells.reduce((a,o)=>a+num(o.qty)*num(o.price),0);
+    const net=buyGross-sellGross;
+    const assets=val+cash;
+    const max=ps.length?ps.reduce((a,p)=>!a||num(p.value)>num(a.value)?p:a,null):null;
+    const worst=ps.length?ps.reduce((a,p)=>!a||num(p.pl)<num(a.pl)?p:a,null):null;
+    // Allocation / summary
+    const alloc=section("Objectif d'allocation");
+    if(alloc){setB(alloc,0,money(ps.filter(p=>/TOTALENERGIES|AKDITAL|CIH|S2M/i.test(p.name||'')).reduce((a,p)=>a+num(p.value),0)));setB(alloc,1,money(ps.filter(p=>!/TOTALENERGIES|AKDITAL|CIH|S2M/i.test(p.name||'')).reduce((a,p)=>a+num(p.value),0)));setB(alloc,2,money(cash));setB(alloc,3,money(assets));}
+    const sum=section('Résumé'); if(sum){setB(sum,0,signed(lat),lat<0?'red':'green');setB(sum,1,signed(real),real<0?'red':'green');setB(sum,2,signed(lat+real),lat+real<0?'red':'green');setB(sum,3,'0,00 MAD');}
+    // Confirmation transactions
+    const conf=section('Avis de confirmation');
+    if(conf){const body=conf.querySelector('tbody');if(body){body.innerHTML=os.map(o=>'<tr><td>'+esc(o.date)+'</td><td>'+esc(o.value)+'</td><td>'+esc(/VENTE/i.test(o.type)?'Vente':'Achat')+'</td><td>'+num(o.qty)+'</td><td>'+num(o.price).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td>'+money(num(o.qty)*num(o.price))+'</td></tr>').join('')||'<tr><td colspan="6">Aucune opération pour le compte CTO.</td></tr>';}const nums=conf.querySelectorAll('.num');if(nums[0])nums[0].textContent=money(buyGross);if(nums[1])nums[1].textContent=money(sellGross);}
+    const ana=section('Analyse des transactions');
+    if(ana){const ns=ana.querySelectorAll('.num');if(ns[0])ns[0].textContent=money(buyGross);if(ns[1])ns[1].textContent=money(sellGross);if(ns[2]){ns[2].textContent=money(net);ns[2].className='num '+(net>=0?'green':'red')}if(ns[3]){ns[3].textContent=signed(real);ns[3].className='num '+(real>=0?'green':'red');}}
+    // Fiscality: never display PEA-specific AKDITAL/CIH values while CTO is selected.
+    const fisc=section('Fiscalité / TPCVM'); if(fisc){const grid=fisc.querySelectorAll('.grid .card');grid.forEach((c,i)=>{if(i===0)c.querySelector('.label').textContent='CTO';if(i===1)c.querySelector('.label').textContent='CTO';const n=c.querySelector('.num');if(n){n.textContent='0,00 MAD';n.className='num';}const h=c.querySelector('.hint');if(h)h.textContent='Données CTO — en attente du relevé correspondant.'});setB(fisc,0,signed(real),real<0?'red':'green');setB(fisc,1,'0,00 MAD');setB(fisc,2,signed(real),real<0?'red':'green');setB(fisc,3,'0,00 MAD');setB(fisc,4,'0,00 MAD');}
+    // Static PEA transaction-state blocks become CTO-only.
+    const et=section('État des titres après les opérations visibles');if(et){const items=et.querySelectorAll('.item');items.forEach(x=>x.remove());const hint=et.querySelector('.hint');if(ps.length){ps.forEach(p=>{const d=document.createElement('div');d.className='item';d.innerHTML='<span>'+esc(p.name)+'</span><b>'+num(p.qty).toLocaleString('fr-FR',{maximumFractionDigits:3})+' détenu(s)</b>';et.insertBefore(d,hint)});}else if(hint)hint.textContent='Aucune position pour le compte CTO — importe le relevé CTO pour commencer.';}
+    const cost=section("Coût d'achat moyen des opérations");if(cost){cost.querySelectorAll('.item').forEach(x=>x.remove());const hint=cost.querySelector('.hint');const map={};buys.forEach(o=>{const k=o.value||'Valeur';if(!map[k])map[k]={q:0,v:0};map[k].q+=num(o.qty);map[k].v+=num(o.qty)*num(o.price)});Object.entries(map).forEach(([k,v])=>{const d=document.createElement('div');d.className='item';d.innerHTML='<span>'+esc(k)+'</span><b>'+money(v.q?v.v/v.q:0)+'</b>';cost.insertBefore(d,hint)});if(hint)hint.textContent=buys.length?'Cours moyens calculés uniquement à partir des opérations CTO importées.':'Aucune opération CTO importée.';}
+    const coh=section('Contrôle de cohérence');if(coh){setB(coh,0,money(val));setB(coh,1,money(cash));setB(coh,2,'0,00 MAD');setB(coh,3,signed(lat),lat<0?'red':'green');setB(coh,4,signed(real),real<0?'red':'green');setB(coh,5,signed(lat+real),lat+real<0?'red':'green');}
+    const conc=section('Concentration');if(conc){setB(conc,0,max?money(max.value)+' • '+(assets?(num(max.value)/assets*100).toFixed(1)+'%':'0%'):'Aucune');const opVal=ps.filter(p=>!/TOTALENERGIES|AKDITAL|CIH|S2M/i.test(p.name||'')).reduce((a,p)=>a+num(p.value),0);setB(conc,1,assets?(opVal/assets*100).toFixed(1)+'%':'0,0%');setB(conc,2,assets?(cash/assets*100).toFixed(1)+'%':'0,0%');}
+    const watch=section('Points à surveiller');if(watch){setB(watch,0,s.performance==null?'0,00%':Number(s.performance).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%',num(s.performance)<0?'red':'green');setB(watch,1,signed(lat),lat<0?'red':'green');setB(watch,2,signed(real),real<0?'red':'green');setB(watch,3,money(cash));}
+    const quick=section('Fiche rapide de la situation');if(quick){const ns=quick.querySelectorAll('.num');if(ns[0])ns[0].textContent=money(assets);if(ns[1])ns[1].textContent=money(val);if(ns[2]){ns[2].textContent=signed(lat);ns[2].className='num '+(lat<0?'red':'green')}if(ns[3]){ns[3].textContent=signed(real);ns[3].className='num '+(real<0?'red':'green')}}
+    const src=section('Source Wafa Bourse');if(src){const title=src.querySelector('h2');if(title)title.textContent='📄 Source Wafa Bourse — CTO';const txt=src.querySelector('.hint');if(txt)txt.textContent=ps.length?('Relevé CTO importé — '+ps.length+' position(s) — Valorisation '+money(val)+' — Cash '+money(cash)):'Aucun relevé CTO importé.';}
+    const stateTitle=document.querySelector('.sub');if(stateTitle)stateTitle.textContent='CTO • Dashboard personnel • MAD';
+    const last=section('Dernière mise à jour');
+  }
+  function render(){if(account()==='CTO')renderCTOOnly();}
+  window.addEventListener('load',()=>setTimeout(render,50));
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(render,100));
+  const old=window.selectPortfolioAccount;
+  window.selectPortfolioAccount=function(a){const r=old?.apply(this,arguments);setTimeout(render,30);setTimeout(render,180);return r};
 })();
 </script>
 </body>
