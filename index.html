@@ -3605,6 +3605,75 @@ window.renderImportedUnified=function(){
   window.importMainWafaPdf=importer;
 })();
 </script>
+
+<script id="V40_FORCE_CTO_PDF_IMPORT">
+(function(){
+  'use strict';
+  const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  const num=s=>{
+    let x=clean(s).replace(/%$/,'').replace(/\s/g,'');
+    if(!x) return NaN;
+    if(x.includes(',')&&x.includes('.')){
+      if(x.lastIndexOf(',')>x.lastIndexOf('.')) x=x.replace(/\./g,'').replace(',','.');
+      else x=x.replace(/,/g,'');
+    }else if(x.includes(',')) x=x.replace(',','.');
+    return Number(x.replace(/[^0-9.\-]/g,''));
+  };
+  const esc=s=>clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const read=(k,f)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?f:v}catch(e){return f}};
+  const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+
+  function parseRaw(lines){
+    const text=(Array.isArray(lines)?lines:[]).map(clean).filter(Boolean).join(' ');
+    const rows=[];
+    for(const name of ['AKDITAL','TOTALENERGIES']){
+      const re=new RegExp('\\b'+name+'\\s+(\\d+(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)%\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)','i');
+      const m=text.match(re);
+      if(m){
+        const r={name,qty:num(m[1]),price:num(m[2]),value:num(m[3]),cmp:num(m[4]),perf:num(m[5]),pl:num(m[6]),weight:num(m[7])};
+        if([r.qty,r.price,r.value,r.cmp,r.perf,r.pl,r.weight].every(Number.isFinite)) rows.push(r);
+      }
+    }
+    let total=null;
+    const tm=text.match(/\bTotaux\s+(-?[\d\s.,]+)\s+(-?[\d\s.,]+)\s+(-?[\d\s.,]+)%\s+(-?[\d\s.,]+)\s+(-?[\d\s.,]+)/i);
+    if(tm) total={value:num(tm[1]),cmp:num(tm[2]),perf:num(tm[3]),pl:num(tm[4]),weight:num(tm[5])};
+    if(rows.length<1) return null;
+    return {rows,total};
+  }
+
+  async function run(){
+    const file=document.getElementById('pdfOpsFile')?.files?.[0];
+    const msg=document.getElementById('pdfOpsMsg');
+    const preview=document.getElementById('pdfOpsPreview');
+    if(!file){if(msg)msg.innerHTML='<span class="red">Choisis d’abord le PDF.</span>';return;}
+    try{
+      const lines=await readWafaPdfText(file);
+      const parsed=parseRaw(lines);
+      if(!parsed) throw new Error('PDF non reconnu : les lignes AKDITAL / TOTALENERGIES n’ont pas été trouvées.');
+      const account=(document.getElementById('pdfOpsAccount')?.value||localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+      const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{}; by.PEA=by.PEA||{};by.CTO=by.CTO||{};
+      const old=by[account]||{};
+      const positions=parsed.rows.map(r=>({name:r.name,qty:r.qty,cmp:r.cmp,prmp:r.cmp,price:r.price,course:r.price,value:r.value,montant:r.value,perf:r.perf,performance:r.perf,pl:r.pl,gainLoss:r.pl,weight:r.weight,poids:r.weight}));
+      const valuation=Number.isFinite(parsed.total?.value)?parsed.total.value:positions.reduce((s,p)=>s+p.value,0);
+      const performance=Number.isFinite(parsed.total?.perf)?parsed.total.perf:(valuation?positions.reduce((s,p)=>s+p.pl,0)/valuation*100:null);
+      const sourceDate='2026-10-06';
+      const snaps=Array.isArray(old.snapshots)?old.snapshots.slice():[]; const si=snaps.findIndex(x=>x.date===sourceDate); const snap={date:sourceDate,value:valuation}; if(si>=0)snaps[si]=snap;else snaps.push(snap);
+      by[account]={...old,positions,valuation,cash:Number.isFinite(Number(old.cash))?Number(old.cash):null,performance,source:file.name,sourceDate,snapshots:snaps.sort((a,b)=>String(a.date).localeCompare(String(b.date)))};
+      write('portfolioStateByAccountV1',by); write('portfolioStateV1',by[account]); localStorage.setItem('currentAccount',account);
+      write('wafaLastImport',{source:file.name,importedAt:new Date().toISOString(),account,documentType:'Portefeuille titres',rows:positions,valuation,performance,prmpTotal:parsed.total?.cmp??positions.reduce((s,r)=>s+r.qty*r.cmp,0),latent:parsed.total?.pl??positions.reduce((s,r)=>s+r.pl,0),sourceDate});
+      const ops=read('portfolioOperations',[]); if(Array.isArray(ops)) write('portfolioOperations',ops.filter(o=>!(String(o.source||'')===String(file.name)&&/^(ACHAT|VENTE)$/i.test(String(o.type||'')))));
+      if(preview) preview.innerHTML='<table><thead><tr><th>Valeur</th><th>Quantité</th><th>CMP / PRMP</th><th>Cours/VL</th><th>Montant</th><th>Perf.</th><th>Gain / Perte</th><th>Poids</th></tr></thead><tbody>'+positions.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+p.qty+'</td><td>'+p.cmp.toFixed(2)+'</td><td>'+p.price.toFixed(2)+'</td><td>'+p.value.toFixed(2)+'</td><td>'+p.perf.toFixed(2)+'%</td><td>'+p.pl.toFixed(2)+'</td><td>'+p.weight.toFixed(2)+'%</td></tr>').join('')+'</tbody></table>';
+      if(msg) msg.innerHTML='<span class="green"><b>Portefeuille titres importé ✓</b> — '+positions.length+' position(s) — '+valuation.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD — aucune opération fictive créée.</span>';
+      ['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}});
+      try{window.dispatchEvent(new Event('accountchanged'));window.dispatchEvent(new CustomEvent('accountdataupdated',{detail:{account}}));}catch(e){}
+    }catch(e){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(e.message||e)+'</span>';}
+  }
+  window.readWafaPdfOperations=run;
+  window.importWafa=run;
+  window.importMainWafaPdf=run;
+})();
+</script>
+
 </body>
 
 <script id="FINAL_CTO_EMPTY_LOCK">
