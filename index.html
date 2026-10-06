@@ -3420,10 +3420,11 @@ window.renderImportedUnified=function(){
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
   /* Sections that are controls/importers and must remain usable in CTO. */
-  const KEEP_IDS=new Set(['accountSelector','pdfOpsImporter','backupSection','settingsSection']);
+  const KEEP_IDS=new Set(['accountSelector','pdfOpsImporter','backupSection','settingsSection','accountsSwitcher']);
   const KEEP_TITLES=[
     'Importer l\'historique Wafa Bourse',
     'Comptes PEA / CTO',
+    'Mes comptes',
     'Sauvegarde',
     'Alertes personnelles',
     'Allocation cible',
@@ -3518,7 +3519,7 @@ window.renderImportedUnified=function(){
   const account=()=>String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
   const ctoState=()=>{const by=read(BY,{PEA:{},CTO:{}})||{};const s=by.CTO||{};return {positions:Array.isArray(s.positions)?s.positions:[],valuation:Number(s.valuation)||0,cash:Number(s.cash)||0,source:s.source||null};};
   const hasData=()=>{const s=ctoState();return s.positions.length>0||s.valuation>0||s.cash>0||!!s.source;};
-  const KEEP=['Importer l\'historique Wafa Bourse','Comptes PEA / CTO','Sauvegarde','Alertes personnelles','Allocation cible','Watchlist personnelle','Recherche & filtres','Dividendes — saisie manuelle'];
+  const KEEP=['Importer l\'historique Wafa Bourse','Comptes PEA / CTO','Mes comptes','Sauvegarde','Alertes personnelles','Allocation cible','Watchlist personnelle','Recherche & filtres','Dividendes — saisie manuelle'];
   const keep=(el)=>{const h=el.querySelector(':scope > h2');const t=(h?.textContent||'').trim();return KEEP.some(x=>t.includes(x))||el.id==='pdfOpsImporter'||el.id==='accountSelector';};
   const allDataCards=()=>[...document.querySelectorAll('.section.card, .grid.section > .card')];
   function blankCard(el){
@@ -3618,4 +3619,37 @@ window.renderImportedUnified=function(){
   setInterval(run,250);
 })();
 </script>
-\n<script id="FINAL_ACCOUNT_SWITCH_V25">\n(function(){\n  // Authoritative account switch: PEA and CTO are independent.\n  // Reloading after changing the selected account prevents any old PEA/CTO DOM\n  // values from surviving the switch.\n  window.switchPortfolioAccountHard=function(account){\n    const a=String(account||'').toUpperCase()==='CTO'?'CTO':'PEA';\n    localStorage.setItem('currentAccount',a);\n    const sel=document.getElementById('pdfOpsAccount');\n    if(sel) sel.value=a;\n    const f=document.getElementById('importedAccountFilter');\n    if(f) f.value=a;\n    window.location.reload();\n  };\n  function bind(){\n    document.querySelectorAll('.account-card[data-account], .mini-account').forEach(btn=>{\n      const a=btn.getAttribute('data-account') || btn.textContent.trim();\n      if(a!=='PEA' && a!=='CTO') return;\n      btn.onclick=function(e){\n        e.preventDefault();\n        e.stopImmediatePropagation();\n        window.switchPortfolioAccountHard(a);\n        return false;\n      };\n    });\n    const a=(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';\n    const sel=document.getElementById('pdfOpsAccount'); if(sel)sel.value=a;\n    const f=document.getElementById('importedAccountFilter'); if(f)f.value=a;\n  }\n  document.addEventListener('DOMContentLoaded',bind);\n  window.addEventListener('load',bind);\n})();\n</script>\n
+
+<script id="FINAL_ACCOUNT_SWITCH_V26">
+(function(){
+  // Single visible PEA / CTO switch. The selected account is persisted,
+  // then the dashboard is reloaded so every section is rebuilt for that account.
+  function normalize(account){ return String(account||'').toUpperCase()==='CTO' ? 'CTO' : 'PEA'; }
+  function switchAccount(account){
+    const a=normalize(account);
+    localStorage.setItem('currentAccount',a);
+    const sel=document.getElementById('pdfOpsAccount'); if(sel) sel.value=a;
+    const f=document.getElementById('importedAccountFilter'); if(f) f.value=a;
+    window.location.reload();
+  }
+  window.switchPortfolioAccountHard=switchAccount;
+  function bind(){
+    const a=normalize(localStorage.getItem('currentAccount')||'PEA');
+    document.querySelectorAll('.account-card[data-account], .mini-account').forEach(function(btn){
+      const target=normalize(btn.getAttribute('data-account')||btn.textContent);
+      if(target!==a && (target!=='PEA' && target!=='CTO')) return;
+      btn.onclick=function(e){ e.preventDefault(); e.stopPropagation(); switchAccount(target); return false; };
+      btn.setAttribute('aria-pressed',target===a?'true':'false');
+      btn.classList.toggle('account-active',target===a);
+    });
+    const title=document.getElementById('selectedAccountTitle');
+    if(title) title.textContent='Compte '+a;
+    const sub=document.querySelector('header .sub');
+    if(sub) sub.textContent=a+' • Dashboard personnel • MAD';
+    const sel=document.getElementById('pdfOpsAccount'); if(sel) sel.value=a;
+    const f=document.getElementById('importedAccountFilter'); if(f) f.value=a;
+  }
+  document.addEventListener('DOMContentLoaded',bind);
+  window.addEventListener('load',bind);
+})();
+</script>
