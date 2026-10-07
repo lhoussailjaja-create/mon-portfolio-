@@ -4329,8 +4329,23 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   setTimeout(draw,250);
   window.addEventListener('accountchanged',()=>setTimeout(draw,80));
   window.addEventListener('accountdataupdated',()=>setTimeout(draw,80));
-  const mo=new MutationObserver(()=>{ if(document.getElementById('synActions')) draw(); });
-  mo.observe(document.body,{subtree:true,childList:true,characterData:true});
+  // Do NOT observe document.body here: draw() itself changes legend/total text,
+  // which would retrigger a MutationObserver indefinitely and freeze the page.
+  let resizeTimer=null;
+  window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(draw,120);});
+})();
+</script>
+<script id="V74_RENDER_GUARD">
+(function(){
+  let busy=false;
+  const original=window.renderAccountAllocation;
+  if(typeof original!=='function') return;
+  window.renderAccountAllocation=function(){
+    if(busy) return;
+    busy=true;
+    try{ return original.apply(this,arguments); }
+    finally{ busy=false; }
+  };
 })();
 </script>
 </body>
@@ -4394,7 +4409,9 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function run(){try{lock()}catch(e){}}
   document.addEventListener('DOMContentLoaded',()=>{run();setTimeout(run,100);setTimeout(run,500);setTimeout(run,1200);});
   window.addEventListener('load',()=>{run();setTimeout(run,250);setTimeout(run,1000);});
-  setInterval(run,700);
+  // Event-driven only. Repeated polling caused unnecessary DOM rewrites and could freeze the page.
+  window.addEventListener('accountchanged',()=>{run();setTimeout(run,120);});
+  window.addEventListener('accountdataupdated',()=>{run();setTimeout(run,120);});
   window.addEventListener('storage',run);
 })();
 </script>
