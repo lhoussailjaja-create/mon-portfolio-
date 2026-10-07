@@ -5454,5 +5454,39 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 window.addEventListener('load',install);
 })();
 </script>\n
+
+<script id="V76_SYNTH_HARD_FINAL">
+(function(){
+'use strict';
+function read(k,d){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}}
+function money(v){
+ let x=String(v??'').replace(/\u00a0/g,' ').replace(/MAD/ig,'').trim().replace(/\s/g,'');
+ if(!x)return 0;
+ if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'');}
+ else if(x.includes(','))x=x.replace(',','.');
+ return Number(x.replace(/[^0-9.\-]/g,''))||0;
+}
+function paint(){
+ if((localStorage.getItem('currentAccount')||'').toUpperCase()!=='CTO') return;
+ const s=read('ctoSyntheseV1',null); if(!s)return;
+ const vals=[s.soldeComptable,s.valorisationActions,s.valorisationOPCVM,s.totalAvoirs,s.latentes,s.realisees,s.totalValues];
+ const fmt=v=>Number(v||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';
+ ['synSolde','synActions','synOpcvm','synAvoirs','synLatentes','synRealisees','synValues'].forEach((id,i)=>{const e=document.getElementById(id);if(e)e.textContent=fmt(vals[i]);});
+ const total=Number(s.totalAvoirs)||0;
+ const parts=[Number(s.valorisationActions)||0,Number(s.valorisationOPCVM)||0,Number(s.soldeComptable)||0];
+ ['allocationActionsPct','allocationOpcvmPct','allocationCashPct'].forEach((id,i)=>{const e=document.getElementById(id);if(e)e.textContent=total?(parts[i]/total*100).toFixed(1)+'%':'0%';});
+ const center=document.getElementById('allocationTotal');if(center)center.textContent=fmt(total);
+}
+window.__V76_FINAL_PAINT_SYNTH=paint;
+function keep(){paint();}
+window.addEventListener('load',()=>{paint();let n=0;const t=setInterval(()=>{paint();if(++n>=25)clearInterval(t)},200);});
+window.addEventListener('accountchanged',()=>setTimeout(paint,50));
+window.addEventListener('accountdataupdated',()=>setTimeout(paint,50));
+window.addEventListener('storage',e=>{if(e.key==='ctoSyntheseV1'||e.key==='portfolioStateByAccountV1')setTimeout(paint,50)});
+// Re-apply after the existing importer/renderers have finished their own redraws.
+setTimeout(paint,50);setTimeout(paint,250);setTimeout(paint,750);setTimeout(paint,1500);setTimeout(paint,3000);setTimeout(paint,5000);
+})();
+</script>
+
 </body>
 </html>
