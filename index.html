@@ -231,6 +231,27 @@ canvas{width:100%;height:230px;background:#0b1016;border-radius:10px}
 .account-synthesis-grid .item span{font-size:12px;opacity:.86}
 .account-synthesis-grid .item b{font-size:14px;text-align:right}
 @media(max-width:700px){.account-synthesis-card{max-width:none}.account-synthesis-grid{grid-template-columns:1fr}.account-synthesis-grid .item{min-height:40px}}
+/* V73 — synthèse compacte à gauche + répartition à droite */
+.account-overview-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.8fr);gap:12px;align-items:stretch;margin:12px auto;max-width:1180px}
+.account-overview-grid .account-synthesis-card{max-width:none;margin:0}
+.account-overview-grid .account-synthesis-grid{grid-template-columns:1fr 1fr;gap:7px 10px}
+.account-overview-grid .account-synthesis-grid .item{min-height:38px;padding:8px 10px}
+.account-overview-grid .account-synthesis-grid .item span{font-size:11px}
+.account-overview-grid .account-synthesis-grid .item b{font-size:13px}
+.portfolio-allocation-card{margin:0;min-width:0}
+.portfolio-allocation-card h2{margin-bottom:8px}
+.allocation-visual{display:flex;align-items:center;justify-content:center;gap:12px;min-height:235px}
+.allocation-donut-wrap{position:relative;width:210px;height:210px;flex:0 0 210px}
+#accountAllocationChart{display:block;width:210px;height:210px}
+.allocation-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.allocation-center b{font-size:17px}.allocation-center span{font-size:10px;opacity:.65;margin-top:2px}
+.allocation-legend{display:flex;flex-direction:column;gap:10px;min-width:105px}
+.allocation-legend>div{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:7px;font-size:11px}
+.allocation-legend b{font-size:12px}
+.legend-dot{width:9px;height:9px;border-radius:50%;display:block}.actions-dot{background:#eab308}.opcvm-dot{background:#d66a4a}.cash-dot{background:#4f8df7}
+@media(max-width:850px){.account-overview-grid{grid-template-columns:1fr}.allocation-visual{justify-content:space-evenly}}
+@media(max-width:520px){.account-overview-grid .account-synthesis-grid{grid-template-columns:1fr}.allocation-visual{flex-direction:column}.allocation-legend{width:100%;max-width:230px}}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script>
 async function importWafa(){
@@ -578,7 +599,8 @@ th,td{padding:10px}
   <div id="mainControlMsg" class="hint" style="margin-top:9px"></div>
 </section>
 
-<!-- V72: compte synthèse regroupé -->
+<!-- V73: Synthèse + Répartition du portefeuille -->
+<div class="account-overview-grid" id="accountOverviewGrid">
 <section class="section card account-synthesis-card" id="accountSynthesisCard">
   <h2>📋 Synthèse du compte</h2>
   <div class="account-synthesis-grid">
@@ -591,6 +613,22 @@ th,td{padding:10px}
     <div class="item"><span>+/- Values :</span><b id="synValues">—</b></div>
   </div>
 </section>
+
+<section class="section card portfolio-allocation-card" id="portfolioAllocationCard">
+  <h2>📊 Répartition du portefeuille</h2>
+  <div class="allocation-visual">
+    <div class="allocation-donut-wrap">
+      <canvas id="accountAllocationChart" width="230" height="230"></canvas>
+      <div class="allocation-center"><b id="allocationTotal">—</b><span>Total</span></div>
+    </div>
+    <div class="allocation-legend" id="accountAllocationLegend">
+      <div><span class="legend-dot actions-dot"></span><span>Actions</span><b id="allocationActionsPct">0%</b></div>
+      <div><span class="legend-dot opcvm-dot"></span><span>OPCVM</span><b id="allocationOpcvmPct">0%</b></div>
+      <div><span class="legend-dot cash-dot"></span><span>Cash</span><b id="allocationCashPct">0%</b></div>
+    </div>
+  </div>
+</section>
+</div>
 
 <div class="cards">
 
@@ -4256,6 +4294,43 @@ function wire(){
  window.importMainWafaPdf=importAuto;
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire);else wire();
+})();
+</script>
+
+<script id="V73_ACCOUNT_ALLOCATION_RENDER">
+(function(){
+  function parseMoney(v){
+    if(v==null)return 0;
+    let s=String(v).replace(/[^0-9,.-]/g,'').replace(/\s/g,'');
+    if(s.includes(',')&&s.includes('.')){ if(s.lastIndexOf(',')>s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',','.'); else s=s.replace(/,/g,''); }
+    else if(s.includes(',')) s=s.replace(',','.');
+    return Number(s)||0;
+  }
+  function val(id){return parseMoney(document.getElementById(id)?.textContent||'0')}
+  function money(n){return Number(n||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD'}
+  function draw(){
+    const canvas=document.getElementById('accountAllocationChart'); if(!canvas)return;
+    const ctx=canvas.getContext('2d'); const dpr=window.devicePixelRatio||1; const size=210;
+    canvas.width=size*dpr; canvas.height=size*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+    const actions=Math.max(0,val('synActions')), opcvm=Math.max(0,val('synOpcvm')), cash=Math.max(0,val('synSolde'));
+    const total=actions+opcvm+cash;
+    document.getElementById('allocationTotal').textContent=money(total);
+    const vals=[actions,opcvm,cash], labels=['Actions','OPCVM','Cash'], colors=['#eab308','#d66a4a','#4f8df7'];
+    const ids=['allocationActionsPct','allocationOpcvmPct','allocationCashPct'];
+    vals.forEach((x,i)=>{const e=document.getElementById(ids[i]);if(e)e.textContent=total?(x/total*100).toFixed(1)+'%':'0%';});
+    ctx.clearRect(0,0,size,size); const cx=size/2,cy=size/2,r=78,lw=32;
+    ctx.lineWidth=lw;ctx.lineCap='butt';
+    if(total<=0){ctx.beginPath();ctx.strokeStyle='rgba(255,255,255,.12)';ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();return;}
+    let a=-Math.PI/2;
+    vals.forEach((x,i)=>{if(x<=0)return;const b=a+(x/total)*Math.PI*2;ctx.beginPath();ctx.strokeStyle=colors[i];ctx.arc(cx,cy,r,a,b);ctx.stroke();a=b;});
+    ctx.beginPath();ctx.strokeStyle='rgba(255,255,255,.07)';ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+  }
+  window.renderAccountAllocation=draw;
+  setTimeout(draw,250);
+  window.addEventListener('accountchanged',()=>setTimeout(draw,80));
+  window.addEventListener('accountdataupdated',()=>setTimeout(draw,80));
+  const mo=new MutationObserver(()=>{ if(document.getElementById('synActions')) draw(); });
+  mo.observe(document.body,{subtree:true,childList:true,characterData:true});
 })();
 </script>
 </body>
