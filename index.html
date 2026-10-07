@@ -218,6 +218,11 @@ canvas{width:100%;height:230px;background:#0b1016;border-radius:10px}
 @media(max-width:900px){.main-control-grid{grid-template-columns:1fr 1fr}.control-actions{grid-column:1/-1}}
 @media(max-width:600px){.main-control-head{align-items:flex-start}.main-control-grid{grid-template-columns:1fr}.control-actions{grid-column:auto}}
 @media(max-width:760px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.wrap{width:100%;max-width:none;padding:14px}.form{grid-template-columns:1fr}header{gap:10px;align-items:flex-start}header button{white-space:nowrap}.card{min-width:0}table{font-size:12px}th,td{padding:9px}.num{font-size:21px}}
+
+.file-importer-card{padding:14px}
+.file-importer-card h2{margin-bottom:6px}
+.file-importer-card input[type=file]{font-size:13px}
+@media(max-width:600px){.file-importer-card .form{grid-template-columns:1fr!important}.file-importer-card button{width:100%}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script>
 async function importWafa(){
@@ -468,6 +473,36 @@ th,td{padding:10px 11px}
 }
 </style>
 
+<style id="V65_BALANCED_UI">
+.wrap{max-width:1080px;padding:18px}
+.section.card{margin-top:16px}
+.cards{gap:10px}
+.card{padding:14px}
+.grid{gap:10px;margin-top:10px}
+.main-control-grid{gap:9px}
+table{font-size:13px}
+th,td{padding:10px}
+@media(max-width:760px){.wrap{padding:12px}.cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.card{padding:12px}.section.card{margin-top:12px}}
+</style>
+
+<style id="V67_COMPACT_TOP_PANELS">
+/* Top navigation panels: slightly narrower and centered for a cleaner balance. */
+#accountsSwitcher, #selectedAccountBar, #mainControl{
+  width:92%;
+  max-width:980px;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+#accountsSwitcher{padding:13px 16px;}
+#selectedAccountBar{padding:9px 14px!important;}
+#selectedAccountBar .num{font-size:19px;}
+#mainControl{padding:12px 14px;}
+#mainControl h2{font-size:17px;}
+#mainControl .hint{font-size:10.5px;}
+@media(max-width:760px){
+  #accountsSwitcher, #selectedAccountBar, #mainControl{width:100%;}
+}
+</style>
 </head>
 <body>
 <div class="install-card">
@@ -1200,6 +1235,21 @@ section class="section card" style="margin-top:16px">
           <th>Bénéfice estimé</th>
 
           <th>Valeur finale</th>
+
+<!-- ================= IMPORTER FICHIER ================= -->
+<section class="section card file-importer-card" id="fileImporterSection">
+  <h2>📂 Importer fichier</h2>
+  <div class="hint">Importer un fichier Wafa Bourse Excel, CSV ou PDF. Le format est détecté automatiquement.</div>
+  <div class="form" style="margin-top:12px;grid-template-columns:1fr 180px;align-items:end">
+    <div>
+      <div class="label">Fichier</div>
+      <input id="excelFile" type="file" accept=".xlsx,.xls,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#0b1016;color:var(--txt)">
+    </div>
+    <button type="button" onclick="importWafaFile()">📥 Importer fichier</button>
+  </div>
+  <div id="importMsg" class="hint" style="margin-top:10px"></div>
+</section>
+
 <script>
 (function(){
   const FALLBACK_POSITIONS = [
@@ -4558,7 +4608,6 @@ setTimeout(install,100);setTimeout(install,500);
 })();
 </script>
 
-</html>
 
 <script id="FINAL_CTO_IMPORT_V61">
 (function(){
@@ -4578,7 +4627,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();
 </script>
 
-<script id="FINAL_CTO_FISCALITE_DISPLAY_V63">
+<script id="FINAL_CTO_FISCALITE_DISPLAY_V65_SAFE">
 (function(){
 'use strict';
 function read(k,d){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}}
@@ -4600,12 +4649,11 @@ function renderFiscalite(){
  if(bs[2])bs[2].textContent=money(totalA);
  if(bs[3])bs[3].textContent=money(tpc);
  if(bs[4])bs[4].textContent=money(rest);
- const note=[...s.querySelectorAll('*')].find(x=>(x.textContent||'').includes('Aucune donnée à afficher pour le moment'));
- if(note && note.childElementCount===0) note.textContent='Relevé Fiscalité CTO importé — données disponibles.';
 }
-function schedule(){[50,300,800,1500,3000].forEach(ms=>setTimeout(renderFiscalite,ms))}
-function boot(){renderFiscalite();schedule();const btn=[...document.querySelectorAll('button')].find(b=>/importer automatiquement/i.test(b.textContent||''));if(btn){btn.addEventListener('click',schedule,true)}const obs=new MutationObserver(()=>{if(localStorage.getItem('ctoFiscaliteV1'))renderFiscalite()});obs.observe(document.body,{subtree:true,childList:true,characterData:true});setInterval(renderFiscalite,2000)}
+function boot(){renderFiscalite();setTimeout(renderFiscalite,300);setTimeout(renderFiscalite,1000)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+window.addEventListener('storage',function(e){if(e.key==='ctoFiscaliteV1'||e.key==='currentAccount')setTimeout(renderFiscalite,0)});
+window.renderFiscaliteSafe=renderFiscalite;
 })();
 </script>
 
@@ -4692,3 +4740,4 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();
 </script>
 
+</html>
