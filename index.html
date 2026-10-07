@@ -4740,4 +4740,50 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();
 </script>
 
+
+<script id="FINAL_HISTORY_ENGINE_EXPORT_V68">
+(function(){
+'use strict';
+/* V68: expose the mature Historique parser to the unified importer.
+   In V67 parseHistory lived inside an IIFE, so window.parseHistory was undefined. */
+if(typeof window.parseHistory!=='function'){
+  window.parseHistory=function(lines,acct,fileName){
+    const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+    const num=s=>{
+      let x=clean(s).replace(/%/g,'').replace(/\s/g,'');
+      if(!x)return 0;
+      if(x.includes(',')&&x.includes('.')){
+        if(x.lastIndexOf(',')>x.lastIndexOf('.')) x=x.replace(/\./g,'').replace(',','.');
+        else x=x.replace(/,/g,'');
+      }else if(x.includes(',')) x=x.replace(',','.');
+      return Number(x.replace(/[^0-9.\-]/g,''))||0;
+    };
+    const out=[];
+    for(let i=0;i<(lines||[]).length;i++){
+      const line=clean(lines[i]); if(!line)continue;
+      const m=line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.+)$/); if(!m)continue;
+      const date=m[1],rest=m[2];
+      const tm=rest.match(/\b(ACHAT(?:\s+OPCVM)?|VENTE|CREDIT|DEBIT|DÉBIT)\b/i); if(!tm)continue;
+      const type=/ACHAT/i.test(tm[1])?'ACHAT':/VENTE/i.test(tm[1])?'VENTE':/CREDIT|VIR/i.test(tm[1])?'CREDIT':'DEBIT';
+      const before=clean(rest.slice(0,tm.index));
+      const after=clean(rest.slice(tm.index+tm[0].length));
+      const toks=after.split(/\s+/);
+      const ni=toks.findIndex(x=>/^[-+]?\d/.test(x));
+      let value=before;
+      if(ni>0)value=clean((value+' '+toks.slice(0,ni).join(' ')).trim());
+      const nums=(ni>=0?toks.slice(ni).join(' '):'').match(/[-+]?\d[\d\s]*(?:[.,]\d+)?/g)||[];
+      let qty=0,price=0,net=0,fees=0;
+      if(nums.length>=3){
+        qty=num(nums[0]); price=num(nums[1]); net=num(nums[2]);
+        fees=nums.slice(3).map(num).filter(x=>x>0).reduce((a,b)=>a+b,0);
+      }
+      if(type==='CREDIT'||type==='DEBIT'){qty=0;price=0;}
+      if(!value){const tail=ni>0?toks.slice(0,ni).join(' '):after.replace(/[-+]?\d[\d\s]*(?:[.,]\d+)?/g,' ');value=clean(tail);}
+      out.push({account:acct||'PEA',date,type,value,qty,price,net,fees,source:fileName||'Wafa Bourse PDF',importedAt:new Date().toISOString()});
+    }
+    return out;
+  };
+}
+})();
+</script>
 </html>
