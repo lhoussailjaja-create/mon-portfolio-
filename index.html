@@ -223,6 +223,14 @@ canvas{width:100%;height:230px;background:#0b1016;border-radius:10px}
 .file-importer-card h2{margin-bottom:6px}
 .file-importer-card input[type=file]{font-size:13px}
 @media(max-width:600px){.file-importer-card .form{grid-template-columns:1fr!important}.file-importer-card button{width:100%}}
+
+/* V72 — synthèse compacte, regroupée dans une seule colonne */
+.account-synthesis-card{max-width:920px;margin:12px auto}
+.account-synthesis-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+.account-synthesis-grid .item{min-height:42px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);display:flex;justify-content:space-between;align-items:center;gap:12px}
+.account-synthesis-grid .item span{font-size:12px;opacity:.86}
+.account-synthesis-grid .item b{font-size:14px;text-align:right}
+@media(max-width:700px){.account-synthesis-card{max-width:none}.account-synthesis-grid{grid-template-columns:1fr}.account-synthesis-grid .item{min-height:40px}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script>
 async function importWafa(){
@@ -568,6 +576,20 @@ th,td{padding:10px}
     </div>
   </div>
   <div id="mainControlMsg" class="hint" style="margin-top:9px"></div>
+</section>
+
+<!-- V72: compte synthèse regroupé -->
+<section class="section card account-synthesis-card" id="accountSynthesisCard">
+  <h2>📋 Synthèse du compte</h2>
+  <div class="account-synthesis-grid">
+    <div class="item"><span>Solde disponible :</span><b id="synSolde">—</b></div>
+    <div class="item"><span>Valorisation actions :</span><b id="synActions">—</b></div>
+    <div class="item"><span>Valorisation OPCVM :</span><b id="synOpcvm">—</b></div>
+    <div class="item"><span>Total des avoirs :</span><b id="synAvoirs">—</b></div>
+    <div class="item"><span>+/- latentes :</span><b id="synLatentes">—</b></div>
+    <div class="item"><span>+/- réalisées :</span><b id="synRealisees">—</b></div>
+    <div class="item"><span>+/- Values :</span><b id="synValues">—</b></div>
+  </div>
 </section>
 
 <div class="cards">
@@ -4844,7 +4866,35 @@ window.parseHistory=function(lines,acct,fileName){
   return out;
 };
 })();
-</script>\n</html>
+</script>\n
+<script id="V72_ACCOUNT_SYNTHESIS_RENDER">
+(function(){
+  'use strict';
+  const money=v=>{const n=Number(v);return Number.isFinite(n)?n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD':'—'};
+  const put=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=money(v)};
+  function read(k,fb){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?fb:v}catch(e){return fb}}
+  function render(){
+    const account=String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+    let s=null;
+    const by=read('portfolioStateByAccountV1',{});
+    if(account==='CTO') s=read('ctoSyntheseV1',null)||by?.CTO?.synthese||null;
+    else s=by?.PEA?.synthese||null;
+    if(!s){['synSolde','synActions','synOpcvm','synAvoirs','synLatentes','synRealisees','synValues'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent='—'});return}
+    put('synSolde',s.soldeComptable);
+    put('synActions',s.valorisationActions);
+    put('synOpcvm',s.valorisationOPCVM);
+    put('synAvoirs',s.totalAvoirs);
+    put('synLatentes',s.latentes);
+    put('synRealisees',s.realisees);
+    put('synValues',s.totalValues);
+  }
+  window.renderAccountSynthesis=render;
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render);else render();
+  window.addEventListener('accountdataupdated',render);
+  window.addEventListener('accountchanged',render);
+})();
+</script>
+</html>
 
 <!-- FINAL V71: standalone Wafa Titres importer. No dependency on __V44_PORTFOLIO_RUN. -->
 <script id="FINAL_V71_STANDALONE_TITRES_IMPORT">
