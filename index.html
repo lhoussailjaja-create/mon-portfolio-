@@ -707,7 +707,7 @@ th,td{padding:10px}
 </div>
 </div>
 
-<div class="section card positions-section-v76" id="positionsSectionV76">
+<div class="section card">
 <h2>📊 Positions</h2>
 <table>
 <thead><tr><th>Valeur</th><th>Qté</th><th>CMP</th><th>Cours/VL</th><th>Valorisation</th><th>+/-</th></tr></thead>
@@ -4351,226 +4351,6 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   };
 })();
 </script>
-
-
-<style id="V76_POSITIONS_FEES_SALE">
-/* V76 — Positions réelles + simulation de vente : frais d'achat et de vente */
-#positionsSectionV76{width:100%;max-width:none;overflow-x:auto}
-#positionsSectionV76 table{width:100%;min-width:1180px;table-layout:auto;font-size:13px}
-#positionsSectionV76 th,#positionsSectionV76 td{padding:10px 12px;white-space:nowrap;vertical-align:middle}
-#positionsSectionV76 th:first-child,#positionsSectionV76 td:first-child{min-width:190px}
-#positionsSectionV76 th:nth-child(2),#positionsSectionV76 td:nth-child(2){min-width:60px;text-align:center}
-#positionsSectionV76 th:nth-child(n+3),#positionsSectionV76 td:nth-child(n+3){min-width:120px}
-#positionsSectionV76 .pos-sim-input{width:112px;min-height:34px;padding:7px 8px;font-size:13px;margin:0}
-#positionsSectionV76 .pos-muted{color:var(--muted)}
-#positionsSectionV76 .pos-net{font-weight:850}
-#positionsSectionV76 .pos-sub{display:block;color:var(--muted);font-size:10px;margin-top:3px}
-@media(max-width:760px){#positionsSectionV76 table{min-width:1180px}}
-</style>
-<script id="V76_POSITIONS_FEES_SALE_ENGINE">
-(function(){
-  'use strict';
-  const LS='portfolioStateByAccountV1';
-  const SIM='portfolioPositionSaleSimV1';
-  const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  const num=v=>{let s=String(v??'').trim().replace(/\u00a0/g,' ').replace(/\s/g,'');if(!s)return NaN;if(s.includes(',')&&s.includes('.')){if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'')}else if(s.includes(','))s=s.replace(',','.');return parseFloat(s)};
-  const money=v=>Number.isFinite(Number(v))?Number(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD':'—';
-  const signed=v=>Number.isFinite(Number(v))?(Number(v)>=0?'+':'−')+Math.abs(Number(v)).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD':'—';
-  const cls=v=>Number(v)>=0?'green':'red';
-  function read(k,fb){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?fb:v}catch(e){return fb}}
-  function account(){return String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA'}
-  function state(){const by=read(LS,{});return (by&&by[account()])||{positions:[]}}
-  function sims(){return read(SIM,{})||{}}
-  function saveSims(v){localStorage.setItem(SIM,JSON.stringify(v))}
-
-  // Reconstitute the remaining purchase lots with FIFO so the displayed purchase fees
-  // correspond to the quantity still held, when Wafa Historique contains the fees.
-  function remainingBuyFees(name,qty){
-    let ops=read('portfolioOperations',[]); if(!Array.isArray(ops))return 0;
-    const a=account();
-    ops=ops.filter(o=>String(o.account||'').toUpperCase()===a && String(o.value||'').trim().toUpperCase()===String(name||'').trim().toUpperCase() && /ACHAT|VENTE/i.test(String(o.type||'')))
-      .sort((x,y)=>String(x.date||'').localeCompare(String(y.date||'')));
-    const lots=[];
-    for(const o of ops){
-      const q=Math.abs(num(o.qty)||0), fee=Math.abs(num(o.fees)||0);
-      if(!q)continue;
-      if(/ACHAT/i.test(String(o.type||''))) lots.push({q,fee});
-      else {let rem=q;while(rem>1e-9&&lots.length){const l=lots[0],take=Math.min(rem,l.q);l.q-=take;l.fee-=l.fee*(take/(l.q+take));rem-=take;if(l.q<1e-9)lots.shift();}}
-    }
-    const totalQty=lots.reduce((x,l)=>x+l.q,0);
-    if(totalQty<=0||!Number.isFinite(qty))return 0;
-    // Scale only when the journal quantity and imported position differ slightly.
-    const scale=Math.min(1,qty/totalQty);
-    return lots.reduce((x,l)=>x+Math.max(0,l.fee)*scale,0);
-  }
-  function findTable(){const sec=document.getElementById('positionsSectionV76');return sec?sec.querySelector('table'):null}
-  function getPositions(){const s=state();return Array.isArray(s.positions)?s.positions:[]}
-  function render(){
-    const table=findTable(); if(!table)return;
-    const ps=getPositions();
-    const thead=table.querySelector('thead'),body=table.querySelector('tbody'); if(!thead||!body)return;
-    thead.innerHTML='<tr><th>Valeur</th><th>Qté</th><th>CMP</th><th>Cours/VL</th><th>Valorisation</th><th>+/- latent</th><th>Frais achat</th><th>Prix vente</th><th>Frais vente</th><th>Net après vente</th><th>+/- net après frais</th></tr>';
-    const store=sims(), a=account();
-    body.innerHTML=ps.map((p,i)=>{
-      const name=String(p.name||''), key=a+'|'+name.toUpperCase();
-      const qty=Number(p.qty)||0, cmp=Number(p.cmp)||0, price=Number(p.price)||0, value=Number(p.value)||qty*price;
-      const buyFees=remainingBuyFees(name,qty);
-      const old=store[key]||{};
-      const sellPrice=Number.isFinite(num(old.sellPrice))?num(old.sellPrice):price;
-      const sellFee=Number.isFinite(num(old.sellFee))?Math.max(0,num(old.sellFee)):0;
-      const cost=qty*cmp+buyFees, net=qty*sellPrice-sellFee, netPL=net-cost;
-      return '<tr data-pos-key="'+esc(key)+'">'+
-        '<td><b>'+esc(name)+'</b></td>'+
-        '<td>'+qty.toLocaleString('fr-FR',{maximumFractionDigits:3})+'</td>'+
-        '<td>'+money(cmp)+'</td>'+
-        '<td>'+money(price)+'</td>'+
-        '<td>'+money(value)+'</td>'+
-        '<td class="'+cls(Number(p.pl))+'">'+signed(Number(p.pl))+'</td>'+
-        '<td>'+money(buyFees)+'<span class="pos-sub">coût achat: '+money(cost)+'</span></td>'+
-        '<td><input class="pos-sim-input" data-field="sellPrice" data-key="'+esc(key)+'" type="number" step="0.01" value="'+(Number.isFinite(sellPrice)?sellPrice.toFixed(2):'')+'"></td>'+
-        '<td><input class="pos-sim-input" data-field="sellFee" data-key="'+esc(key)+'" type="number" min="0" step="0.01" value="'+sellFee.toFixed(2)+'"></td>'+
-        '<td class="pos-net">'+money(net)+'<span class="pos-sub">après frais de vente</span></td>'+
-        '<td class="pos-net '+cls(netPL)+'">'+signed(netPL)+'<span class="pos-sub">achat + vente</span></td>'+
-      '</tr>';
-    }).join('') || '<tr><td colspan="11">Aucune position pour le compte '+esc(a)+'.</td></tr>';
-    body.querySelectorAll('.pos-sim-input').forEach(inp=>inp.addEventListener('change',function(){
-      const all=sims(),k=this.dataset.key;all[k]=all[k]||{};all[k][this.dataset.field]=num(this.value);saveSims(all);render();
-    }));
-  }
-  function patch(){try{render()}catch(e){console.warn('Positions fees patch',e)}}
-  window.renderPositionsFeesSale=patch;
-  document.addEventListener('DOMContentLoaded',()=>{patch();setTimeout(patch,100);setTimeout(patch,500)});
-  window.addEventListener('accountchanged',()=>setTimeout(patch,0));
-  window.addEventListener('accountdataupdated',()=>setTimeout(patch,0));
-  // The importer and account switchers in V76 render asynchronously; one lightweight
-  // periodic refresh keeps the table synchronized without a MutationObserver loop.
-  let last='';
-  setInterval(()=>{const st=state(),sig=JSON.stringify([account(),st.positions,st.sourceDate]);if(sig!==last){last=sig;patch()}},1000);
-})();
-</script>
-
-
-<!-- V76 FINAL IMPORT ROUTER / ACCOUNT STATUS FIX -->
-<script id="V76_FINAL_IMPORT_ROUTER_FIX">
-(function(){
-  'use strict';
-  const $=id=>document.getElementById(id);
-  const read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};
-  const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-  const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
-  const esc=s=>clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  const money=n=>(Number(n)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';
-  const account=()=>String($('mainPdfAccount')?.value||localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
-
-  function refreshCards(){
-    const ops=Array.isArray(read('portfolioOperations',[]))?read('portfolioOperations',[]):[];
-    const count=a=>ops.filter(o=>String(o.account||'').toUpperCase()===a).length;
-    const p=$('peaAccountSummary'),c=$('ctoAccountSummary');
-    const pc=count('PEA'),cc=count('CTO');
-    if(p)p.textContent=pc+' opération'+(pc===1?'':'s');
-    if(c){
-      const f=read('ctoFiscaliteV1',null),syn=read('ctoSyntheseV1',null),st=read('portfolioStateByAccountV1',{CTO:{}})?.CTO||{};
-      const extras=[];
-      if(f&&String(f.account||'').toUpperCase()==='CTO')extras.push('Fiscalité ✓');
-      if(syn&&String(syn.account||'').toUpperCase()==='CTO')extras.push('Synthèse ✓');
-      if(Array.isArray(st.positions)&&st.positions.length)extras.push(st.positions.length+' position'+(st.positions.length===1?'':'s'));
-      c.textContent=cc+' opération'+(cc===1?'':'s')+(extras.length?' • '+extras.join(' • '):'');
-    }
-  }
-  window.refreshAccountCards=refreshCards;
-
-  async function pdfLines(file){
-    if(typeof pdfjsLib==='undefined')throw new Error('Lecteur PDF indisponible. Recharge la page avec Internet.');
-    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
-    const out=[];
-    for(let p=1;p<=pdf.numPages;p++){
-      const c=await (await pdf.getPage(p)).getTextContent();
-      out.push(c.items.map(i=>i.str||'').join(' ').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim());
-    }
-    return out.filter(Boolean);
-  }
-  function kind(file,lines){
-    const n=String(file.name||'').toLowerCase(),t=lines.join(' ').toLowerCase();
-    if(/fiscal/.test(n)||/tpcvm|etat des prelevements|etat des prélèvements|prélèvements action/.test(t))return'fiscalite';
-    if(/synth/.test(n)||/synthese du portefeuille|synthèse du portefeuille|total des avoirs/.test(t))return'synthese';
-    if(/historique|mouvements/.test(n)||/historique du compte/.test(t)||(/date\s+op[ée]ration/.test(t)&&/montant\s+net/.test(t)))return'historique';
-    if(/titres/.test(n)||/portefeuille titres/.test(t)||(/cours\/vl/.test(t)&&/prmp/.test(t)&&/poids/.test(t)))return'titres';
-    return'unknown';
-  }
-  function saveHistory(ops,file,a){
-    let old=read('portfolioOperations',[]);if(!Array.isArray(old))old=[];
-    const key=o=>[o.account,o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|').toUpperCase();
-    const seen=new Set(old.map(key));let added=0;
-    for(const o0 of ops){const o={...o0,account:a,source:file.name,importedAt:new Date().toISOString()};const k=key(o);if(!seen.has(k)){old.push(o);seen.add(k);added++;}}
-    write('portfolioOperations',old);return added;
-  }
-  function updateAfter(){
-    refreshCards();
-    ['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','renderImportedUnified','renderUnifiedJournal','renderWafaHistoryAmounts','renderFeeTracking','renderFiscaliteSafe','renderImportStatus'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}});
-    if(typeof window.renderUltimateCtoIsolation==='function'){try{window.renderUltimateCtoIsolation()}catch(e){}}
-  }
-
-  async function run(){
-    const input=$('mainPdfFile'),msg=$('mainPdfMsg'),preview=$('mainPdfPreview'),a=account();
-    const files=[...(input?.files||[])];
-    if(!files.length){if(msg)msg.innerHTML='<span class="red">Choisis le ou les PDF Wafa Bourse à importer.</span>';return;}
-    localStorage.setItem('currentAccount',a);
-    const report=[];
-    try{
-      for(const file of files){
-        const lines=await pdfLines(file), k=kind(file,lines);
-        if(k==='fiscalite'){
-          if(a!=='CTO')throw new Error('Le PDF Fiscalité est réservé au compte CTO.');
-          if(typeof window.parseFiscal!=='function')throw new Error('Moteur Fiscalité indisponible.');
-          const d=window.parseFiscal(lines);
-          write('ctoFiscaliteV1',{...d,account:'CTO',source:file.name,importedAt:new Date().toISOString()});
-          report.push('Fiscalité ✓');
-          // IMPORTANT: Fiscalité is not an operation file. Existing Journal/operations are preserved.
-        }else if(k==='synthese'){
-          if(a!=='CTO')throw new Error('Le PDF Synthèse est réservé au compte CTO.');
-          if(typeof window.parseSynth!=='function')throw new Error('Moteur Synthèse indisponible.');
-          const d=window.parseSynth(lines);
-          write('ctoSyntheseV1',{...d,account:'CTO',source:file.name,importedAt:new Date().toISOString()});
-          const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{};by.CTO=by.CTO||{};
-          by.CTO={...by.CTO,synthese:d,cash:d.soldeComptable,totalAvoirs:d.totalAvoirs,valuation:d.totalAvoirs};
-          write('portfolioStateByAccountV1',by);write('portfolioStateV1',by.CTO);
-          report.push('Synthèse ✓');
-        }else if(k==='historique'){
-          if(typeof window.parseHistory!=='function')throw new Error('Moteur Historique indisponible.');
-          const ops=window.parseHistory(lines,a,file)||[];
-          if(!ops.length)throw new Error('Historique détecté mais aucune opération reconnue.');
-          const added=saveHistory(ops,file,a);
-          report.push('Historique '+ops.length+' opérations / '+added+' nouvelles ✓');
-        }else if(k==='titres'){
-          if(typeof window.__V44_PORTFOLIO_RUN!=='function')throw new Error('Moteur Titres indisponible.');
-          await window.__V44_PORTFOLIO_RUN(file,msg,preview);
-          report.push('Titres / positions ✓');
-        }else{
-          throw new Error('Type de PDF non reconnu : '+file.name);
-        }
-      }
-      updateAfter();
-      if(msg)msg.innerHTML='<span class="green"><b>Import automatique terminé ✓</b></span><div style="margin-top:7px">'+report.map(x=>'<div>• '+esc(x)+'</div>').join('')+'</div>';
-      if(preview && files.length===1 && kind(files[0],await pdfLines(files[0]))==='fiscalite') preview.innerHTML='';
-    }catch(e){
-      if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(e.message||e)+'</span>';
-      console.error(e);
-    }
-  }
-
-  function install(){
-    const old=[...document.querySelectorAll('#mainWafaPdfImporter button')].find(b=>/importer automatiquement/i.test(b.textContent||''));
-    if(!old)return;
-    const btn=old.cloneNode(true);btn.removeAttribute('onclick');btn.id='mainWafaImportFinal';old.replaceWith(btn);
-    btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();run();},false);
-    const input=$('mainPdfFile');if(input)input.setAttribute('multiple','multiple');
-    window.importMainWafaPdf=run;
-  }
-  function boot(){install();setTimeout(install,300);setTimeout(install,1000);setTimeout(refreshCards,50);setTimeout(refreshCards,500);}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
-})();
-</script>
-
 </body>
 
 <script id="FINAL_CTO_EMPTY_LOCK">
@@ -5314,64 +5094,156 @@ setTimeout(install,100);setTimeout(install,500);setTimeout(install,1000);
 })();
 </script>
 
-<style id="V76_POSITIONS_LAYOUT">
-/* V76 — Positions: give the table the full dashboard width and make it easier to read. */
-#positionsSectionV76{
-  width:100%;
-  max-width:none;
-  grid-column:1 / -1;
-}
-#positionsSectionV76 table{
-  width:100%;
-  min-width:760px;
-  table-layout:auto;
-  font-size:14px;
-}
-#positionsSectionV76 th,
-#positionsSectionV76 td{
-  padding:12px 14px;
-  white-space:nowrap;
-}
-#positionsSectionV76 th:first-child,
-#positionsSectionV76 td:first-child{
-  min-width:230px;
-  text-align:left;
-}
-#positionsSectionV76 th:nth-child(2),#positionsSectionV76 td:nth-child(2){min-width:65px}
-#positionsSectionV76 th:nth-child(n+3),#positionsSectionV76 td:nth-child(n+3){min-width:120px}
-@media(max-width:760px){
-  #positionsSectionV76{overflow-x:auto}
-  #positionsSectionV76 table{min-width:720px;font-size:13px}
-  #positionsSectionV76 th,#positionsSectionV76 td{padding:10px 12px}
-}
-</style>
-
-<script id="V76_SUMMARY_SYNC">
+<!-- V76 FINAL: authoritative Wafa Bourse importer + real Positions trade calculator. Built on V75. -->
+<script id="V76_FINAL_STABLE_PATCH">
 (function(){
-  'use strict';
-  function read(k,fb){try{var v=JSON.parse(localStorage.getItem(k)||'null');return v==null?fb:v}catch(e){return fb}}
-  function money(v){var n=Number(v);return Number.isFinite(n)?n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD':'0,00 MAD'}
-  function render(){
-    var account=String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
-    var by=read('portfolioStateByAccountV1',{}), s=account==='CTO'?(read('ctoSyntheseV1',null)||(by.CTO&&by.CTO.synthese)):((by.PEA&&by.PEA.synthese)||null);
-    var card=[].slice.call(document.querySelectorAll('.section.card')).find(function(x){return /Résumé/.test((x.querySelector('h2')||{}).textContent||'')});
-    if(!card)return;
-    var items=card.querySelectorAll('.item');
-    if(!s){
-      if(items[0])items[0].querySelector('b').textContent='0,00 MAD';
-      if(items[1])items[1].querySelector('b').textContent='0,00 MAD';
-      if(items[2])items[2].querySelector('b').textContent='0,00 MAD';
-      return;
-    }
-    var vals=[s.latentes,s.realisees,s.totalValues];
-    [0,1,2].forEach(function(i){if(items[i]&&items[i].querySelector('b'))items[i].querySelector('b').textContent=money(vals[i]);});
-    if(items[3]&&items[3].querySelector('b'))items[3].querySelector('b').textContent=money(0);
+'use strict';
+const $=id=>document.getElementById(id);
+const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+const esc=s=>clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};
+const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const account=()=>String($('mainPdfAccount')?.value||localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+function num(v){let x=clean(v).replace(/%/g,'').replace(/\s/g,'');if(!x)return 0;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'');}else if(x.includes(','))x=x.replace(',','.');x=x.replace(/[^0-9.\-]/g,'');return Number(x)||0;}
+function money(v){return Number(v||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';}
+function signed(v){const n=Number(v)||0;return (n>=0?'+':'−')+Math.abs(n).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';}
+async function pdfLines(file){
+ if(typeof window.readWafaPdfText==='function') return await window.readWafaPdfText(file);
+ if(typeof pdfjsLib==='undefined') throw new Error('Lecteur PDF indisponible. Recharge la page.');
+ const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise, out=[];
+ for(let p=1;p<=pdf.numPages;p++){const c=await (await pdf.getPage(p)).getTextContent();out.push(clean(c.items.map(x=>x.str||'').join(' ')));}
+ return out.filter(Boolean);
+}
+function classify(file,lines){
+ const n=String(file?.name||'').toLowerCase(),t=lines.map(clean).join(' ').toLowerCase();
+ if(/fiscal/.test(n)||/tpcvm|etat des prélèvements|etat des prelevements/.test(t))return 'fiscalite';
+ if(/synth/.test(n)||/synthèse du portefeuille|synthese du portefeuille|synthèse compte/.test(t))return 'synthese';
+ if(/historique|mouvements/.test(n)||/historique du compte/.test(t))return 'historique';
+ if(/titres|portefeuille/.test(n)||/portefeuille titres/.test(t)||(/cours\/vl/.test(t)&&/prmp/.test(t)&&/poids/.test(t)))return 'titres';
+ return 'unknown';
+}
+function parseDate(lines){
+ const t=lines.join(' '),m=t.match(/\b(\d{1,2})\s+([A-Za-zéû.]+)\s+(\d{4})\b/i), months={jan:1,fév:2,fev:2,mar:3,avr:4,mai:5,juin:6,juil:7,aou:8,aoû:8,sep:9,oct:10,nov:11,dec:12};
+ if(!m)return new Date().toISOString().slice(0,10);const k=clean(m[2]).normalize('NFD').replace(/[\u0300-\u036f]/g,'').slice(0,3).toLowerCase();return months[k]?m[3]+'-'+String(months[k]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0'):new Date().toISOString().slice(0,10);
+}
+function parseTitres(lines){
+ const a=lines.map(clean).filter(Boolean), text=a.join(' ');
+ if(!/portefeuille\s+titres/i.test(text)||!/prmp/i.test(text)||!/poids/i.test(text))return null;
+ const rows=[];
+ // Wafa Bourse row: Valeur | Quantité | Cours/VL | Montant | PRMP | Perf. | +/- Values latentes | Poids
+ const rowRe=/^(.+?)\s+(\d+(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?[\d\s.,]+)%\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)$/;
+ for(const line of a){
+  if(/^totaux\b/i.test(line)||/^(valeur|quantité|cours\/vl|montant|prmp|perf|poids|avertissement)\b/i.test(line))continue;
+  const m=line.match(rowRe);if(!m)continue;
+  const r={name:clean(m[1]),qty:num(m[2]),price:num(m[3]),value:num(m[4]),cmp:num(m[5]),perf:num(m[6]),pl:num(m[7]),weight:num(m[8])};
+  if(r.name&&[r.qty,r.price,r.value,r.cmp,r.perf,r.pl,r.weight].every(Number.isFinite)&&!/^(totaux|quantité|cours\/vl|montant|prmp)$/i.test(r.name))rows.push(r);
+ }
+ // Fallback for PDFs where the row is split differently.
+ if(!rows.length){
+  for(const name of ['AKDITAL','TOTALENERGIES']){
+   const re=new RegExp('\\b'+name+'\\b\\s+(\\d+(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)\\s+(-?[\\d\\s.,]+)%\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)\\s+(\\d+(?:[.,]\\d+)?)','i');
+   const m=text.match(re);if(m)rows.push({name,qty:num(m[1]),price:num(m[2]),value:num(m[3]),cmp:num(m[4]),perf:num(m[5]),pl:num(m[6]),weight:num(m[7])});
   }
-  window.renderAccountSummaryV76=render;
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render);else render();
-  window.addEventListener('accountdataupdated',function(){setTimeout(render,20)});
-  window.addEventListener('accountchanged',function(){setTimeout(render,20)});
-  setTimeout(render,300);
+ }
+ if(!rows.length)return null;
+ let total=null;
+ const tm=text.match(/\bTotaux\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(-?[\d\s.,]+)%\s+(-?\d[\d\s]*(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)/i);
+ if(tm)total={value:num(tm[1]),cmp:num(tm[2]),perf:num(tm[3]),pl:num(tm[4]),weight:num(tm[5])};
+ return {rows,total,sourceDate:parseDate(a)};
+}
+function parseSynthese(lines){
+ const a=lines.map(clean).filter(Boolean), text=a.join(' ');
+ const get=(label)=>{const m=text.match(new RegExp(label+'\\s+(-?\\d[\\d\\s]*(?:[.,]\\d+)?)','i'));return m?num(m[1]):null};
+ return {account:account(),sourceDate:parseDate(a),soldeComptable:get('Solde\\s+comptable'),valorisationActions:get('Valorisation\\s+actions'),valorisationOPCVM:get('Valorisation\\s+OPCVM'),totalAvoirs:get('Total\\s+des\\s+avoirs'),latentes:get('\\+/-latentes'),realisees:get('\\+/-réalisées'),totalValues:get('\\+/-\\s*Values\\s+totales')};
+}
+function saveTitres(d,file,a){
+ const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{};by.PEA=by.PEA||{};by.CTO=by.CTO||{};const old=by[a]||{};
+ const positions=d.rows.map(r=>({name:r.name,qty:r.qty,cmp:r.cmp,prmp:r.cmp,price:r.price,course:r.price,value:r.value,montant:r.value,perf:r.perf,performance:r.perf,pl:r.pl,gainLoss:r.pl,weight:r.weight,poids:r.weight}));
+ const valuation=Number.isFinite(d.total?.value)?d.total.value:positions.reduce((s,p)=>s+p.value,0), performance=Number.isFinite(d.total?.perf)?d.total.perf:null, date=d.sourceDate;
+ const snaps=Array.isArray(old.snapshots)?old.snapshots.slice():[];const idx=snaps.findIndex(x=>x.date===date);const snap={date,value:valuation};if(idx>=0)snaps[idx]=snap;else snaps.push(snap);snaps.sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+ const next={...old,positions,valuation,cash:Number.isFinite(Number(old.cash))?Number(old.cash):null,performance,source:file.name,sourceDate:date,snapshots:snaps};by[a]=next;write('portfolioStateByAccountV1',by);write('portfolioStateV1',next);localStorage.setItem('currentAccount',a);
+ write('wafaLastImport',{source:file.name,importedAt:new Date().toISOString(),account:a,documentType:'Portefeuille titres',rows:positions,valuation,performance,prmpTotal:d.total?.cmp??positions.reduce((s,p)=>s+p.qty*p.cmp,0),latent:d.total?.pl??positions.reduce((s,p)=>s+p.pl,0),sourceDate:date});
+ return next;
+}
+function saveSynth(d,file){
+ const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{};by.PEA=by.PEA||{};by.CTO=by.CTO||{};const old=by.CTO||{};
+ const next={...old,synthese:d,cash:d.soldeComptable,totalAvoirs:d.totalAvoirs,account:'CTO'};by.CTO=next;write('portfolioStateByAccountV1',by);write('portfolioStateV1',next);write('ctoSyntheseV1',{...d,source:file.name,importedAt:new Date().toISOString()});localStorage.setItem('currentAccount','CTO');
+}
+function saveHistory(ops,file,a){
+ const old=read('portfolioOperations',[]),seen=new Set(old.map(o=>[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|')));let added=0;
+ for(const o0 of ops||[]){const o={...o0,account:a,source:file.name};const k=[o.account,o.date,o.type,o.value,o.qty,o.price,o.net].join('|');if(!seen.has(k)){seen.add(k);old.push(o);added++;}}
+ write('portfolioOperations',old);return added;
+}
+function parseFiscal(lines){
+ const text=lines.join(' '),mA=text.match(/Total\s+Actions\s+(-?[\d\s.,]+)\s+(-?[\d\s.,]+)/i),mR=text.match(/Total\s+Restitution\s+(-?[\d\s.,]+)/i);
+ return {account:'CTO',sourceDate:parseDate(lines),totalActions:mA?num(mA[1]):0,tpcvm:mA?num(mA[2]):0,totalRestitution:mR?num(mR[1]):0};
+}
+function refreshAll(){
+ ['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards','renderImportedUnified','renderUnifiedJournal','renderWafaHistoryAmounts','renderFeeTracking','renderSnapshots','renderPositions','renderAccountSynthesis','renderAccountAllocation'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}});
+ try{window.dispatchEvent(new Event('accountchanged'));window.dispatchEvent(new Event('accountdataupdated'))}catch(e){}
+}
+function renderPreview(rows,preview){if(!preview)return;preview.innerHTML='<div class="v76-preview-table"><table><thead><tr><th>Valeur</th><th>Qté</th><th>CMP / PRMP</th><th>Cours/VL</th><th>Valorisation</th><th>Perf.</th><th>+/- latent</th><th>Poids</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+r.qty+'</td><td>'+money(r.cmp)+'</td><td>'+money(r.price)+'</td><td>'+money(r.value)+'</td><td>'+Number(r.perf).toFixed(2)+'%</td><td class="'+(r.pl<0?'red':'green')+'">'+signed(r.pl)+'</td><td>'+Number(r.weight).toFixed(2)+'%</td></tr>').join('')+'</tbody></table></div><div class="hint" style="margin-top:8px">Portefeuille titres reconnu ✓ — '+rows.length+' position(s).</div>';}
+async function importV76(e){
+ if(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();}
+ const input=$('mainPdfFile'),msg=$('mainPdfMsg'),preview=$('mainPdfPreview'),files=[...(input?.files||[])],a=account();
+ if(!files.length){if(msg)msg.innerHTML='<span class="red">Choisis le PDF Wafa Bourse.</span>';return;}
+ try{
+  localStorage.setItem('currentAccount',a);const report=[];let lastRows=null;
+  for(const file of files){
+   const lines=await pdfLines(file), k=classify(file,lines);
+   if(k==='titres'){
+    const d=parseTitres(lines);if(!d)throw new Error('PDF Titres détecté, mais aucune position exploitable n’a été reconnue.');saveTitres(d,file,a);lastRows=d.rows;report.push('Titres : '+d.rows.length+' positions ✓');
+   }else if(k==='synthese'){
+    if(a!=='CTO')throw new Error('La Synthèse Wafa Bourse est affectée au compte CTO.');const d=parseSynthese(lines);saveSynth(d,file);report.push('Synthèse ✓');
+   }else if(k==='historique'){
+    if(typeof window.parseHistory!=='function')throw new Error('Moteur Historique indisponible.');const ops=window.parseHistory(lines,a,file)||[];if(!ops.length)throw new Error('Historique détecté mais aucune opération reconnue.');report.push('Historique : '+ops.length+' opérations / '+saveHistory(ops,file,a)+' nouvelles ✓');
+   }else if(k==='fiscalite'){
+    if(a!=='CTO')throw new Error('La Fiscalité Wafa Bourse est affectée au compte CTO.');const d=parseFiscal(lines);write('ctoFiscaliteV1',{...d,source:file.name,importedAt:new Date().toISOString()});report.push('Fiscalité ✓');
+   }else report.push(file.name+' : type non reconnu');
+  }
+  if(lastRows)renderPreview(lastRows,preview);else if(preview)preview.innerHTML='';
+  refreshAll();
+  if(msg)msg.innerHTML='<span class="green"><b>Import automatique terminé ✓</b></span><div style="margin-top:8px">'+report.map(x=>'<div>• '+esc(x)+'</div>').join('')+'</div>';
+ }catch(err){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(err.message||err)+'</span>';if(preview)preview.innerHTML='';}
+}
+// Strong capture listener: it wins over all older V75/V76 onclick routers and never calls __V44_PORTFOLIO_RUN.
+function installImporter(){
+ const input=$('mainPdfFile');if(input){input.multiple=true;input.accept='application/pdf,.pdf';}
+ const sec=$('mainWafaPdfImporter')||document;
+ const btn=[...sec.querySelectorAll('button')].find(b=>/importer automatiquement/i.test(b.textContent||''));
+ if(btn){btn.removeAttribute('onclick');btn.dataset.v76='1';}
+ window.importMainWafaPdf=importV76;
+ if(!window.__V76_CAPTURE){document.addEventListener('click',function(ev){const b=ev.target?.closest?.('button');if(!b||!/(importer automatiquement)/i.test(b.textContent||''))return;const sec2=$('mainWafaPdfImporter');if(sec2&&!sec2.contains(b))return;ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation();importV76(ev);},true);window.__V76_CAPTURE=true;}
+}
+// Wider, readable Positions table + fee/sale calculator.
+function tradeMeta(a,name){const all=read('positionTradeMetaV76',{});all[a]=all[a]||{};all[a][name]=all[a][name]||{};return all[a][name];}
+function saveMeta(a,name,m){const all=read('positionTradeMetaV76',{});all[a]=all[a]||{};all[a][name]={...(all[a][name]||{}),...m};write('positionTradeMetaV76',all);}
+function renderPositionsV76(){
+ const a=String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA',by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{},ps=Array.isArray(by[a]?.positions)?by[a].positions:[];
+ const sec=[...document.querySelectorAll('.section.card')].find(s=>(s.querySelector('h2')?.textContent||'').includes('Positions'));if(!sec)return;sec.classList.add('positions-section');const table=sec.querySelector('table');if(!table)return;table.classList.add('position-table-v76');
+ const th=table.querySelector('thead tr');if(th)th.innerHTML='<th>Valeur</th><th>Qté</th><th>CMP</th><th>Cours/VL</th><th>Valorisation</th><th>+/- latent</th><th>Frais achat</th><th>Prix vente</th><th>Frais vente</th><th>Net après vente</th><th>+/- net après frais</th>';
+ const body=table.querySelector('tbody');if(!body)return;if(!ps.length){body.innerHTML='<tr><td colspan="11">Aucune position pour le compte '+a+'.</td></tr>';return;}
+ body.innerHTML=ps.map(p=>{const m=tradeMeta(a,p.name),buy=Number(m.buyFee)||0,sell=Number(m.sellFee)||0,sellPrice=Number.isFinite(Number(m.sellPrice))?Number(m.sellPrice):Number(p.price)||0,net=Number(p.qty||0)*sellPrice-sell,netpl=net-(Number(p.qty||0)*Number(p.cmp||0)+buy);return '<tr><td><b>'+esc(p.name)+'</b></td><td>'+Number(p.qty||0).toLocaleString('fr-FR',{maximumFractionDigits:3})+'</td><td>'+money(p.cmp)+'</td><td>'+money(p.price)+'</td><td>'+money(p.value)+'</td><td class="'+(Number(p.pl)>=0?'green':'red')+'">'+signed(p.pl)+'</td><td><input class="v76-fee-buy" data-name="'+esc(p.name)+'" type="number" step="0.01" value="'+buy.toFixed(2)+'"></td><td><input class="v76-sale-price" data-name="'+esc(p.name)+'" type="number" step="0.01" value="'+sellPrice.toFixed(2)+'"></td><td><input class="v76-fee-sell" data-name="'+esc(p.name)+'" type="number" step="0.01" value="'+sell.toFixed(2)+'"></td><td>'+money(net)+'</td><td class="'+(netpl>=0?'green':'red')+'">'+signed(netpl)+'</td></tr>';}).join('');
+}
+function installPositionTools(){
+ const sec=[...document.querySelectorAll('.section.card')].find(s=>(s.querySelector('h2')?.textContent||'').includes('Positions'));if(!sec||sec.dataset.v76Tools)return;sec.dataset.v76Tools='1';
+ sec.addEventListener('input',function(e){const t=e.target;if(!t.matches('input[data-name]'))return;const a=String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA',name=t.dataset.name;const m={};if(t.classList.contains('v76-fee-buy'))m.buyFee=num(t.value);if(t.classList.contains('v76-sale-price'))m.sellPrice=num(t.value);if(t.classList.contains('v76-fee-sell'))m.sellFee=num(t.value);saveMeta(a,name,m);renderPositionsV76();});
+ renderPositionsV76();
+}
+function patchDashboard(){
+ const old=window.renderAccountDashboard;if(typeof old==='function'&&!old.__v76Wrapped){const wrapped=function(){const r=old.apply(this,arguments);setTimeout(()=>{renderPositionsV76();const a=String(localStorage.getItem('currentAccount')||'PEA').toUpperCase();if(a==='CTO'){const s=read('ctoSyntheseV1',null);if(s){const set=(label,val,cls)=>{const c=[...document.querySelectorAll('.cards .card')].find(x=>(x.querySelector('.label')?.textContent||'').toUpperCase().includes(label));const n=c?.querySelector('.num');if(n){n.textContent=money(val);if(cls)n.className='num '+cls}};set('VALORISATION TOTALE',s.totalAvoirs);set('CASH DISPONIBLE',s.soldeComptable);set('GAIN / PERTE LATENT',s.latentes,Number(s.latentes)<0?'red':'green');}}},0);return r};wrapped.__v76Wrapped=true;window.renderAccountDashboard=wrapped;}
+}
+function hideOldMainSettings(){document.querySelectorAll('.section.card').forEach(s=>{const t=(s.querySelector('h2')?.textContent||'').toLowerCase();if(t.includes('réglages principaux'))s.style.display='none';});}
+function boot(){installImporter();installPositionTools();patchDashboard();hideOldMainSettings();setTimeout(installImporter,250);setTimeout(installPositionTools,500);setTimeout(patchDashboard,500);setTimeout(()=>{renderPositionsV76();hideOldMainSettings()},1000);}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
 </script>
+<style id="V76_FINAL_STYLES">
+.positions-section{overflow-x:auto}
+.positions-section .position-table-v76{min-width:1180px;font-size:13px}
+.positions-section .position-table-v76 th,.positions-section .position-table-v76 td{padding:11px 10px;white-space:nowrap;vertical-align:middle}
+.positions-section .position-table-v76 input{width:105px;min-width:105px;padding:8px 7px;font-size:13px}
+.positions-section .position-table-v76 th{font-size:10px}
+.v76-preview-table{overflow-x:auto}.v76-preview-table table{min-width:900px}
+</style>
 
