@@ -3429,7 +3429,7 @@ window.renderImportedUnified=function(){
   window.addEventListener('accountchanged',clear);window.addEventListener('storage',clear);
 })();
 </script>
-\n<script id="TOP_IMPORTER_BOTH_ACCOUNTS_V30">
+<script id="TOP_IMPORTER_BOTH_ACCOUNTS_V30">
 (function(){
   function currentAccount(){
     return (localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
@@ -3460,7 +3460,8 @@ window.renderImportedUnified=function(){
   window.addEventListener('load',moveImporterTop);
   window.addEventListener('accountchanged',syncTopImporter);
 })();
-</script>\n
+</script>
+
 <!-- ================= V35 FIX: ROBUST WAFA PORTFOLIO HEADER/ROWS ================= -->
 <script id="V35_WAFA_PORTFOLIO_IMPORT_FIX">
 (function(){
@@ -3949,7 +3950,7 @@ window.readWafaPdfOperations=importFinal;
 })();
 </script>
 
-\n<script id="FINAL_WAFA_DOCUMENT_ROUTER_V47">
+<script id="FINAL_WAFA_DOCUMENT_ROUTER_V47">
 (function(){
 'use strict';
 const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
@@ -4008,7 +4009,7 @@ window.importMainWafaPdf=function(){return route(document.getElementById('mainPd
 window.readWafaPdfOperations=function(){return route(document.getElementById('pdfOpsFile')?.files?.[0],'pdfOpsAccount','pdfOpsMsg','pdfOpsPreview');};
 window.importWafa=window.readWafaPdfOperations;
 })();
-</script>\n<script id="V49_JOURNAL_NET_FIX">
+</script><script id="V49_JOURNAL_NET_FIX">
 (function(){
   function n(v){ const x=Number(v); return Number.isFinite(x)?x:0; }
   function money(v){ return n(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD'; }
@@ -4351,7 +4352,64 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   };
 })();
 </script>
-</body>
+
+<script id="V76_LAST_SYNTH_BIND_FIX">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};
+const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+function fmt(v){return Number(v||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';}
+function getSynth(){
+ const s=read('ctoSyntheseV1',null); if(s) return s;
+ const by=read('portfolioStateByAccountV1',{}); return by?.CTO?.synthese||null;
+}
+function paint(){
+ const s=getSynth(); if(!s) return;
+ const vals=[s.soldeComptable,s.valorisationActions,s.valorisationOPCVM,s.totalAvoirs,s.latentes,s.realisees,s.totalValues];
+ ['synSolde','synActions','synOpcvm','synAvoirs','synLatentes','synRealisees','synValues'].forEach((id,i)=>{const e=$(id);if(e)e.textContent=fmt(vals[i]);});
+ // Persist the seven display values too, because legacy dashboard renderers read these keys.
+ ['synSolde','synActions','synOpcvm','synAvoirs','synLatentes','synRealisees','synValues'].forEach((k,i)=>write(k,Number(vals[i]||0)));
+ const total=Number(s.totalAvoirs)||Number(s.valorisationActions||0)+Number(s.valorisationOPCVM||0)+Number(s.soldeComptable||0);
+ const parts=[Number(s.valorisationActions||0),Number(s.valorisationOPCVM||0),Number(s.soldeComptable||0)];
+ ['allocationActionsPct','allocationOpcvmPct','allocationCashPct'].forEach((id,i)=>{const e=$(id);if(e)e.textContent=total?(parts[i]/total*100).toFixed(1)+'%':'0%';});
+ const ce=$('allocationTotal');if(ce)ce.textContent=fmt(total);
+ const canvas=$('accountAllocationChart');if(canvas&&canvas.getContext){const dpr=window.devicePixelRatio||1,size=230;canvas.width=size*dpr;canvas.height=size*dpr;const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,size,size);let a=0,colors=['#eab308','#d66a4a','#4f8df7'];ctx.lineWidth=32;ctx.lineCap='butt';if(total<=0){ctx.beginPath();ctx.strokeStyle='rgba(255,255,255,.12)';ctx.arc(size/2,size/2,78,0,Math.PI*2);ctx.stroke();}else{parts.forEach((v,i)=>{if(v<=0)return;const end=a+v/total*Math.PI*2;ctx.beginPath();ctx.strokeStyle=colors[i];ctx.arc(size/2,size/2,78,a,end);ctx.stroke();a=end;});}}
+}
+window.renderAccountSynthesis=paint;window.renderAccountAllocation=paint;
+function bind(){
+ const sec=$('mainWafaPdfImporter')||document;
+ const old=[...sec.querySelectorAll('button')].find(b=>/importer automatiquement/i.test(b.textContent||''));
+ if(old&&!old.dataset.lastSynthFix){
+   const b=old.cloneNode(true); b.removeAttribute('onclick'); b.dataset.lastSynthFix='1'; old.replaceWith(b);
+   b.addEventListener('click',async function(e){
+     e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();
+     const f=$('mainPdfFile')?.files?.[0],msg=$('mainPdfMsg');
+     if(!f){if(msg)msg.innerHTML='<span class="red">Choisis le PDF Wafa Bourse.</span>';return;}
+     const name=(f.name||'').toLowerCase();
+     if(!name.includes('synth')) return;
+     try{
+       const lines=await window.readWafaPdfText(f);
+       const t=String(lines.join(' ')).replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+       const m=t.match(/Total\s+des\s+avoirs\s+(-?\d[\d\s.,]*)/i);
+       if(!m) throw new Error('Total des avoirs introuvable.');
+       const nums=[]; const re=/-?\d[\d\s]*(?:[.,]\d+)?/g; let x;
+       while((x=re.exec(t.slice(m.index)))&&nums.length<7) nums.push(Number(x[0].replace(/\s/g,'').replace(',','.')));
+       if(nums.length<7) throw new Error('Les valeurs de la Synthèse ne sont pas toutes lisibles.');
+       const s={account:'CTO',source:f.name,sourceDate:'2026-10-06',totalAvoirs:nums[0],soldeComptable:nums[1],valorisationActions:nums[2],valorisationOPCVM:nums[3],realisees:nums[4],latentes:nums[5],totalValues:nums[6]};
+       write('ctoSyntheseV1',s);const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}});by.CTO={...(by.CTO||{}),synthese:s,cash:s.soldeComptable,totalAvoirs:s.totalAvoirs,valuation:s.valorisationActions+s.valorisationOPCVM,source:f.name,sourceDate:s.sourceDate};write('portfolioStateByAccountV1',by);write('portfolioStateV1',by.CTO);localStorage.setItem('currentAccount','CTO');
+       paint(); if(msg)msg.innerHTML='<span class="green"><b>Import automatique terminé ✓</b></span><div style="margin-top:8px">• Synthèse ✓</div>';
+       [50,150,300,600,1000,1500].forEach(ms=>setTimeout(paint,ms));
+     }catch(err){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+String(err.message||err)+'</span>';}
+   },true);
+ }
+ paint();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();window.addEventListener('load',bind);window.addEventListener('accountchanged',()=>setTimeout(paint,20));window.addEventListener('accountdataupdated',()=>setTimeout(paint,20));
+})();
+</script>
+
+
 
 <script id="FINAL_CTO_EMPTY_LOCK">
 (function(){
@@ -4961,7 +5019,8 @@ window.parseHistory=function(lines,acct,fileName){
   return out;
 };
 })();
-</script>\n
+</script>
+
 <script id="V72_ACCOUNT_SYNTHESIS_RENDER">
 (function(){
   'use strict';
@@ -4989,7 +5048,7 @@ window.parseHistory=function(lines,acct,fileName){
   window.addEventListener('accountchanged',render);
 })();
 </script>
-</html>
+
 
 <!-- FINAL V71: standalone Wafa Titres importer. No dependency on __V44_PORTFOLIO_RUN. -->
 <script id="FINAL_V71_STANDALONE_TITRES_IMPORT">
@@ -5304,4 +5363,23 @@ function bind(){const sec=$('mainWafaPdfImporter')||document;const b=[...sec.que
 window.parseSynthV76Real=parseRealSynth;window.renderAccountSynthesis=renderReal;window.renderAccountAllocation=renderReal;window.addEventListener('accountchanged',()=>setTimeout(renderReal,20));window.addEventListener('accountdataupdated',()=>setTimeout(renderReal,20));if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();window.addEventListener('load',bind);setTimeout(bind,100);setTimeout(bind,500);setTimeout(bind,1200);
 })();
 </script>
-\n<script id="V76_ULTRA_SYNTH_FIX">\n(function(){\n'use strict';\nconst $=id=>document.getElementById(id);\nconst read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};\nconst write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));\nconst clean=s=>String(s??'').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();\nconst num=s=>{let x=clean(s).replace(/MAD/ig,'').replace(/\\s/g,'');if(!x)return 0;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\\./g,'').replace(',','.');else x=x.replace(/,/g,'');}else if(x.includes(','))x=x.replace(',','.');return Number(x.replace(/[^0-9.\\-]/g,''))||0};\nfunction extractSynth(lines){\n const t=clean((lines||[]).join(' '));\n const start=t.search(/Total\\s+des\\s+avoirs/i);\n if(start<0) throw new Error('Total des avoirs introuvable dans le PDF Synthèse.');\n const tail=t.slice(start);\n const rx=/-?\\d[\\d\\s]*(?:[.,]\\d+)?/g, a=[]; let m;\n while((m=rx.exec(tail)) && a.length<7) a.push(num(m[0]));\n if(a.length<7) throw new Error('Les 7 valeurs de la Synthèse ne sont pas lisibles.');\n return {account:'CTO',sourceDate:(t.match(/le\\s+(\\d{2})\\s+oct\\.?\\s+(\\d{4})/i)?(t.match(/le\\s+(\\d{2})\\s+oct\\.?\\s+(\\d{4})/i)[3]+'-10-'+t.match(/le\\s+(\\d{2})\\s+oct\\.?\\s+(\\d{4})/i)[1]):'2026-10-06'),totalAvoirs:a[0],soldeComptable:a[1],valorisationActions:a[2],valorisationOPCVM:a[3],realisees:a[4],latentes:a[5],totalValues:a[6]};\n}\nfunction paint(s){\n const vals=[s.soldeComptable,s.valorisationActions,s.valorisationOPCVM,s.totalAvoirs,s.latentes,s.realisees,s.totalValues];\n ['synSolde','synActions','synOpcvm','synAvoirs','synLatentes','synRealisees','synValues'].forEach((id,i)=>{const e=$(id);if(e)e.textContent=Number(vals[i]).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';});\n const total=s.totalAvoirs||((s.valorisationActions||0)+(s.valorisationOPCVM||0)+(s.soldeComptable||0));\n ['allocationActionsPct','allocationOpcvmPct','allocationCashPct'].forEach((id,i)=>{const e=$(id),v=[s.valorisationActions,s.valorisationOPCVM,s.soldeComptable][i];if(e)e.textContent=total?(v/total*100).toFixed(1)+'%':'0%';});\n const ce=$('allocationTotal');if(ce)ce.textContent=total.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';\n}\nasync function importSynthFinal(file){\n const lines=await window.readWafaPdfText(file); const s=extractSynth(lines);\n const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{}; by.CTO={...(by.CTO||{}),synthese:s,cash:s.soldeComptable,valuation:s.valorisationActions+s.valorisationOPCVM,totalAvoirs:s.totalAvoirs,source:file.name,sourceDate:s.sourceDate}; write('portfolioStateByAccountV1',by); write('portfolioStateV1',by.CTO); write('ctoSyntheseV1',s); localStorage.setItem('currentAccount','CTO'); paint(s);\n return s;\n}\nfunction bind(){\n const sec=$('mainWafaPdfImporter')||document; const old=[...sec.querySelectorAll('button')].find(b=>/importer automatiquement/i.test(b.textContent||'')); if(!old)return;\n const b=old.cloneNode(true); b.removeAttribute('onclick'); b.dataset.ultrasynth='1'; old.replaceWith(b);\n b.addEventListener('click',async function(e){e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();const f=$('mainPdfFile')?.files?.[0],msg=$('mainPdfMsg');if(!f){if(msg)msg.innerHTML='<span class="red">Choisis le PDF Wafa Bourse.</span>';return;}try{const s=await importSynthFinal(f);if(msg)msg.innerHTML='<span class="green"><b>Synthèse importée ✓</b></span>';[50,200,500,1000].forEach(ms=>setTimeout(()=>paint(s),ms));}catch(err){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+String(err.message||err)+'</span>';}});\n}\nfunction boot(){bind();const s=read('ctoSyntheseV1',null);if(s&&localStorage.getItem('currentAccount')==='CTO')paint(s);}\nif(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();window.addEventListener('load',boot);\n})();\n</script>\n
+<script id="V76_ULTRA_SYNTH_FIX">\n(function(){\n'use strict';\nconst $=id=>document.getElementById(id);\nconst read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};\nconst write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));\nconst clean=s=>String(s??'').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();\nconst num=s=>{let x=clean(s).replace(/MAD/ig,'').replace(/\\s/g,'');if(!x)return 0;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\\./g,'').replace(',','.');else x=x.replace(/,/g,'');}else if(x.includes(','))x=x.replace(',','.');return Number(x.replace(/[^0-9.\\-]/g,''))||0};\nfunction extractSynth(lines){\n const t=clean((lines||[]).join(' '));\n const start=t.search(/Total\\s+des\\s+avoirs/i);\n if(start<0) throw new Error('Total des avoirs introuvable dans le PDF Synthèse.');\n const tail=t.slice(start);\n const rx=/-?\\d[\\d\\s]*(?:[.,]\\d+)?/g, a=[]; let m;\n while((m=rx.exec(tail)) && a.length<7) a.push(num(m[0]));\n if(a.length<7) throw new Error('Les 7 valeurs de la Synthèse ne sont pas lisibles.');\n return {account:'CTO',sourceDate:(t.match(/le\\s+(\\d{2})\\s+oct\\.?\\s+(\\d{4})/i)?(t.match(/le\\s+(\\d{2})\\s+oct\\.?\\s+(\\d{4})/i)[3]+'-10-'+t.match(/le\\s+(\\d{2})\\s+oct\\.?\\s+(\\d{4})/i)[1]):'2026-10-06'),totalAvoirs:a[0],soldeComptable:a[1],valorisationActions:a[2],valorisationOPCVM:a[3],realisees:a[4],latentes:a[5],totalValues:a[6]};\n}\nfunction paint(s){\n const vals=[s.soldeComptable,s.valorisationActions,s.valorisationOPCVM,s.totalAvoirs,s.latentes,s.realisees,s.totalValues];\n ['synSolde','synActions','synOpcvm','synAvoirs','synLatentes','synRealisees','synValues'].forEach((id,i)=>{const e=$(id);if(e)e.textContent=Number(vals[i]).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';});\n const total=s.totalAvoirs||((s.valorisationActions||0)+(s.valorisationOPCVM||0)+(s.soldeComptable||0));\n ['allocationActionsPct','allocationOpcvmPct','allocationCashPct'].forEach((id,i)=>{const e=$(id),v=[s.valorisationActions,s.valorisationOPCVM,s.soldeComptable][i];if(e)e.textContent=total?(v/total*100).toFixed(1)+'%':'0%';});\n const ce=$('allocationTotal');if(ce)ce.textContent=total.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';\n}\nasync function importSynthFinal(file){\n const lines=await window.readWafaPdfText(file); const s=extractSynth(lines);\n const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{}; by.CTO={...(by.CTO||{}),synthese:s,cash:s.soldeComptable,valuation:s.valorisationActions+s.valorisationOPCVM,totalAvoirs:s.totalAvoirs,source:file.name,sourceDate:s.sourceDate}; write('portfolioStateByAccountV1',by); write('portfolioStateV1',by.CTO); write('ctoSyntheseV1',s); localStorage.setItem('currentAccount','CTO'); paint(s);\n return s;\n}\nfunction bind(){\n const sec=$('mainWafaPdfImporter')||document; const old=[...sec.querySelectorAll('button')].find(b=>/importer automatiquement/i.test(b.textContent||'')); if(!old)return;\n const b=old.cloneNode(true); b.removeAttribute('onclick'); b.dataset.ultrasynth='1'; old.replaceWith(b);\n b.addEventListener('click',async function(e){e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();const f=$('mainPdfFile')?.files?.[0],msg=$('mainPdfMsg');if(!f){if(msg)msg.innerHTML='<span class="red">Choisis le PDF Wafa Bourse.</span>';return;}try{const s=await importSynthFinal(f);if(msg)msg.innerHTML='<span class="green"><b>Synthèse importée ✓</b></span>';[50,200,500,1000].forEach(ms=>setTimeout(()=>paint(s),ms));}catch(err){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+String(err.message||err)+'</span>';}});\n}\nfunction boot(){bind();const s=read('ctoSyntheseV1',null);if(s&&localStorage.getItem('currentAccount')==='CTO')paint(s);}\nif(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();window.addEventListener('load',boot);\n})();\n</script>
+
+<script id="V76_DEFINITIVE_SYNTH_UI_FIX">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};
+const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const fmt=v=>Number(v||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';
+function synth(){return read('ctoSyntheseV1',null)||read('portfolioStateByAccountV1',{}).CTO?.synthese||null;}
+function paint(){const s=synth();if(!s)return;const vals=[s.soldeComptable,s.valorisationActions,s.valorisationOPCVM,s.totalAvoirs,s.latentes,s.realisees,s.totalValues];['synSolde','synActions','synOpcvm','synAvoirs','synLatentes','synRealisees','synValues'].forEach((id,i)=>{const e=$(id);if(e)e.textContent=fmt(vals[i]);});['synSolde','synActions','synOpcvm','synAvoirs','synLatentes','synRealisees','synValues'].forEach((k,i)=>write(k,Number(vals[i]||0)));const total=Number(s.totalAvoirs)||Number(s.soldeComptable||0)+Number(s.valorisationActions||0)+Number(s.valorisationOPCVM||0);const p=[Number(s.valorisationActions||0),Number(s.valorisationOPCVM||0),Number(s.soldeComptable||0)];['allocationActionsPct','allocationOpcvmPct','allocationCashPct'].forEach((id,i)=>{const e=$(id);if(e)e.textContent=total?(p[i]/total*100).toFixed(1)+'%':'0%';});const c=$( 'allocationTotal');if(c)c.textContent=fmt(total);}
+function parse(lines){const t=String(lines.join(' ')).replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();const m=t.match(/Total\s+des\s+avoirs\s+(-?\d[\d\s.,]*)/i);if(!m)throw Error('Total des avoirs introuvable.');const tail=t.slice(m.index),a=[],r=/-?\d[\d\s]*(?:[.,]\d+)?/g;let x;while((x=r.exec(tail))&&a.length<7)a.push(Number(x[0].replace(/\s/g,'').replace(',','.')));if(a.length<7)throw Error('Les valeurs de Synthèse ne sont pas toutes lisibles.');return {account:'CTO',sourceDate:'2026-10-06',totalAvoirs:a[0],soldeComptable:a[1],valorisationActions:a[2],valorisationOPCVM:a[3],realisees:a[4],latentes:a[5],totalValues:a[6]};}
+async function importSynth(f,msg){const lines=await window.readWafaPdfText(f),s=parse(lines);write('ctoSyntheseV1',{...s,source:f.name,importedAt:new Date().toISOString()});const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}});by.CTO={...(by.CTO||{}),synthese:s,cash:s.soldeComptable,totalAvoirs:s.totalAvoirs,valuation:s.valorisationActions+s.valorisationOPCVM,source:f.name,sourceDate:s.sourceDate};write('portfolioStateByAccountV1',by);write('portfolioStateV1',by.CTO);localStorage.setItem('currentAccount','CTO');paint();if(msg)msg.innerHTML='<span class="green"><b>Import automatique terminé ✓</b></span><div>• Synthèse ✓</div>';[50,150,300,600,1000].forEach(ms=>setTimeout(paint,ms));}
+function bind(){const b=[...document.querySelectorAll('#mainWafaPdfImporter button')].find(x=>/importer automatiquement/i.test(x.textContent||''));if(!b||b.dataset.defSynth)return;b.dataset.defSynth='1';b.addEventListener('click',async e=>{const f=$( 'mainPdfFile')?.files?.[0];if(!f||!/(synth|synthese|synthèse)/i.test(f.name||''))return;e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();try{await importSynth(f,$('mainPdfMsg'));}catch(err){const m=$('mainPdfMsg');if(m)m.innerHTML='<span class="red"><b>Import impossible :</b> '+String(err.message||err)+'</span>'; }},true);paint();}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();window.addEventListener('load',bind);window.addEventListener('accountchanged',()=>setTimeout(paint,30));window.addEventListener('accountdataupdated',()=>setTimeout(paint,30));
+})();
+</script>
+
+</body>
+</html>
