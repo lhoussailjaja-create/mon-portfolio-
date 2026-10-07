@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mon Portfolio — Dashboard V24</title>
+<title>Mon Portfolio — Dashboard V64</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
 function norm(v){
  return String(v ?? '').trim().toLowerCase()
@@ -419,6 +419,54 @@ function importBackup(event){
   };
 })();
 </script>
+
+
+<style id="V64_BALANCED_UI">
+/* V64 — interface moyenne, équilibrée et lisible */
+:root{--wrap:1080px;--gap:14px;--radius:12px}
+body{overflow-x:hidden}
+.wrap{max-width:var(--wrap);padding:18px 20px}
+header{margin-bottom:14px}
+h1{font-size:27px;letter-spacing:-.2px}
+h2{font-size:17px;margin-bottom:11px}
+.section{margin-top:16px}
+.card{border-radius:var(--radius);padding:14px}
+.cards{gap:var(--gap);grid-template-columns:repeat(4,minmax(0,1fr))}
+.grid{gap:var(--gap);margin-top:var(--gap)}
+.cards .card .num{font-size:21px}
+.num{font-size:21px}
+.label{font-size:10px;letter-spacing:.2px}
+.hint,.sub{font-size:11px;line-height:1.4}
+.main-control{padding:13px 14px}
+.main-control-grid{gap:9px}
+.control-box{padding:10px}
+button{padding:10px 13px}
+input,select{min-height:40px}
+table{font-size:13px}
+th,td{padding:10px 11px}
+.install-card{margin:12px 0;padding:13px 14px}
+#accountsSwitcher .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+#selectedAccountBar{padding:10px 14px}
+#mainWafaPdfImporter{padding:14px}
+#mainPdfPreview:empty{display:none}
+#mainPdfPreview pre{max-height:260px;overflow:auto;background:#0b1117;border:1px solid var(--line);border-radius:9px;padding:10px;font-size:11px;white-space:pre-wrap}
+/* Keep the dashboard calm: secondary legacy panels stay available but do not dominate. */
+.legacy-control-section{display:none!important}
+@media(max-width:900px){
+  .wrap{max-width:760px}
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .main-control-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:600px){
+  .wrap{padding:12px}
+  h1{font-size:24px}
+  .cards,#accountsSwitcher .cards,.grid,.form,.main-control-grid{grid-template-columns:1fr}
+  .card{padding:12px}
+  table{display:block;overflow-x:auto;white-space:nowrap}
+  th,td{padding:9px}
+  #mainWafaPdfImporter .form{grid-template-columns:1fr!important}
+}
+</style>
 
 </head>
 <body>
@@ -3103,8 +3151,29 @@ window.renderImportedUnified=function(){
     if(conf){const body=conf.querySelector('tbody');if(body){body.innerHTML=os.map(o=>'<tr><td>'+esc(o.date)+'</td><td>'+esc(o.value)+'</td><td>'+esc(/VENTE/i.test(o.type)?'Vente':'Achat')+'</td><td>'+num(o.qty)+'</td><td>'+num(o.price).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td>'+money(num(o.qty)*num(o.price))+'</td></tr>').join('')||'<tr><td colspan="6">Aucune opération pour le compte CTO.</td></tr>';}const nums=conf.querySelectorAll('.num');if(nums[0])nums[0].textContent=money(buyGross);if(nums[1])nums[1].textContent=money(sellGross);}
     const ana=section('Analyse des transactions');
     if(ana){const ns=ana.querySelectorAll('.num');if(ns[0])ns[0].textContent=money(buyGross);if(ns[1])ns[1].textContent=money(sellGross);if(ns[2]){ns[2].textContent=money(net);ns[2].className='num '+(net>=0?'green':'red')}if(ns[3]){ns[3].textContent=signed(real);ns[3].className='num '+(real>=0?'green':'red');}}
-    // Fiscality: never display PEA-specific AKDITAL/CIH values while CTO is selected.
-    const fisc=section('Fiscalité / TPCVM'); if(fisc){const grid=fisc.querySelectorAll('.grid .card');grid.forEach((c,i)=>{if(i===0)c.querySelector('.label').textContent='CTO';if(i===1)c.querySelector('.label').textContent='CTO';const n=c.querySelector('.num');if(n){n.textContent='0,00 MAD';n.className='num';}const h=c.querySelector('.hint');if(h)h.textContent='Données CTO — en attente du relevé correspondant.'});setB(fisc,0,signed(real),real<0?'red':'green');setB(fisc,1,'0,00 MAD');setB(fisc,2,signed(real),real<0?'red':'green');setB(fisc,3,'0,00 MAD');setB(fisc,4,'0,00 MAD');}
+    // Fiscalité CTO: display the imported Fiscalité PDF data when available; never fall back to PEA values.
+    const fisc=section('Fiscalité / TPCVM');
+    if(fisc){
+      const fd=read('ctoFiscaliteV1',null);
+      const isCto=fd && String(fd.account||'').toUpperCase()==='CTO';
+      const totalA=Number(fd?.totalActions ?? fd?.totalActionsValue ?? 0)||0;
+      const tpc=Number(fd?.tpcvmActions ?? fd?.tpcvm ?? 0)||0;
+      const rest=Number(fd?.totalRestitution ?? 0)||0;
+      const grid=fisc.querySelectorAll('.grid .card');
+      grid.forEach((c,i)=>{if(i===0)c.querySelector('.label').textContent='CTO';if(i===1)c.querySelector('.label').textContent='CTO';});
+      if(isCto){
+        if(grid[0]){const n=grid[0].querySelector('.num');if(n){n.textContent=totalA.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';n.className='num '+(totalA<0?'red':'green');}const h=grid[0].querySelector('.hint');if(h)h.textContent='Total Actions — +/- Value importée du relevé Fiscalité CTO.';}
+        if(grid[1]){const n=grid[1].querySelector('.num');if(n){n.textContent=tpc.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';n.className='num '+(tpc<0?'red':'green');}const h=grid[1].querySelector('.hint');if(h)h.textContent='TPCVM importée du relevé Fiscalité CTO.';}
+        setB(fisc,0,totalA.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD',totalA<0?'red':'green');
+        setB(fisc,1,'0,00 MAD');
+        setB(fisc,2,totalA.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD',totalA<0?'red':'green');
+        setB(fisc,3,tpc.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD',tpc<0?'red':'green');
+        setB(fisc,4,rest.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD',rest<0?'red':'green');
+      }else{
+        grid.forEach(c=>{const n=c.querySelector('.num');if(n){n.textContent='0,00 MAD';n.className='num';}const h=c.querySelector('.hint');if(h)h.textContent='Données CTO — en attente du relevé Fiscalité correspondant.'});
+        setB(fisc,0,'0,00 MAD');setB(fisc,1,'0,00 MAD');setB(fisc,2,'0,00 MAD');setB(fisc,3,'0,00 MAD');setB(fisc,4,'0,00 MAD');
+      }
+    }
     // Static PEA transaction-state blocks become CTO-only.
     const et=section('État des titres après les opérations visibles');if(et){const items=et.querySelectorAll('.item');items.forEach(x=>x.remove());const hint=et.querySelector('.hint');if(ps.length){ps.forEach(p=>{const d=document.createElement('div');d.className='item';d.innerHTML='<span>'+esc(p.name)+'</span><b>'+num(p.qty).toLocaleString('fr-FR',{maximumFractionDigits:3})+' détenu(s)</b>';et.insertBefore(d,hint)});}else if(hint)hint.textContent='Aucune position pour le compte CTO — importe le relevé CTO pour commencer.';}
     const cost=section("Coût d'achat moyen des opérations");if(cost){cost.querySelectorAll('.item').forEach(x=>x.remove());const hint=cost.querySelector('.hint');const map={};buys.forEach(o=>{const k=o.value||'Valeur';if(!map[k])map[k]={q:0,v:0};map[k].q+=num(o.qty);map[k].v+=num(o.qty)*num(o.price)});Object.entries(map).forEach(([k,v])=>{const d=document.createElement('div');d.className='item';d.innerHTML='<span>'+esc(k)+'</span><b>'+money(v.q?v.v/v.q:0)+'</b>';cost.insertBefore(d,hint)});if(hint)hint.textContent=buys.length?'Cours moyens calculés uniquement à partir des opérations CTO importées.':'Aucune opération CTO importée.';}
@@ -4317,6 +4386,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       }
       renderSummary57(results,msg);
       if(preview && results.every(r=>r.kind!=='positions' && r.kind!=='historique')) preview.innerHTML='';
+      if(results.some(r=>r.kind==='fiscalite')) setTimeout(()=>{ if(typeof render==='function') render(); },0);
       try{['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards','renderImportedUnified','renderUnifiedJournal','renderWafaHistoryAmounts','renderFeeTracking'].forEach(fn=>{if(typeof window[fn]==='function')window[fn]()});}catch(e){}
     }catch(e){if(msg)msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc57(e.message||e)+'</span>'}
   };
@@ -4507,3 +4577,118 @@ function boot(){install();setTimeout(install,250);setTimeout(install,1000)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
 </script>
+
+<script id="FINAL_CTO_FISCALITE_DISPLAY_V63">
+(function(){
+'use strict';
+function read(k,d){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}}
+function money(v){const n=Number(v)||0;return n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD'}
+function section(){return [...document.querySelectorAll('.section.card')].find(s=>(s.querySelector('h2')?.textContent||'').includes('Fiscalité / TPCVM'))}
+function renderFiscalite(){
+ if(String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()!=='CTO') return;
+ const d=read('ctoFiscaliteV1',null); if(!d || String(d.account||'').toUpperCase()!=='CTO') return;
+ const s=section(); if(!s) return;
+ const totalA=Number(d.totalActions ?? d.totalActionsValue ?? 0)||0;
+ const tpc=Number(d.tpcvmActions ?? d.tpcvm ?? 0)||0;
+ const rest=Number(d.totalRestitution ?? 0)||0;
+ const grid=s.querySelectorAll('.grid .card');
+ if(grid[0]){const l=grid[0].querySelector('.label'),n=grid[0].querySelector('.num'),h=grid[0].querySelector('.hint');if(l)l.textContent='Total Actions';if(n){n.textContent=money(totalA);n.className='num '+(totalA<0?'red':'green')}if(h)h.textContent='Données importées du relevé Fiscalité CTO.'}
+ if(grid[1]){const l=grid[1].querySelector('.label'),n=grid[1].querySelector('.num'),h=grid[1].querySelector('.hint');if(l)l.textContent='TPCVM';if(n){n.textContent=money(tpc);n.className='num '+(tpc<0?'red':'green')}if(h)h.textContent='TPCVM importée du relevé Fiscalité CTO.'}
+ const bs=s.querySelectorAll('.item b');
+ if(bs[0])bs[0].textContent=money(totalA);
+ if(bs[1])bs[1].textContent='0,00 MAD';
+ if(bs[2])bs[2].textContent=money(totalA);
+ if(bs[3])bs[3].textContent=money(tpc);
+ if(bs[4])bs[4].textContent=money(rest);
+ const note=[...s.querySelectorAll('*')].find(x=>(x.textContent||'').includes('Aucune donnée à afficher pour le moment'));
+ if(note && note.childElementCount===0) note.textContent='Relevé Fiscalité CTO importé — données disponibles.';
+}
+function schedule(){[50,300,800,1500,3000].forEach(ms=>setTimeout(renderFiscalite,ms))}
+function boot(){renderFiscalite();schedule();const btn=[...document.querySelectorAll('button')].find(b=>/importer automatiquement/i.test(b.textContent||''));if(btn){btn.addEventListener('click',schedule,true)}const obs=new MutationObserver(()=>{if(localStorage.getItem('ctoFiscaliteV1'))renderFiscalite()});obs.observe(document.body,{subtree:true,childList:true,characterData:true});setInterval(renderFiscalite,2000)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+})();
+</script>
+
+
+<script id="FINAL_V64_CONTROLLER">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};
+const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const clean=s=>String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+const esc=s=>clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+function active(){return String($('mainPdfAccount')?.value||localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA'}
+function refresh(){['renderAccountDashboard','renderAccount','refreshAdvancedAnalytics','renderAll','refreshAccountCards','renderImportedUnified','renderUnifiedJournal','renderWafaHistoryAmounts','renderFeeTracking','renderSnapshots','renderPositions'].forEach(fn=>{try{if(typeof window[fn]==='function')window[fn]()}catch(e){}})}
+function syncAccount(){const a=active();localStorage.setItem('currentAccount',a);document.querySelectorAll('.account-card').forEach(b=>{const on=b.dataset.account===a;b.classList.toggle('account-active',on);b.setAttribute('aria-pressed',on?'true':'false')});const t=$('selectedAccountTitle');if(t)t.textContent='Compte '+a;refreshAccountCards();}
+function refreshAccountCards(){const ops=read('portfolioOperations',[]);for(const a of ['PEA','CTO']){const n=ops.filter(o=>String(o.account||'').toUpperCase()===a).length;const e=$(a.toLowerCase()+'AccountSummary');if(e)e.textContent=n+' opération'+(n===1?'':'s')}}
+function installAccountSwitch(){
+ document.querySelectorAll('.account-card').forEach(b=>b.addEventListener('click',()=>{localStorage.setItem('currentAccount',b.dataset.account);syncAccount()},true));
+ document.querySelectorAll('.mini-account').forEach(b=>b.addEventListener('click',()=>{localStorage.setItem('currentAccount',b.textContent.trim());syncAccount()},true));
+}
+function renderImportStatus(){
+ const m=$('mainPdfMsg'); if(!m)return;
+ const a=active();
+ const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{};
+ const s=by[a]||{};
+ const f=a==='CTO'?read('ctoFiscaliteV1',null):null;
+ const syn=a==='CTO'?read('ctoSyntheseV1',null):null;
+ if(!s.positions?.length && !f && !syn)return;
+ const parts=[];
+ if(s.positions?.length)parts.push('Positions: '+s.positions.length);
+ if(syn?.totalAvoirs!=null)parts.push('Avoirs: '+Number(syn.totalAvoirs).toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD');
+ if(syn?.soldeComptable!=null)parts.push('Cash: '+Number(syn.soldeComptable).toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD');
+ if(f)parts.push('Fiscalité: importée');
+ const old=m.querySelector('.v64-summary');if(old)old.remove();if(parts.length){const d=document.createElement('div');d.className='v64-summary hint';d.style.marginTop='8px';d.textContent=parts.join(' · ');m.appendChild(d)}
+}
+function wireImporter(){
+ const input=$('mainPdfFile'),sec=$('mainWafaPdfImporter');if(!input||!sec)return;
+ input.multiple=true;input.accept='application/pdf,.pdf';
+ const old=sec.querySelector('button[data-v64-import]');
+ if(old)return;
+ const buttons=[...sec.querySelectorAll('button')];const original=buttons.find(b=>/importer automatiquement/i.test(b.textContent||''));if(!original)return;
+ const btn=original.cloneNode(true);btn.removeAttribute('onclick');btn.dataset.v64Import='1';original.replaceWith(btn);
+ btn.addEventListener('click',async e=>{
+  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
+  const files=[...input.files||[]],msg=$('mainPdfMsg'),preview=$('mainPdfPreview'),a=active();
+  if(!files.length){msg.innerHTML='<span class="red">Choisis les PDF à importer.</span>';return}
+  localStorage.setItem('currentAccount',a);
+  if(msg)msg.innerHTML='<span class="hint">Lecture des PDF en cours…</span>';
+  try{
+   const report=[];
+   for(const f of files){
+    // Delegate parsing to the mature engines already present in V63.
+    const lines=typeof window.readWafaPdfText==='function'?await window.readWafaPdfText(f):null;
+    const text=Array.isArray(lines)?lines.join(' '):'';
+    const name=f.name.toLowerCase();
+    let kind='unknown';
+    if(/fiscal/.test(name)||/tpcvm|etat des prelevements|etat des prélèvements/i.test(text))kind='fiscalite';
+    else if(/synth/.test(name)||/synthese du portefeuille|synthèse du portefeuille|total des avoirs/i.test(text))kind='synthese';
+    else if(/historique|mouvements/.test(name)||/historique du compte/i.test(text))kind='historique';
+    else if(/titres/.test(name)||/portefeuille titres/i.test(text)||(/cours\/vl/i.test(text)&&/prmp/i.test(text)&&/poids/i.test(text)))kind='titres';
+    if(a==='CTO' && kind==='fiscalite' && typeof window.parseFiscal==='function'){
+      const d=window.parseFiscal(lines);write('ctoFiscaliteV1',{...d,account:'CTO',source:f.name,importedAt:new Date().toISOString()});report.push('Fiscalité ✓');
+    }else if(a==='CTO' && kind==='synthese' && typeof window.parseSynth==='function'){
+      const d=window.parseSynth(lines);write('ctoSyntheseV1',{...d,account:'CTO',source:f.name,importedAt:new Date().toISOString()});
+      const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}});by.CTO={...(by.CTO||{}),synthese:d,cash:d.soldeComptable,totalAvoirs:d.totalAvoirs,valuation:d.totalAvoirs};write('portfolioStateByAccountV1',by);write('portfolioStateV1',by.CTO);report.push('Synthèse ✓');
+    }else if(kind==='historique' && typeof window.parseHistory==='function'){
+      const ops=window.parseHistory(lines,a,f)||[];if(!ops.length)throw new Error('Historique détecté mais aucune opération reconnue : '+f.name);
+      let all=read('portfolioOperations',[]),seen=new Set(all.map(o=>[o.account,o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|'))),added=0;
+      for(const o0 of ops){const o={...o0,account:a};const k=[o.account,o.date,o.type,o.value,o.qty,o.price,o.net,o.fees].join('|');if(!seen.has(k)){all.push(o);seen.add(k);added++}}
+      write('portfolioOperations',all);report.push('Historique '+ops.length+' opérations / '+added+' nouvelles ✓');
+    }else if(kind==='titres' && typeof window.__V44_PORTFOLIO_RUN==='function'){
+      await window.__V44_PORTFOLIO_RUN(f,msg,preview);report.push('Titres / Positions ✓');
+    }else if(kind==='unknown') report.push(f.name+' : type non reconnu');
+    else report.push(f.name+' : moteur indisponible');
+   }
+   refresh();renderImportStatus();
+   msg.innerHTML='<span class="green"><b>Import terminé ✓</b> — compte '+a+'</span><div style="margin-top:6px">'+report.map(x=>'<div>• '+esc(x)+'</div>').join('')+'</div>';
+   setTimeout(renderImportStatus,50);
+  }catch(err){msg.innerHTML='<span class="red"><b>Import impossible :</b> '+esc(err.message||err)+'</span>';if(preview)preview.innerHTML=''}
+ },false);
+}
+function boot(){syncAccount();installAccountSwitch();wireImporter();renderImportStatus();setTimeout(()=>{wireImporter();syncAccount();renderImportStatus()},500)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+})();
+</script>
+
