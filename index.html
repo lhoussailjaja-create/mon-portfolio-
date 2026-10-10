@@ -6411,3 +6411,34 @@ setTimeout(schedule,1600);
  if(typeof old==='function'&&!old.__v39Wrapped){const wrapped=async function(){const r=await old.apply(this,arguments);setTimeout(run,100);setTimeout(run,350);return r};wrapped.__v39Wrapped=true;window.importMainWafaPdf=wrapped;}
 })();
 </script>
+
+<!-- V40: Reliable CTO synthesis import, source values stay authoritative; duplicate notices removed. -->
+<script id="V40_SYNTHESIS_IMPORT_FIX">
+(function(){'use strict';
+ const $=id=>document.getElementById(id);
+ const read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k)||'null');return v==null?d:v}catch(e){return d}};
+ const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+ function n(x){if(x==null)return null;let s=String(x).replace(/[\s\u00a0]/g,'').replace(/MAD|%/gi,'');if(!s)return null;if(s.includes(',')&&s.includes('.')){if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'')}else if(s.includes(','))s=s.replace(',','.');const v=Number(s);return Number.isFinite(v)?v:null}
+ function parse(text,name){const t=String(text||'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  const num='(-?\\d[\\d .]*?(?:,\\d{2}|\\.\\d{2}))';
+  const get=label=>{let m=t.match(new RegExp(label+'\\s*'+num,'i'));if(m){const v=n(m[1]);if(v!==null)return v}return null};
+  let d={account:'CTO',source:name||null,sourceDate:null,soldeComptable:get('Solde\\s+comptable'),valorisationActions:get('Valorisation\\s+actions'),valorisationOPCVM:get('Valorisation\\s+OPCVM'),totalAvoirs:get('Total\\s+des\\s+avoirs'),latentes:get('\\+\\s*/\\s*-?\\s*latentes'),realisees:get('\\+\\s*/\\s*-?\\s*réalisées'),totalValues:get('\\+\\s*/\\s*-?\\s*Values\\s+totales')};
+  const dm=t.match(/(?:Casablanca,?\\s*(?:le)?\\s*|le\\s+)(\\d{1,2})\\s+(janv\\.?|janvier|févr\\.?|février|mars|avr\\.?|avril|mai|juin|juil\\.?|juillet|août|sept\\.?|septembre|oct\\.?|octobre|nov\\.?|novembre|déc\\.?|décembre)\\s+(\\d{4})/i);
+  const months={'janv':'01','janvier':'01','févr':'02','février':'02','mars':'03','avr':'04','avril':'04','mai':'05','juin':'06','juil':'07','juillet':'07','août':'08','sept':'09','septembre':'09','oct':'10','octobre':'10','nov':'11','novembre':'11','déc':'12','décembre':'12'};
+  if(dm){let mo=dm[2].toLowerCase().replace(/\\.$/,'');if(months[mo])d.sourceDate=dm[3]+'-'+months[mo]+'-'+dm[1].padStart(2,'0')}
+  // If a PDF extractor orders the summary block as label followed by four values, map only that known block.
+  if([d.totalAvoirs,d.soldeComptable,d.valorisationActions,d.valorisationOPCVM].some(v=>v===null)){
+   const m=t.match(/Total\\s+des\\s+avoirs\\s+(-?[\\d .]+[,\\.]\\d{2})\\s+(-?[\\d .]+[,\\.]\\d{2})\\s+(-?[\\d .]+[,\\.]\\d{2})\\s+(-?[\\d .]+[,\\.]\\d{2})/i);
+   if(m){const a=m.slice(1).map(n);if(d.totalAvoirs===null)d.totalAvoirs=a[0];if(d.soldeComptable===null)d.soldeComptable=a[1];if(d.valorisationActions===null)d.valorisationActions=a[2];if(d.valorisationOPCVM===null)d.valorisationOPCVM=a[3]}
+  }
+  if(d.soldeComptable===null||d.valorisationActions===null||d.totalAvoirs===null)throw new Error('Synthèse CTO non reconnue : montants source manquants; aucune donnée existante remplacée.');
+  return d;
+ }
+ async function pdfText(file){if(typeof pdfjsLib==='undefined')throw new Error('Lecteur PDF indisponible');const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;let out=[];for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i),c=await pg.getTextContent();out.push(c.items.map(x=>x.str||'').join(' '))}return out.join(' ')}
+ function render(){if(String(localStorage.getItem('currentAccount')||'').toUpperCase()!=='CTO')return;const s=read('ctoSyntheseV1',null);if(!s)return;const map={synSolde:s.soldeComptable,synActions:s.valorisationActions,synOpcvm:s.valorisationOPCVM,synAvoirs:s.totalAvoirs,synLatentes:s.latentes,synRealisees:s.realisees,synValues:s.totalValues};for(const [id,v] of Object.entries(map)){const e=$(id);if(e)e.textContent=v==null||!Number.isFinite(Number(v))?'—':Number(v).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD'}}
+ function dedupe(){const all=[...document.querySelectorAll('body *')].filter(e=>e.children.length===0);let kept=false;for(const e of all){const t=(e.textContent||'').replace(/\\s+/g,' ').trim();if(/Synthèse et positions rapprochées/i.test(t)){const p=e.closest('.alert,.warning,.notice')||e.parentElement;if(!kept){kept=true;continue}if(p&&p!==document.body)p.remove();else e.remove()}}}
+ const prior=window.importMainWafaPdf;
+ if(typeof prior==='function'&&!prior.__v40Wrapped){const wrapped=async function(){const files=[...(($('mainPdfFile')&&$('mainPdfFile').files)||[])];const result=await prior.apply(this,arguments);for(const f of files){if(!/synth[eè]se/i.test(f.name||''))continue;try{const d=parse(await pdfText(f),f.name);const old=read('ctoSyntheseV1',{})||{};const merged={...old,...d,account:'CTO',source:f.name,importedAt:new Date().toISOString()};write('ctoSyntheseV1',merged);const by=read('portfolioStateByAccountV1',{PEA:{},CTO:{}})||{};by.CTO={...(by.CTO||{}),synthese:merged,cash:merged.soldeComptable,totalAvoirs:merged.totalAvoirs,valuation:merged.totalAvoirs,sourceDate:merged.sourceDate};write('portfolioStateByAccountV1',by);write('portfolioStateV1',by.CTO);const msg=$('mainPdfMsg');if(msg)msg.innerHTML+='<div style="color:#86efac;margin-top:6px">Synthèse source enregistrée : '+(d.sourceDate||'date non détectée')+' · cash '+d.soldeComptable.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD · actions '+d.valorisationActions.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD · total '+d.totalAvoirs.toLocaleString('fr-FR',{minimumFractionDigits:2})+' MAD.</div>';}catch(err){const msg=$('mainPdfMsg');if(msg)msg.innerHTML+='<div style="color:#fbbf24;margin-top:6px">Synthèse non remplacée : '+String(err.message||err)+'</div>'}}setTimeout(()=>{render();dedupe()},150);setTimeout(()=>{render();dedupe()},500);return result};wrapped.__v40Wrapped=true;window.importMainWafaPdf=wrapped}
+ window.addEventListener('load',()=>setTimeout(()=>{render();dedupe()},500));window.addEventListener('accountchanged',()=>setTimeout(render,100));window.addEventListener('accountdataupdated',()=>setTimeout(()=>{render();dedupe()},150));
+})();
+</script>
