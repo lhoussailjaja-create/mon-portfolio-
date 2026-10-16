@@ -7448,62 +7448,47 @@ body[data-portfolio-tab="home"] #v35SectionTitle,body[data-portfolio-tab="home"]
 </script>
 
 
-<!-- V35.11 PATCH: restauration robuste du Dashboard Synthèse sur mobile -->
-<style id="V3511_PEA_SYNTHESIS_MOBILE_FIX">
-  body[data-portfolio-tab="synthesis"] #v35DashboardOrder,
-  body[data-portfolio-tab="synthesis"] #accountOverviewGrid,
-  body[data-portfolio-tab="synthesis"] #accountSynthesisCard,
-  body[data-portfolio-tab="synthesis"] #portfolioAllocationCard,
-  body[data-portfolio-tab="synthesis"] #analyticsCenter,
-  body[data-portfolio-tab="synthesis"] #anDataChecks,
-  body[data-portfolio-tab="synthesis"] #v35SectionTitle {
-    display:block!important; visibility:visible!important; opacity:1!important;
-    height:auto!important; max-height:none!important; overflow:visible!important;
-    position:relative!important; clip:auto!important;
-  }
-  body[data-portfolio-tab="synthesis"] #accountOverviewGrid,
-  body[data-portfolio-tab="synthesis"] #v35DashboardOrder .cards,
-  body[data-portfolio-tab="synthesis"] #analyticsCenter .cards {display:grid!important; visibility:visible!important; opacity:1!important;}
-  body[data-portfolio-tab="synthesis"] #accountOverviewGrid {grid-template-columns:minmax(0,1fr)!important; width:100%!important;}
-  body[data-portfolio-tab="synthesis"] #v35DashboardOrder {width:100%!important; min-height:0!important; flex-direction:column!important; gap:12px!important;}
-  body[data-portfolio-tab="synthesis"] #v35DashboardOrder > * {visibility:visible!important; opacity:1!important; max-height:none!important;}
-  body[data-portfolio-tab="synthesis"] .positions-card,
-  body[data-portfolio-tab="synthesis"] #positionsTable,
-  body[data-portfolio-tab="synthesis"] .positions-scroll,
-  body[data-portfolio-tab="synthesis"] #journalOperationsSection,
-  body[data-portfolio-tab="synthesis"] #importedOpsSection,
-  body[data-portfolio-tab="synthesis"] #portfolioSectionMenu,
-  body[data-portfolio-tab="synthesis"] #fileImporterSection,
-  body[data-portfolio-tab="synthesis"] #marketUpdateLinks {display:none!important; visibility:hidden!important;}
-  @media(max-width:700px){body[data-portfolio-tab="synthesis"] #v35DashboardOrder .cards,body[data-portfolio-tab="synthesis"] #analyticsCenter .cards{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}}
-  @media(max-width:420px){body[data-portfolio-tab="synthesis"] #v35DashboardOrder .cards,body[data-portfolio-tab="synthesis"] #analyticsCenter .cards{grid-template-columns:1fr!important}}
-</style>
-<script id="V3511_PEA_SYNTHESIS_MOBILE_FIX_JS">
+<!-- V35.11 PATCH: dashboard Synthèse account-specific values and safe fallbacks -->
+<script id="V3511_SYNTHESIS_VALUES_FIX">
 (function(){
  'use strict';
- const ids=['v35DashboardOrder','accountOverviewGrid','accountSynthesisCard','portfolioAllocationCard','analyticsCenter','anDataChecks'];
- function reveal(el,display){
-   if(!el)return;
-   el.classList.remove('v35-nav-hidden','mp-tab-hidden','v35-nav-v3-hidden');
-   el.style.setProperty('display',display||((el.matches('.cards,.account-overview-grid'))?'grid':'block'),'important');
-   el.style.setProperty('visibility','visible','important');el.style.setProperty('opacity','1','important');
-   el.style.setProperty('height','auto','important');el.style.setProperty('max-height','none','important');el.style.setProperty('overflow','visible','important');
+ const read=(key,fb=null)=>{try{const v=JSON.parse(localStorage.getItem(key)||'null');return v==null?fb:v}catch(e){return fb}};
+ const number=v=>{if(v===null||v===undefined||v==='')return null;if(typeof v==='number')return Number.isFinite(v)?v:null;let x=String(v).replace(/[\s\u00a0]/g,'').replace(/MAD/gi,'').replace(/[−]/g,'-');if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'')}else if(x.includes(','))x=x.replace(',','.');const n=Number(x);return Number.isFinite(n)?n:null};
+ const money=v=>v===null?'Non disponible':v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' MAD';
+ const active=()=>String(localStorage.getItem('currentAccount')||'PEA').toUpperCase()==='CTO'?'CTO':'PEA';
+ const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+ function state(a){const by=read('portfolioStateByAccountV1',{})||{};let st=by[a]||{};if(!Object.keys(st).length)st=read(a==='PEA'?'portfolioStatePEA':'portfolioStateCTO',{})||{};return st}
+ function render(){
+  const a=active(),st=state(a),syn=a==='CTO'?(read('ctoSyntheseV1',null)||st.synthese):(read('peaSyntheseV1',null)||st.synthese);
+  const ps=Array.isArray(st.positions)?st.positions:[];
+  const classify=p=>{const t=norm(p.assetType||p.typeActif||p.category||p.name||p.valeur||p.valueName);return /OPCVM|FCP|OBLIGATION|MONETAIRE|TRESORERIE|PATRIMOINE|DIVIDEND FUND|LOW VOLATILITY FACTOR FUND|MOMENTUM FUND|AL MOUCHARAKA|ATTIJARI ACTIONS/.test(t)?'opcvm':'actions'};
+  const sum=(arr,keys)=>{let total=0,found=false;arr.forEach(p=>{let v=null;for(const k of keys){v=number(p[k]);if(v!==null)break}if(v!==null){total+=v;found=true}});return found?total:null};
+  const actionPositions=ps.filter(p=>classify(p)==='actions'),fundPositions=ps.filter(p=>classify(p)==='opcvm');
+  const actions=number(syn?.valorisationActions)??sum(actionPositions,['value','montant','valorisation']);
+  const opcvm=number(syn?.valorisationOPCVM)??sum(fundPositions,['value','montant','valorisation']);
+  const cash=number(syn?.soldeComptable)??number(st.cash);
+  const total=number(syn?.totalAvoirs)??number(st.valuation)??((actions!==null&&opcvm!==null&&cash!==null)?actions+opcvm+cash:null);
+  const latent=number(syn?.latentes)??sum(ps,['pl','gainLoss','performanceValue']);
+  const largest=ps.reduce((best,p)=>{const v=number(p.value??p.montant??p.valorisation);return v!==null&&(!best||v>best.v)?{p,v}:best},null);
+  const worst=ps.reduce((best,p)=>{const v=number(p.pl??p.gainLoss??p.performanceValue);return v!==null&&(!best||v<best.v)?{p,v}:best},null);
+  const vals={'valorisation actions':actions,'valorisation opcvm':opcvm,'total des avoirs':total,'valorisation totale':total,'cash disponible':cash,'gain / perte latent':latent};
+  document.querySelectorAll('.cards .card, #v35DashboardOrder .card, #analyticsCenter .card').forEach(card=>{
+    const label=norm(card.querySelector('.label')?.textContent),el=card.querySelector('.num'),hint=card.querySelector('.hint');if(!el)return;
+    for(const [k,v] of Object.entries(vals)){if(label.includes(norm(k))){el.textContent=k.includes('gain / perte')?(v===null?'Non disponible':(v>0?'+':'')+money(v)):money(v);if(k.includes('gain / perte'))el.className='num '+(v===null?'':v<0?'red':'green');return}}
+    if(label.includes('plus grosse position')){el.textContent=largest?.p.name||largest?.p.valeur||'Non disponible';if(hint&&largest&&total!==null&&total>0)hint.textContent=(largest.v/total*100).toLocaleString('fr-FR',{maximumFractionDigits:1})+'% du portefeuille';}
+    if(label.includes('plus grosse perte')){el.textContent=worst===null?'Non disponible':(worst.v>0?'+':'')+money(worst.v);el.className='num '+(worst===null?'':worst.v<0?'red':'green');if(hint)hint.textContent=worst?.p.name||worst?.p.valeur||'Non disponible';}
+    if(label.includes('nombre de positions'))el.textContent=String(ps.length||'Non disponible');
+  });
  }
- function repair(){
-   if((document.body.dataset.portfolioTab||'home')!=='synthesis')return;
-   const wrap=document.querySelector('.wrap');
-   ids.forEach(id=>{const el=document.getElementById(id);if(!el)return;let p=el;while(p&&p!==wrap&&p!==document.body){p.classList.remove('v35-nav-hidden','mp-tab-hidden','v35-nav-v3-hidden');p.style.setProperty('visibility','visible','important');p.style.setProperty('opacity','1','important');if(getComputedStyle(p).display==='none')p.style.setProperty('display',p.matches('.cards,.account-overview-grid')?'grid':'block','important');p=p.parentElement;}reveal(el,id==='accountOverviewGrid'?'grid':'block');});
-   ['v35DashboardOrder','analyticsCenter'].forEach(id=>{const root=document.getElementById(id);if(root)root.querySelectorAll('.cards').forEach(c=>reveal(c,'grid'));});
-   const title=document.getElementById('v35SectionTitle');if(title)reveal(title,'block');
-   // Exclure les panneaux hors Synthèse même après les rendus asynchrones.
-   document.querySelectorAll('.positions-card,#positionsTable,.positions-scroll,#journalOperationsSection,#importedOpsSection,#portfolioSectionMenu,#fileImporterSection,#marketUpdateLinks').forEach(el=>{el.style.setProperty('display','none','important');el.style.setProperty('visibility','hidden','important');});
- }
- const obs=new MutationObserver(()=>{if(document.body.dataset.portfolioTab==='synthesis')repair();});
- function init(){obs.observe(document.body,{attributes:true,attributeFilter:['data-portfolio-tab']});[0,150,500,1100,1800].forEach(ms=>setTimeout(repair,ms));}
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
- window.addEventListener('load',()=>[150,600,1300].forEach(ms=>setTimeout(repair,ms)));
+ const run=()=>{try{render()}catch(e){console.warn('V35.11 Synthèse:',e)}};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run();
+ window.addEventListener('load',()=>setTimeout(run,300));window.addEventListener('accountchanged',()=>setTimeout(run,100));window.addEventListener('accountdataupdated',()=>setTimeout(run,150));
+ const old=window.selectPortfolioAccount;if(typeof old==='function'&&!old.__v3511){const wrapped=function(){const r=old.apply(this,arguments);setTimeout(run,100);setTimeout(run,400);return r};wrapped.__v3511=true;window.selectPortfolioAccount=wrapped}
+ ['importWafaFile','importMainWafaPdf'].forEach(name=>{const oldFn=window[name];if(typeof oldFn==='function'&&!oldFn.__v3511){const wrapped=async function(){const r=await oldFn.apply(this,arguments);setTimeout(run,100);setTimeout(run,500);return r};wrapped.__v3511=true;window[name]=wrapped}});
+ setTimeout(run,900);setTimeout(run,2000);
 })();
 </script>
+<!-- /V35.11 PATCH -->
 
 </body>
 </html>
@@ -7784,60 +7769,3 @@ body[data-portfolio-tab="synthesis"] #marketUpdateLinks {display:none!important;
 })();
 </script>
 
-
-<!-- V35.11 PATCH: restauration robuste du Dashboard Synthèse sur mobile -->
-<style id="V3511_PEA_SYNTHESIS_MOBILE_FIX">
-  body[data-portfolio-tab="synthesis"] #v35DashboardOrder,
-  body[data-portfolio-tab="synthesis"] #accountOverviewGrid,
-  body[data-portfolio-tab="synthesis"] #accountSynthesisCard,
-  body[data-portfolio-tab="synthesis"] #portfolioAllocationCard,
-  body[data-portfolio-tab="synthesis"] #analyticsCenter,
-  body[data-portfolio-tab="synthesis"] #anDataChecks,
-  body[data-portfolio-tab="synthesis"] #v35SectionTitle {
-    display:block!important; visibility:visible!important; opacity:1!important;
-    height:auto!important; max-height:none!important; overflow:visible!important;
-    position:relative!important; clip:auto!important;
-  }
-  body[data-portfolio-tab="synthesis"] #accountOverviewGrid,
-  body[data-portfolio-tab="synthesis"] #v35DashboardOrder .cards,
-  body[data-portfolio-tab="synthesis"] #analyticsCenter .cards {display:grid!important; visibility:visible!important; opacity:1!important;}
-  body[data-portfolio-tab="synthesis"] #accountOverviewGrid {grid-template-columns:minmax(0,1fr)!important; width:100%!important;}
-  body[data-portfolio-tab="synthesis"] #v35DashboardOrder {width:100%!important; min-height:0!important; flex-direction:column!important; gap:12px!important;}
-  body[data-portfolio-tab="synthesis"] #v35DashboardOrder > * {visibility:visible!important; opacity:1!important; max-height:none!important;}
-  body[data-portfolio-tab="synthesis"] .positions-card,
-  body[data-portfolio-tab="synthesis"] #positionsTable,
-  body[data-portfolio-tab="synthesis"] .positions-scroll,
-  body[data-portfolio-tab="synthesis"] #journalOperationsSection,
-  body[data-portfolio-tab="synthesis"] #importedOpsSection,
-  body[data-portfolio-tab="synthesis"] #portfolioSectionMenu,
-  body[data-portfolio-tab="synthesis"] #fileImporterSection,
-  body[data-portfolio-tab="synthesis"] #marketUpdateLinks {display:none!important; visibility:hidden!important;}
-  @media(max-width:700px){body[data-portfolio-tab="synthesis"] #v35DashboardOrder .cards,body[data-portfolio-tab="synthesis"] #analyticsCenter .cards{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}}
-  @media(max-width:420px){body[data-portfolio-tab="synthesis"] #v35DashboardOrder .cards,body[data-portfolio-tab="synthesis"] #analyticsCenter .cards{grid-template-columns:1fr!important}}
-</style>
-<script id="V3511_PEA_SYNTHESIS_MOBILE_FIX_JS">
-(function(){
- 'use strict';
- const ids=['v35DashboardOrder','accountOverviewGrid','accountSynthesisCard','portfolioAllocationCard','analyticsCenter','anDataChecks'];
- function reveal(el,display){
-   if(!el)return;
-   el.classList.remove('v35-nav-hidden','mp-tab-hidden','v35-nav-v3-hidden');
-   el.style.setProperty('display',display||((el.matches('.cards,.account-overview-grid'))?'grid':'block'),'important');
-   el.style.setProperty('visibility','visible','important');el.style.setProperty('opacity','1','important');
-   el.style.setProperty('height','auto','important');el.style.setProperty('max-height','none','important');el.style.setProperty('overflow','visible','important');
- }
- function repair(){
-   if((document.body.dataset.portfolioTab||'home')!=='synthesis')return;
-   const wrap=document.querySelector('.wrap');
-   ids.forEach(id=>{const el=document.getElementById(id);if(!el)return;let p=el;while(p&&p!==wrap&&p!==document.body){p.classList.remove('v35-nav-hidden','mp-tab-hidden','v35-nav-v3-hidden');p.style.setProperty('visibility','visible','important');p.style.setProperty('opacity','1','important');if(getComputedStyle(p).display==='none')p.style.setProperty('display',p.matches('.cards,.account-overview-grid')?'grid':'block','important');p=p.parentElement;}reveal(el,id==='accountOverviewGrid'?'grid':'block');});
-   ['v35DashboardOrder','analyticsCenter'].forEach(id=>{const root=document.getElementById(id);if(root)root.querySelectorAll('.cards').forEach(c=>reveal(c,'grid'));});
-   const title=document.getElementById('v35SectionTitle');if(title)reveal(title,'block');
-   // Exclure les panneaux hors Synthèse même après les rendus asynchrones.
-   document.querySelectorAll('.positions-card,#positionsTable,.positions-scroll,#journalOperationsSection,#importedOpsSection,#portfolioSectionMenu,#fileImporterSection,#marketUpdateLinks').forEach(el=>{el.style.setProperty('display','none','important');el.style.setProperty('visibility','hidden','important');});
- }
- const obs=new MutationObserver(()=>{if(document.body.dataset.portfolioTab==='synthesis')repair();});
- function init(){obs.observe(document.body,{attributes:true,attributeFilter:['data-portfolio-tab']});[0,150,500,1100,1800].forEach(ms=>setTimeout(repair,ms));}
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
- window.addEventListener('load',()=>[150,600,1300].forEach(ms=>setTimeout(repair,ms)));
-})();
-</script>
