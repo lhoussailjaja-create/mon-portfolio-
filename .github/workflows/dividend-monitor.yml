@@ -1,6 +1,6 @@
 name: Dividend Monitor - PEA
 
-'on':
+on:
   schedule:
     - cron: '0 9 * * 1,4'
   workflow_dispatch:
