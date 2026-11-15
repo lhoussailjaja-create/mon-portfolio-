@@ -6,16 +6,19 @@ name: Dividend Monitor - PEA
   workflow_dispatch:
 
 permissions:
- contents: read
+  contents: read
+
 jobs:
   check-official-calendar:
     runs-on: ubuntu-latest
+
     steps:
       - name: Update trusted certificates
         run: python -m pip install --upgrade certifi
+
       - name: Check official Bourse de Casablanca calendar
         run: |
-         python - <<'PY'
+          python - <<'PY'
           import urllib.request
           import ssl
           import certifi
@@ -45,3 +48,7 @@ jobs:
               print("Reason:", error)
               raise
           PY
+
+
+
+دير هاد الخطوات
