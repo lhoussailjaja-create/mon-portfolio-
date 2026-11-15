@@ -12,9 +12,9 @@ jobs:
   check-official-calendar:
     runs-on: ubuntu-latest
    steps:
-      - name: Update trusted certificates
+     - name: Update trusted certificates
        run: python -m pip install --upgrade certifi
-      - name: Check official Bourse de Casablanca calendar
+     - name: Check official Bourse de Casablanca calendar
     run: |
       python - <<'PY'
           import urllib.request
