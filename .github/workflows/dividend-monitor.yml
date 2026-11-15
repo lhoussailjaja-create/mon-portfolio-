@@ -7,7 +7,7 @@ name: Dividend Monitor - PEA
 
 permissions:
    contents: read
- jobs:
+jobs:
   check-official-calendar:
     runs-on: ubuntu-latest
     steps:
