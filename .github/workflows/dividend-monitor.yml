@@ -38,9 +38,12 @@ jobs:
 
           url = "https://www.casablanca-bourse.com/fr/emetteurs/calendrier-financier"
 
+          
           context = ssl.create_default_context(
-              cafile=certifi.where()
+            cafile="/etc/ssl/certs/ca-certificates.crt"
           )
+
+          
 
           request = urllib.request.Request(
               url,
