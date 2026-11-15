@@ -13,49 +13,62 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check official Bourse de Casablanca calendar
+      - name: Install trusted certificates
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl
+          sudo update-ca-certificates
+          python -m pip install --upgrade certifi
+
+      - name: Diagnose official website connection
+        run: |
+          echo "Testing official Bourse website..."
+          curl -Iv --max-time 30 \
+            https://www.casablanca-bourse.com/fr/emetteurs/calendrier-financier \
+            2>&1 || true
+
+      - name: Check official dividend calendar
         run: |
           python - <<'PY'
           import urllib.request
           import ssl
+          import certifi
           from datetime import datetime, timezone
 
           url = "https://www.casablanca-bourse.com/fr/emetteurs/calendrier-financier"
 
+          print("UTC:", datetime.now(timezone.utc).isoformat())
+          print("CA bundle:", certifi.where())
+
+          context = ssl.create_default_context()
+          context.load_verify_locations(cafile=certifi.where())
+
           request = urllib.request.Request(
               url,
               headers={
-                  "User-Agent": "Mozilla/5.0 MonPortfolio-PEA-DividendMonitor/1.0"
+                  "User-Agent": "Mozilla/5.0 MonPortfolio-PEA/1.0"
               }
           )
 
-          print("Date UTC:", datetime.now(timezone.utc).isoformat())
-          print("Checking official Bourse de Casablanca...")
+          with urllib.request.urlopen(
+              request,
+              timeout=30,
+              context=context
+          ) as response:
+              html = response.read().decode("utf-8", errors="replace")
 
-          ssl_context = ssl.create_default_context()
-
-          try:
-              with urllib.request.urlopen(
-                  request,
-                  timeout=30,
-                  context=ssl_context
-              ) as response:
-
-                  html = response.read().decode("utf-8", errors="replace")
-
-                  print("HTTP status:", response.status)
-                  print("Final URL:", response.url)
-                  print("Page title available:", "<title" in html.lower())
-                  print(
-                      "Dividend keyword:",
-                      "dividend" in html.lower()
-                      or "dividende" in html.lower()
-                  )
-                  print("HTTPS certificate verification: SUCCESS")
-                  print("Source connection: SUCCESS")
-
-          except Exception as error:
-              print("Source connection: FAILED")
-              print("Error:", repr(error))
-              raise
+              print("HTTP status:", response.status)
+              print("Final URL:", response.url)
+              print("Page title:", "<title" in html.lower())
+              print(
+                  "Dividend keyword:",
+                  "dividend" in html.lower()
+                  or "dividende" in html.lower()
+              )
+              print("HTTPS verification: SUCCESS")
+              print("Connection: SUCCESS")
           PY
+
+
+
+من بعد
