@@ -28,6 +28,38 @@ jobs:
         run: |
           python -m pip install --upgrade pip certifi
 
+      - name: Diagnose SSL connection
+        run: |
+          python - <<'PY'
+          import ssl
+          import certifi
+          import socket
+
+          host = "www.casablanca-bourse.com"
+
+          print("Certifi file:", certifi.where())
+
+          for name, cafile in [
+              ("Certifi", certifi.where()),
+              ("System", "/etc/ssl/certs/ca-certificates.crt")
+          ]:
+              print("\nTesting:", name)
+              try:
+                  context = ssl.create_default_context(
+                      cafile=cafile
+                  )
+                  with socket.create_connection(
+                      (host, 443), timeout=20
+                  ) as sock:
+                      with context.wrap_socket(
+                          sock, server_hostname=host
+                      ) as secure:
+                          print("SUCCESS:", secure.version())
+              except Exception as error:
+                  print("FAILED:", repr(error))
+
+          PY
+
       - name: Check official Bourse de Casablanca calendar
         run: |
           python - <<'PY'
@@ -61,6 +93,7 @@ jobs:
 
               print("HTTP status:", response.status)
               print("Final URL:", response.url)
+
               print(
                   "Dividend keyword:",
                   "dividend" in html.lower()
