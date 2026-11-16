@@ -1,4 +1,4 @@
-name: Dividend Monitor - PEA V4
+name: Dividend Monitor - PEA V5
 
 on:
   schedule:
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   dividend-monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Setup Python
@@ -24,17 +24,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install secure CA certificates
+      - name: Update secure certificates
         run: |
           sudo apt-get update
           sudo apt-get install --reinstall -y ca-certificates
           sudo update-ca-certificates
 
-      - name: Monitor official Bourse de Casablanca
+      - name: Dividend Monitor V5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        shell: bash
         run: |
           python - <<'PY'
           import os
@@ -45,14 +44,20 @@ jobs:
           import unicodedata
           import urllib.request
           import urllib.parse
+          import urllib.error
 
           from html.parser import HTMLParser
           from datetime import datetime, timezone
           from zoneinfo import ZoneInfo
 
-          URL = (
+          OFFICIAL_URL = (
               "https://www.casablanca-bourse.com/"
               "fr/emetteurs/calendrier-financier"
+          )
+
+          PROXY_URL = (
+              "https://r.jina.ai/"
+              + OFFICIAL_URL
           )
 
           TOKEN = os.environ["GITHUB_TOKEN"]
@@ -63,19 +68,22 @@ jobs:
               + REPOSITORY
           )
 
-          # Secure system certificate store.
-          CONTEXT = ssl.create_default_context()
+          SSL_CONTEXT = ssl.create_default_context()
 
           COMPANIES = {
               "ITISSALAT AL MAGHRIB": [
                   "ITISSALAT AL MAGHRIB",
+                  "ITISSALAT AL-MAGHRIB",
                   "MAROC TELECOM",
                   "IAM"
               ],
-              "AKDITAL": ["AKDITAL"],
+              "AKDITAL": [
+                  "AKDITAL"
+              ],
               "MARSA MAROC": [
                   "MARSA MAROC",
-                  "MARSA MAROC SA"
+                  "MARSA MAROC SA",
+                  "SOCIETE D'EXPLOITATION DES PORTS"
               ],
               "TOTALENERGIES MARKETING MAROC": [
                   "TOTALENERGIES MARKETING MAROC",
@@ -98,9 +106,7 @@ jobs:
           ]
 
           def normalize(value):
-              value = unicodedata.normalize(
-                  "NFKD", value
-              )
+              value = unicodedata.normalize("NFKD", value)
               value = "".join(
                   c for c in value
                   if not unicodedata.combining(c)
@@ -127,26 +133,24 @@ jobs:
                   if not self.skip and data.strip():
                       self.parts.append(data.strip())
 
-          def http_request(url, method="GET", data=None):
+          def request(url, method="GET", data=None):
               headers = {
-                  "User-Agent": "Mozilla/5.0 MonPortfolioDividendMonitor/4.0",
+                  "User-Agent": "MonPortfolioDividendMonitor/5.0",
                   "Accept": (
                       "application/vnd.github+json"
-                      if url.startswith("https://api.github.com/")
-                      else "text/html,application/xhtml+xml"
+                      if "api.github.com" in url
+                      else "text/plain,text/html,/"
                   ),
                   "X-GitHub-Api-Version": "2022-11-28"
               }
 
-              if url.startswith("https://api.github.com/"):
-                  headers["Authorization"] = (
-                      "Bearer " + TOKEN
-                  )
+              if "api.github.com" in url:
+                  headers["Authorization"] = "Bearer " + TOKEN
 
               if data is not None:
                   headers["Content-Type"] = "application/json"
 
-              request = urllib.request.Request(
+              req = urllib.request.Request(
                   url,
                   data=(
                       json.dumps(data).encode("utf-8")
@@ -157,14 +161,58 @@ jobs:
               )
 
               with urllib.request.urlopen(
-                  request,
+                  req,
                   timeout=45,
-                  context=CONTEXT
+                  context=SSL_CONTEXT
               ) as response:
-                  raw = response.read().decode(
-                      "utf-8", errors="replace"
+                  return (
+                      response.status,
+                      response.read().decode(
+                          "utf-8", errors="replace"
+                      )
                   )
-                  return response.status, raw
+
+          def get_official_calendar():
+              print("Trying official Bourse website...")
+
+              try:
+                  status, content = request(OFFICIAL_URL)
+
+                  if status == 200 and len(content) > 100:
+                      print("Official direct connection: SUCCESS")
+                      return content, "Official direct"
+
+              except Exception as error:
+                  print("Direct connection failed:", str(error))
+
+              print("Trying HTTPS reader fallback...")
+
+              try:
+                  status, content = request(PROXY_URL)
+
+                  if status == 200 and len(content) > 100:
+                      print("HTTPS fallback: SUCCESS")
+                      print("Content source:", OFFICIAL_URL)
+                      print("Retrieval method: Jina Reader")
+                      return content, "HTTPS reader fallback"
+
+                  raise RuntimeError(
+                      "Fallback returned invalid response"
+                  )
+
+              except Exception as error:
+                  raise RuntimeError(
+                      "Both official and fallback connections failed: "
+                      + str(error)
+                  )
+
+          def extract_text(content):
+              parser = TextExtractor()
+              parser.feed(content)
+
+              return normalize(
+                  " ".join(parser.parts)
+              )
 
           def find_alerts(text):
               alerts = []
@@ -243,12 +291,11 @@ jobs:
                   )
               })
 
-              search_url = (
+              status, result = request(
                   "https://api.github.com/search/issues?"
                   + query
               )
 
-              status, result = http_request(search_url)
               existing = json.loads(result)
 
               if existing.get("total_count", 0) > 0:
@@ -260,7 +307,7 @@ jobs:
               ).isoformat()
 
               body = "\n".join([
-                  "## Dividend Monitor - PEA V4",
+                  "## Dividend Monitor - PEA V5",
                   "",
                   "Company: " + alert["company"],
                   "",
@@ -268,39 +315,44 @@ jobs:
                   "",
                   "Detection date (Morocco): " + morocco_time,
                   "",
-                  "Official source: " + URL,
+                  "Official source: " + OFFICIAL_URL,
                   "",
                   "### Extracted context",
                   "",
                   alert["context"],
                   "",
                   "---",
-                  "Automatically detected by Mon Portfolio Dividend Monitor."
+                  "Automatically detected by Mon Portfolio Dividend Monitor V5."
               ])
 
-              issue_data = {
+              issue = {
                   "title": title,
                   "body": body
               }
 
-              status, result = http_request(
+              status, result = request(
                   API + "/issues",
                   method="POST",
-                  data=issue_data
+                  data=issue
               )
 
-              issue = json.loads(result)
+              created = json.loads(result)
+
+              if status not in (200, 201):
+                  raise RuntimeError(
+                      "GitHub issue creation failed"
+                  )
 
               print(
                   "ALERT CREATED:",
-                  issue.get("html_url", "Unknown")
+                  created.get("html_url", "Unknown")
               )
 
               return True
 
           def main():
               print("================================")
-              print("DIVIDEND MONITOR - PEA V4")
+              print("DIVIDEND MONITOR - PEA V5")
               print("================================")
 
               print(
@@ -316,26 +368,13 @@ jobs:
               )
 
               print("SSL verification: ENABLED")
-              print("CA verification: system trust store")
 
-              print("Checking official calendar...")
+              content, source = get_official_calendar()
 
-              status, html = http_request(URL)
+              print("Retrieval method:", source)
+              print("Page size:", len(content))
 
-              print("HTTP:", status)
-              print("Page size:", len(html))
-
-              if status != 200:
-                  raise RuntimeError(
-                      "Official calendar unavailable"
-                  )
-
-              parser = TextExtractor()
-              parser.feed(html)
-
-              page_text = normalize(
-                  " ".join(parser.parts)
-              )
+              page_text = extract_text(content)
 
               print("Extracting dividend information...")
 
@@ -358,7 +397,7 @@ jobs:
               print("New alerts:", created)
               print("Monitor completed successfully.")
 
-          if _name_ == "_main_":
+          if _ _name_ _ == "_ _main_ _":
               main()
 
           PY
