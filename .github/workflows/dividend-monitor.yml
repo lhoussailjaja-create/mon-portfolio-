@@ -2,6 +2,7 @@ name: Dividend Monitor - PEA
 
 on:
   schedule:
+    # 09:00 Morocco time (UTC+1)
     - cron: "0 8 * * 1,4"
   workflow_dispatch:
 
@@ -17,6 +18,38 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ca-certificates curl openssl
+
+      - name: Install official Sectigo certificates
+        run: |
+          set -e
+
+          mkdir -p sectigo
+
+          curl -fLsS --retry 3 \
+            https://crt.sectigo.com/SectigoPublicServerAuthenticationCADVR36.crt \
+            -o sectigo/intermediate.crt
+
+          curl -fLsS --retry 3 \
+            https://crt.sectigo.com/SectigoPublicServerAuthenticationRootR46.crt \
+            -o sectigo/root.crt
+
+          for cert in intermediate root; do
+            if openssl x509 -in "sectigo/${cert}.crt" -noout 2>/dev/null; then
+              cp "sectigo/${cert}.crt" "sectigo/${cert}-trusted.crt"
+            else
+              openssl x509 \
+                -inform DER \
+                -in "sectigo/${cert}.crt" \
+                -out "sectigo/${cert}-trusted.crt"
+            fi
+          done
+
+          sudo cp sectigo/intermediate-trusted.crt \
+            /usr/local/share/ca-certificates/sectigo-intermediate.crt
+
+          sudo cp sectigo/root-trusted.crt \
+            /usr/local/share/ca-certificates/sectigo-root.crt
+
           sudo update-ca-certificates
 
       - name: Setup Python
@@ -24,78 +57,39 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Sectigo CA certificates
-        shell: bash
-        run: |
-          set -e
-
-          mkdir -p "$RUNNER_TEMP/sectigo"
-
-          cd "$RUNNER_TEMP/sectigo"
-
-          curl -fL --retry 3 \
-            http://crt.sectigo.com/SectigoPublicServerAuthenticationCADVR36.crt \
-            -o intermediate.crt
-
-          curl -fL --retry 3 \
-            http://crt.sectigo.com/SectigoPublicServerAuthenticationRootR46.crt \
-            -o root.crt
-
-          for name in intermediate root; do
-            if openssl x509 -in "$name.crt" -noout 2>/dev/null; then
-              cp "$name.crt" "$name.pem"
-            else
-              openssl x509 -inform DER \
-                -in "$name.crt" -out "$name.pem"
-            fi
-          done
-
-          openssl x509 -in intermediate.pem -noout -subject
-          openssl x509 -in root.pem -noout -subject
-
-          grep -q "Sectigo Public Server Authentication CA DV R36" \
-            <(openssl x509 -in intermediate.pem -noout -subject)
-
-          grep -q "Sectigo Public Server Authentication Root R46" \
-            <(openssl x509 -in root.pem -noout -subject)
-
-          cat /etc/ssl/certs/ca-certificates.crt \
-            intermediate.pem root.pem > sectigo-ca-bundle.pem
-
-          echo "SSL_CERT_FILE=$PWD/sectigo-ca-bundle.pem" >> "$GITHUB_ENV"
-
-      - name: Verify SSL connection
-        run: |
-          openssl s_client \
-            -connect www.casablanca-bourse.com:443 \
-            -servername www.casablanca-bourse.com \
-            -CAfile "$SSL_CERT_FILE" \
-            -verify_return_error </dev/null
-
       - name: Check official Bourse de Casablanca calendar
         run: |
           python - <<'PY'
-          import urllib.request
           import ssl
-          import os
-          from datetime import datetime
+          import urllib.request
+          from datetime import datetime, timezone
           from zoneinfo import ZoneInfo
 
-          url = "https://www.casablanca-bourse.com/fr/emetteurs/calendrier-financier"
-
-          context = ssl.create_default_context(
-              cafile=os.environ["SSL_CERT_FILE"]
+          url = (
+              "https://www.casablanca-bourse.com/"
+              "fr/emetteurs/calendrier-financier"
           )
+
+          context = ssl.create_default_context()
 
           request = urllib.request.Request(
               url,
               headers={
-                  "User-Agent": "Mozilla/5.0 MonPortfolio-PEA/3.0"
+                  "User-Agent": "Mozilla/5.0 MonPortfolio-PEA/2.0"
               }
           )
 
+          print("================================")
+          print("DIVIDEND MONITOR - PEA")
+          print("================================")
+
           print(
-              "Morocco time:",
+              "UTC:",
+              datetime.now(timezone.utc).isoformat()
+          )
+
+          print(
+              "Morocco:",
               datetime.now(
                   ZoneInfo("Africa/Casablanca")
               ).isoformat()
@@ -104,27 +98,41 @@ jobs:
           print("Checking official dividend calendar...")
 
           with urllib.request.urlopen(
-              request, timeout=30, context=context
+              request,
+              timeout=40,
+              context=context
           ) as response:
 
               html = response.read().decode(
-                  "utf-8", errors="replace"
+                  "utf-8",
+                  errors="replace"
               )
 
               print("HTTP status:", response.status)
               print("Final URL:", response.url)
 
-          if not html.strip():
-              raise RuntimeError("Empty official calendar page")
+              if response.status != 200:
+                  raise RuntimeError(
+                      "Official calendar returned an error"
+                  )
 
-          print("Page received successfully")
+              keywords = [
+                  "dividend",
+                  "dividende",
+                  "dividendes"
+              ]
 
-          print(
-              "Dividend keyword:",
-              "dividende" in html.lower()
-              or "dividend" in html.lower()
-          )
+              found = [
+                  word for word in keywords
+                  if word in html.lower()
+              ]
 
-          print("SSL: VERIFIED")
-          print("Connection: SUCCESS")
+              print("Dividend keywords found:", found)
+              print("Page size:", len(html), "characters")
+              print("SSL verification: SUCCESS")
+              print("Connection: SUCCESS")
+
+          print("================================")
+          print("MONITOR CHECK COMPLETED")
+          print("================================")
           PY
