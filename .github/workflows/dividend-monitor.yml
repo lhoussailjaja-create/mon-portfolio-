@@ -1,8 +1,8 @@
+
 name: Dividend Monitor - PEA
 
 on:
   schedule:
-    # 09:00 Morocco time (UTC+1)
     - cron: "0 8 * * 1,4"
   workflow_dispatch:
 
@@ -19,38 +19,54 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ca-certificates curl openssl
 
-      - name: Install official Sectigo certificates
+      - name: Install verified Sectigo certificates
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          mkdir -p sectigo
+          mkdir -p certificates
 
+          echo "Downloading official Sectigo DV R36..."
           curl -fLsS --retry 3 \
-            https://crt.sectigo.com/SectigoPublicServerAuthenticationCADVR36.crt \
-            -o sectigo/intermediate.crt
+            http://crt.sectigo.com/SectigoPublicServerAuthenticationCADVR36.crt \
+            -o certificates/intermediate.der
 
+          echo "Downloading official Sectigo Root R46..."
           curl -fLsS --retry 3 \
-            https://crt.sectigo.com/SectigoPublicServerAuthenticationRootR46.crt \
-            -o sectigo/root.crt
+            http://crt.sectigo.com/SectigoPublicServerAuthenticationRootR46.crt \
+            -o certificates/root.der
 
-          for cert in intermediate root; do
-            if openssl x509 -in "sectigo/${cert}.crt" -noout 2>/dev/null; then
-              cp "sectigo/${cert}.crt" "sectigo/${cert}-trusted.crt"
-            else
-              openssl x509 \
-                -inform DER \
-                -in "sectigo/${cert}.crt" \
-                -out "sectigo/${cert}-trusted.crt"
-            fi
-          done
+          echo "Checking SHA-256 fingerprints..."
 
-          sudo cp sectigo/intermediate-trusted.crt \
+          echo "8c54c334b66ba4e426772af4a3f9136c19a1aec729fdb28c535c07a5a4ef22e0  certificates/intermediate.der" \
+            | sha256sum -c -
+
+          echo "7bb647a62aeeac88bf257aa522d01ffea395e0ab45c73f93f65654ec38f25a06  certificates/root.der" \
+            | sha256sum -c -
+
+          openssl x509 -inform DER \
+            -in certificates/intermediate.der \
+            -out certificates/intermediate.crt
+
+          openssl x509 -inform DER \
+            -in certificates/root.der \
+            -out certificates/root.crt
+
+          openssl x509 -in certificates/intermediate.crt \
+            -noout -subject -issuer
+
+          openssl x509 -in certificates/root.crt \
+            -noout -subject -issuer
+
+          sudo cp certificates/intermediate.crt \
             /usr/local/share/ca-certificates/sectigo-intermediate.crt
 
-          sudo cp sectigo/root-trusted.crt \
+          sudo cp certificates/root.crt \
             /usr/local/share/ca-certificates/sectigo-root.crt
 
           sudo update-ca-certificates
+
+          echo "Sectigo certificates verified and installed."
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -58,6 +74,7 @@ jobs:
           python-version: "3.12"
 
       - name: Check official Bourse de Casablanca calendar
+        shell: bash
         run: |
           python - <<'PY'
           import ssl
@@ -95,7 +112,7 @@ jobs:
               ).isoformat()
           )
 
-          print("Checking official dividend calendar...")
+          print("Checking official calendar...")
 
           with urllib.request.urlopen(
               request,
@@ -108,13 +125,11 @@ jobs:
                   errors="replace"
               )
 
-              print("HTTP status:", response.status)
-              print("Final URL:", response.url)
+              print("HTTP:", response.status)
+              print("URL:", response.url)
 
               if response.status != 200:
-                  raise RuntimeError(
-                      "Official calendar returned an error"
-                  )
+                  raise RuntimeError("Calendar unavailable")
 
               keywords = [
                   "dividend",
@@ -127,12 +142,10 @@ jobs:
                   if word in html.lower()
               ]
 
-              print("Dividend keywords found:", found)
-              print("Page size:", len(html), "characters")
+              print("Keywords:", found)
+              print("Page size:", len(html))
               print("SSL verification: SUCCESS")
               print("Connection: SUCCESS")
 
-          print("================================")
           print("MONITOR CHECK COMPLETED")
-          print("================================")
           PY
