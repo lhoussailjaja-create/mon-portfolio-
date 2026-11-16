@@ -807,8 +807,9 @@ async function refreshMarketDividends(){
  if(status)status.textContent='Actualisation depuis GitHub et la Bourse de Casablanca…';if(nstatus)nstatus.textContent='Actualisation des deux sources…';
  const results=await Promise.allSettled([fetchGitHubDividendAnnouncements(),fetchBvcDividendAnnouncements()]);
  const gh=results[0],bvc=results[1],merged=new Map();
- if(gh.status==='fulfilled')gh.value.forEach(x=>merged.set([x.company,x.exDate,x.paymentDate,x.amount].join('|').toLowerCase(),x));
- if(bvc.status==='fulfilled')bvc.value.forEach(x=>{const key=[x.company,x.exDate,x.paymentDate,x.amount].join('|').toLowerCase();const prior=merged.get(key);merged.set(key,prior?{...x,...prior,source: x.source,sourceName:'Bourse + GitHub'}:x)});
+ const dividendKey=x=>x.eventId||[x.company,x.exDate,x.paymentDate,x.type||'',x.amount].map(v=>String(v||'').normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').trim().replace(/\\s+/g,' ').toLocaleLowerCase('fr')).join('|');
+ if(gh.status==='fulfilled')gh.value.forEach(x=>merged.set(dividendKey(x),x));
+ if(bvc.status==='fulfilled')bvc.value.forEach(x=>{const key=dividendKey(x);const prior=merged.get(key);merged.set(key,prior?{...x,...prior,source:x.source,sourceName:'Bourse + GitHub'}:x)});
  const items=[...merged.values()].sort((a,b)=>String(b.exDate||'').split('/').reverse().join('').localeCompare(String(a.exDate||'').split('/').reverse().join('')));
  if(items.length|| (gh.status==='fulfilled'&&bvc.status==='fulfilled')){
   state.marketDividends=items;state.marketNotifications=items;
