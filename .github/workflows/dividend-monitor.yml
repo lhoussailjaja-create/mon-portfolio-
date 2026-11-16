@@ -137,66 +137,65 @@ jobs:
 
           def parse_calendar(content):
               alerts = []
+              column_aliases = {
+                  "company": ("issuer", "company", "emetteur", "émetteur", "name"),
+                  "ex_date": ("ex-date", "ex date", "detachment", "détachement"),
+                  "payment_date": ("payment date", "payment", "paiement"),
+                  "dividend_type": ("type", "dividend type", "type de dividende"),
+                  "amount": ("amount", "montant", "dividend")
+              }
 
+              def header_key(value):
+                  return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+              def parse_date(value):
+                  for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
+                      try:
+                          return datetime.strptime(value.strip(), fmt).strftime("%d/%m/%Y")
+                      except ValueError:
+                          pass
+                  return ""
+
+              indexes = None
               for line in content.splitlines():
-                  line = line.strip()
-
                   if "|" not in line:
                       continue
-
-                  cells = [
-                      normalize(cell)
-                      for cell in line.strip("|").split("|")
-                  ]
-
-                  if len(cells) < 5:
+                  cells = [normalize(x) for x in line.strip().strip("|").split("|")]
+                  keys = [header_key(x) for x in cells]
+                  found = {}
+                  for field, aliases in column_aliases.items():
+                      for i, key in enumerate(keys):
+                          if key in [header_key(alias) for alias in aliases]:
+                              found[field] = i
+                              break
+                  if all(field in found for field in column_aliases):
+                      indexes = found
                       continue
-
-                  company = cells[0]
-                  ex_date = cells[1]
-                  payment_date = cells[2]
-                  dividend_type = cells[3]
-                  amount = cells[4]
-
-                  if company.lower() in (
-                      "", "issuer", "year", "filter by agenda"
-                  ):
+                  if not indexes or len(cells) <= max(indexes.values()):
                       continue
-
-                  if not re.fullmatch(
-                      r"\d{2}/\d{2}/\d{4}", ex_date
-                  ):
+                  row = {field: cells[i] for field, i in indexes.items()}
+                  ex_date, payment_date = parse_date(row["ex_date"]), parse_date(row["payment_date"])
+                  if not row["company"] or not ex_date or not payment_date or not re.search(r"\\d", row["amount"]):
                       continue
-
-                  if not re.fullmatch(
-                      r"\d{2}/\d{2}/\d{4}", payment_date
-                  ):
-                      continue
-
-                  if not re.search(r"\d", amount):
-                      continue
-
                   alerts.append({
-                      "company": company,
-                      "ex_date": ex_date,
+                      "company": row["company"], "ex_date": ex_date,
                       "payment_date": payment_date,
-                      "dividend_type": dividend_type,
-                      "amount": amount
+                      "dividend_type": row["dividend_type"] or "Unspecified",
+                      "amount": row["amount"]
                   })
-
               unique = {}
-
               for alert in alerts:
-                  key = "|".join([
-                      alert["company"].upper(),
-                      alert["ex_date"],
-                      alert["payment_date"],
-                      alert["dividend_type"].upper(),
-                      alert["amount"]
-                  ])
-                  unique[key] = alert
-
+                  unique[event_id(alert)] = alert
               return list(unique.values())
+
+          def event_id(alert):
+              import unicodedata
+              def clean(value):
+                  value = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode().casefold()
+                  return re.sub(r"[^a-z0-9]+", " ", value).strip()
+              identity = "|".join(clean(alert.get(k, "")) for k in
+                  ("company", "ex_date", "payment_date", "dividend_type", "amount"))
+              return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
           def is_relevant(alert):
               today = datetime.now(MOROCCO).date()
@@ -298,83 +297,67 @@ jobs:
 
           def main():
               print("====================================")
-              print("DIVIDEND MONITOR - V7")
-              print("====================================")
-
-              print(
-                  "Morocco time:",
-                  datetime.now(MOROCCO).isoformat()
-              )
-
-              print("SSL verification: ENABLED")
-
+              print("DIVIDEND MONITOR - V8")
+              print("Morocco time:", datetime.now(MOROCCO).isoformat())
               content = get_calendar()
-
               all_alerts = parse_calendar(content)
-
               print("Dividend rows found:", len(all_alerts))
-
-              if not all_alerts:
-                  print("Calendar preview:")
-                  print(content[:5000])
-                  raise RuntimeError(
-                      "No dividend rows found. "
-                      "Check official calendar format."
-                  )
-
-              relevant = [
-                  alert for alert in all_alerts
-                  if is_relevant(alert)
-              ]
-
+              # A valid calendar with zero rows is not a failure and never clears the ledger.
+              relevant = [a for a in all_alerts if is_relevant(a)]
               print("Relevant current/future dividends:", len(relevant))
+
+              snapshot_path = pathlib.Path("data/dividend-announcements.json")
+              snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+              previous = {"announcements": []}
+              if snapshot_path.exists():
+                  try:
+                      previous = json.loads(snapshot_path.read_text(encoding="utf-8"))
+                      if not isinstance(previous, dict) or not isinstance(previous.get("announcements"), list):
+                          raise ValueError("invalid announcements structure")
+                  except Exception as exc:
+                      raise RuntimeError("Existing dividend JSON is invalid; refusing to overwrite: " + str(exc))
+              announcements = list(previous.get("announcements", []))
+              known = {x.get("eventId") for x in announcements if isinstance(x, dict) and x.get("eventId")}
+              by_legacy = set()
+              for item in announcements:
+                  if isinstance(item, dict):
+                      by_legacy.add("|".join([item.get("company",""),item.get("exDate",""),item.get("paymentDate",""),item.get("type",""),item.get("amount","")]).upper())
+
+              created = 0
+              for alert in relevant:
+                  eid = event_id(alert)
+                  if eid in known:
+                      print("ALREADY IN JSON:", alert["company"], eid)
+                      continue
+                  legacy = "|".join([alert["company"],alert["ex_date"],alert["payment_date"],alert["dividend_type"],alert["amount"]]).upper()
+                  # Existing snapshot items and existing GitHub issues are both dedupe sources.
+                  url = ""
+                  if legacy in by_legacy:
+                      print("LEGACY DUPLICATE SKIPPED:", alert["company"])
+                      continue
+                  issue_url = create_issue(alert)
+                  if issue_url:
+                      url = issue_url
+                      created += 1
+                  announcements.append({
+                      "eventId": eid, "company": alert["company"],
+                      "exDate": alert["ex_date"], "paymentDate": alert["payment_date"],
+                      "type": alert["dividend_type"], "amount": alert["amount"],
+                      "source": OFFICIAL_URL, "sourceName": "Bourse de Casablanca",
+                      "url": url
+                  })
+                  known.add(eid)
+                  by_legacy.add(legacy)
 
               snapshot = {
                   "updatedAt": datetime.now(MOROCCO).isoformat(),
                   "source": OFFICIAL_URL,
-                  "announcements": [
-                      {
-                          "company": alert["company"],
-                          "exDate": alert["ex_date"],
-                          "paymentDate": alert["payment_date"],
-                          "type": alert["dividend_type"],
-                          "amount": alert["amount"],
-                          "source": OFFICIAL_URL,
-                          "sourceName": "Bourse de Casablanca",
-                          "url": ""
-                      }
-                      for alert in relevant
-                  ]
+                  "announcements": announcements
               }
-              snapshot_path = pathlib.Path("data/dividend-announcements.json")
-              snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-              snapshot_path.write_text(
-                  json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n",
-                  encoding="utf-8"
-              )
-              print("Published snapshot rows:", len(relevant))
-
-              created = 0
-
-              for alert in relevant:
-                  print(
-                      "Checking:",
-                      alert["company"],
-                      "| Ex-date:",
-                      alert["ex_date"],
-                      "| Payment:",
-                      alert["payment_date"],
-                      "| Amount:",
-                      alert["amount"]
-                  )
-
-                  if create_issue(alert):
-                      created += 1
-
+              snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+              print("Published snapshot rows (history retained):", len(announcements))
               print("New alerts:", created)
-              print("====================================")
               print("MONITOR COMPLETED SUCCESSFULLY")
-              print("====================================")
 
           if __name__ == "__main__":
               main()
