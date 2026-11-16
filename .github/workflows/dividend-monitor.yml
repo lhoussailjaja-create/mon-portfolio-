@@ -175,7 +175,7 @@ jobs:
                       continue
                   row = {field: cells[i] for field, i in indexes.items()}
                   ex_date, payment_date = parse_date(row["ex_date"]), parse_date(row["payment_date"])
-                  if not row["company"] or not ex_date or not payment_date or not re.search(r"\\d", row["amount"]):
+                  if not row["company"] or not ex_date or not payment_date or not re.search(r"\d", row["amount"]):
                       continue
                   alerts.append({
                       "company": row["company"], "ex_date": ex_date,
@@ -354,7 +354,7 @@ jobs:
                   "source": OFFICIAL_URL,
                   "announcements": announcements
               }
-              snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+              snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
               print("Published snapshot rows (history retained):", len(announcements))
               print("New alerts:", created)
               print("MONITOR COMPLETED SUCCESSFULLY")
