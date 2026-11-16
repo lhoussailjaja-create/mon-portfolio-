@@ -1,4 +1,4 @@
-name: Dividend Monitor - Bourse de Casablanca V7
+name: Dividend Monitor - Bourse de Casablanca V8.1
 
 on:
   schedule:
@@ -35,7 +35,7 @@ jobs:
           sudo apt-get install --reinstall -y ca-certificates
           sudo update-ca-certificates
 
-      - name: Dividend Monitor V7
+      - name: Dividend Monitor V8.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -43,319 +43,376 @@ jobs:
           python - <<'PY'
           import os
           import re
-          import pathlib
           import json
           import ssl
           import hashlib
+          import unicodedata
           import urllib.request
           import urllib.parse
+          import urllib.error
+          from pathlib import Path
           from datetime import datetime
           from zoneinfo import ZoneInfo
 
-          OFFICIAL_URL = (
-              "https://www.casablanca-bourse.com/"
-              "en/emetteurs/calendrier-financier"
-          )
-
+          OFFICIAL_URL = "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier"
           READER_URL = "https://r.jina.ai/" + OFFICIAL_URL
-
           TOKEN = os.environ["GITHUB_TOKEN"]
           REPOSITORY = os.environ["GITHUB_REPOSITORY"]
-
           API = "https://api.github.com/repos/" + REPOSITORY
           SSL_CONTEXT = ssl.create_default_context()
           MOROCCO = ZoneInfo("Africa/Casablanca")
+          TODAY = datetime.now(MOROCCO).date()
+
 
           def request(url, method="GET", data=None):
               headers = {
-                  "User-Agent": "MonPortfolioDividendMonitor/7.0",
-                  "Accept": (
-                      "application/vnd.github+json"
-                      if "api.github.com" in url
-                      else "text/plain"
-                  ),
-                  "X-GitHub-Api-Version": "2022-11-28"
+                  "User-Agent": "MonPortfolioDividendMonitor/8.0",
+                  "Accept": "application/vnd.github+json" if "api.github.com" in url else "text/plain",
+                  "X-GitHub-Api-Version": "2022-11-28",
               }
-
               if "api.github.com" in url:
                   headers["Authorization"] = "Bearer " + TOKEN
-
               if data is not None:
                   headers["Content-Type"] = "application/json"
-
               req = urllib.request.Request(
                   url,
-                  data=(
-                      json.dumps(data).encode("utf-8")
-                      if data is not None else None
-                  ),
+                  data=json.dumps(data, ensure_ascii=False).encode("utf-8") if data is not None else None,
                   headers=headers,
-                  method=method
+                  method=method,
               )
+              try:
+                  with urllib.request.urlopen(req, timeout=60, context=SSL_CONTEXT) as response:
+                      return response.status, response.read().decode("utf-8", errors="replace")
+              except urllib.error.HTTPError as exc:
+                  body = exc.read().decode("utf-8", errors="replace")
+                  raise RuntimeError(f"HTTP {exc.code} for {url}: {body[:1000]}") from exc
 
-              with urllib.request.urlopen(
-                  req, timeout=60, context=SSL_CONTEXT
-              ) as response:
-                  content = response.read().decode(
-                      "utf-8", errors="replace"
-                  )
-                  return response.status, content
 
-          def normalize(value):
-              value = value.replace("**", "").replace("`", "")
+          def clean_text(value):
+              value = str(value or "").replace("**", "").replace("`", "").strip()
+              value = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", value)
+              value = re.sub(r"<[^>]+>", "", value)
               return re.sub(r"\s+", " ", value).strip()
+
+
+          def normalized_key(value):
+              value = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode().casefold()
+              return re.sub(r"[^a-z0-9]+", " ", value).strip()
+
+
+          def header_key(value):
+              return normalized_key(clean_text(value))
+
 
           def get_calendar():
               print("Connecting to official English financial calendar...")
               print("Source:", OFFICIAL_URL)
-
               status, content = request(READER_URL)
-
               if status != 200:
-                  raise RuntimeError(
-                      "Calendar request failed: " + str(status)
-                  )
-
+                  raise RuntimeError("Calendar request failed: " + str(status))
               if len(content) < 1000:
-                  raise RuntimeError("Calendar content is too short")
-
-              # Do not bind validation to the page title or exact English labels.
-              # The parser below validates that a recognizable calendar schema exists.
+                  raise RuntimeError("Calendar content is too short; refusing to alter the ledger.")
               print("Calendar response received; validating its table schema.")
               print("Content length:", len(content))
-
               return content
+
+
+          def parse_date(value):
+              value = clean_text(value)
+              for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y", "%d %b %Y", "%d %B %Y"):
+                  try:
+                      return datetime.strptime(value, fmt).strftime("%d/%m/%Y")
+                  except ValueError:
+                      pass
+              return ""
+
 
           def parse_calendar(content):
               alerts = []
-              column_aliases = {
-                  "company": ("issuer", "company", "emetteur", "émetteur", "name"),
-                  "ex_date": ("ex-date", "ex date", "detachment", "détachement"),
-                  "payment_date": ("payment date", "payment", "paiement"),
-                  "dividend_type": ("type", "dividend type", "type de dividende"),
-                  "amount": ("amount", "montant", "dividend", "amount per share", "dividend per share", "dividend amount")
+              aliases = {
+                  "company": ("issuer", "company", "emetteur", "émetteur", "name", "société"),
+                  "ex_date": ("ex-date", "ex date", "detachment", "détachement", "date de détachement"),
+                  "payment_date": ("payment date", "payment", "paiement", "date de paiement"),
+                  "dividend_type": ("dividend type", "type de dividende", "type"),
+                  "amount": ("amount per share", "dividend per share", "dividend amount", "amount", "montant par action", "montant", "dividende par action"),
               }
-
-              def header_key(value):
-                  return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
-
-              def parse_date(value):
-                  for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
-                      try:
-                          return datetime.strptime(value.strip(), fmt).strftime("%d/%m/%Y")
-                      except ValueError:
-                          pass
-                  return ""
-
+              required = {"company", "ex_date", "amount"}
               indexes = None
+
               for line in content.splitlines():
                   if "|" not in line:
                       continue
-                  cells = [normalize(x) for x in line.strip().strip("|").split("|")]
+                  cells = [clean_text(x) for x in line.strip().strip("|").split("|")]
                   keys = [header_key(x) for x in cells]
                   found = {}
-                  for field, aliases in column_aliases.items():
-                      for i, key in enumerate(keys):
-                          if any(key == header_key(alias) or key.startswith(header_key(alias) + " ") for alias in aliases):
-                              found[field] = i
-                              break
-                  if all(field in found for field in column_aliases):
+                  for field, field_aliases in aliases.items():
+                      candidates = [header_key(x) for x in field_aliases]
+                      exact = next((i for i, key in enumerate(keys) if key in candidates), None)
+                      if exact is not None:
+                          found[field] = exact
+                          continue
+                      prefixed = next(
+                          (i for i, key in enumerate(keys)
+                           if any(key.startswith(alias + " ") for alias in candidates if len(alias) > 4)),
+                          None,
+                      )
+                      if prefixed is not None:
+                          found[field] = prefixed
+
+                  if required.issubset(found):
                       indexes = found
                       continue
-                  if not indexes or len(cells) <= max(indexes.values()):
+                  if indexes is None or len(cells) <= max(indexes.values()):
                       continue
-                  row = {field: cells[i] for field, i in indexes.items()}
-                  ex_date, payment_date = parse_date(row["ex_date"]), parse_date(row["payment_date"])
-                  if not row["company"] or not ex_date or not payment_date or not re.search(r"\d", row["amount"]):
+
+                  row = {field: cells[index] for field, index in indexes.items()}
+                  ex_date = parse_date(row.get("ex_date", ""))
+                  payment_date = parse_date(row.get("payment_date", ""))
+                  amount = row.get("amount", "")
+                  company = row.get("company", "")
+                  if not company or not ex_date or not re.search(r"\d", amount):
                       continue
                   alerts.append({
-                      "company": row["company"], "ex_date": ex_date,
+                      "company": company,
+                      "ex_date": ex_date,
                       "payment_date": payment_date,
-                      "dividend_type": row["dividend_type"] or "Unspecified",
-                      "amount": row["amount"]
+                      "dividend_type": row.get("dividend_type", "") or "Unspecified",
+                      "amount": amount,
                   })
+
               if indexes is None:
                   print("Calendar preview:")
                   print(content[:3000])
-                  raise RuntimeError("No recognizable dividend table schema found; preserving prior JSON.")
+                  raise RuntimeError("No recognizable dividend table schema found; preserving the previous JSON.")
 
               unique = {}
               for alert in alerts:
                   unique[event_id(alert)] = alert
               return list(unique.values())
 
+
           def event_id(alert):
-              import unicodedata
-              def clean(value):
-                  value = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode().casefold()
-                  return re.sub(r"[^a-z0-9]+", " ", value).strip()
-              identity = "|".join(clean(alert.get(k, "")) for k in
-                  ("company", "ex_date", "payment_date", "dividend_type", "amount"))
+              identity = "|".join((
+                  normalized_key(alert.get("company")),
+                  parse_date(alert.get("ex_date", "")) or str(alert.get("ex_date", "")),
+                  parse_date(alert.get("payment_date", "")) or str(alert.get("payment_date", "")),
+              ))
               return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
+
+          def legacy_fingerprint(alert):
+              identity = "|".join(str(alert.get(k, "")) for k in
+                                  ("company", "ex_date", "payment_date", "dividend_type", "amount"))
+              return hashlib.sha256(identity.upper().encode("utf-8")).hexdigest()[:20]
+
+
+          def to_date(value):
+              parsed = parse_date(value)
+              return datetime.strptime(parsed, "%d/%m/%Y").date() if parsed else None
+
+
           def is_relevant(alert):
-              today = datetime.now(MOROCCO).date()
+              dates = [to_date(alert.get("ex_date")), to_date(alert.get("payment_date"))]
+              return any(day is not None and day >= TODAY for day in dates)
 
-              ex_date = datetime.strptime(
-                  alert["ex_date"], "%d/%m/%Y"
-              ).date()
 
-              payment_date = datetime.strptime(
-                  alert["payment_date"], "%d/%m/%Y"
-              ).date()
+          def alert_from_record(record):
+              return {
+                  "company": clean_text(record.get("company", "")),
+                  "ex_date": clean_text(record.get("exDate", record.get("ex_date", ""))),
+                  "payment_date": clean_text(record.get("paymentDate", record.get("payment_date", ""))),
+                  "dividend_type": clean_text(record.get("type", record.get("dividend_type", ""))) or "Unspecified",
+                  "amount": clean_text(record.get("amount", "")),
+              }
 
-              return ex_date >= today or payment_date >= today
 
-          def create_issue(alert):
-              identity = "|".join([
-                  alert["company"],
-                  alert["ex_date"],
-                  alert["payment_date"],
-                  alert["dividend_type"],
-                  alert["amount"]
-              ])
-
-              fingerprint = hashlib.sha256(
-                  identity.upper().encode("utf-8")
-              ).hexdigest()[:20]
-
-              title = (
-                  "[DIVIDEND] "
-                  + alert["company"]
-                  + " - "
-                  + alert["ex_date"]
-                  + " - "
-                  + fingerprint
-              )
-
-              query = urllib.parse.urlencode({
-                  "q": (
-                      "repo:" + REPOSITORY
-                      + " is:issue "
-                      + fingerprint
-                  )
-              })
-
-              _, result = request(
-                  "https://api.github.com/search/issues?" + query
-              )
-
-              existing = json.loads(result)
-
-              if existing.get("total_count", 0) > 0:
-                  print("DUPLICATE SKIPPED:", title)
-                  return False
+          def create_issue(alert, stable_id):
+              marker = "DIVIDEND_EVENT_ID:" + stable_id
+              legacy = legacy_fingerprint(alert)
+              queries = [
+                  'repo:' + REPOSITORY + ' is:issue in:body "' + marker + '"',
+                  'repo:' + REPOSITORY + ' is:issue "' + legacy + '"',
+              ]
+              for query_text in queries:
+                  query = urllib.parse.urlencode({"q": query_text})
+                  _, result = request("https://api.github.com/search/issues?" + query)
+                  existing = json.loads(result)
+                  items = existing.get("items", [])
+                  if items:
+                      issue_url = items[0].get("html_url", "")
+                      print("DUPLICATE / EXISTING ISSUE:", issue_url or marker)
+                      return False, issue_url
 
               detected = datetime.now(MOROCCO).isoformat()
-
               body = "\n".join([
                   "## Nouveau dividende - Bourse de Casablanca",
                   "",
-                  "**Société :** " + alert["company"],
+                  "*Société :* " + alert["company"],
+                  "*Date de détachement :* " + (alert["ex_date"] or "Non précisée"),
+                  "*Date de paiement :* " + (alert["payment_date"] or "Non précisée"),
+                  "*Type :* " + alert["dividend_type"],
+                  "*Montant brut par action :* " + alert["amount"],
+                  "*Date de détection :* " + detected,
+                  "*Source officielle :* " + OFFICIAL_URL,
                   "",
-                  "**Date de détachement :** " + alert["ex_date"],
+                  "<!-- " + marker + " -->",
                   "",
-                  "**Date de paiement :** " + alert["payment_date"],
-                  "",
-                  "**Type :** " + alert["dividend_type"],
-                  "",
-                  "**Montant brut par action :** " + alert["amount"],
-                  "",
-                  "**Date de détection :** " + detected,
-                  "",
-                  "**Source officielle :** " + OFFICIAL_URL,
-                  "",
-                  "---",
-                  "Détection automatique - Mon Portfolio Dividend Monitor V7.",
-                  "Cette surveillance concerne toutes les sociétés du calendrier,",
-                  "et pas uniquement les titres détenus dans le PEA."
+                  "Surveillance de toutes les sociétés présentes dans le calendrier officiel,",
+                  "et pas uniquement des titres détenus dans le PEA ou le CTO.",
               ])
-
-              _, result = request(
-                  API + "/issues",
-                  method="POST",
-                  data={
-                      "title": title,
-                      "body": body
-                  }
-              )
-
+              _, result = request(API + "/issues", method="POST", data={
+                  "title": "[DIVIDEND] " + alert["company"] + " - " + (alert["ex_date"] or "Date inconnue") + " - " + stable_id[:12],
+                  "body": body,
+              })
               created = json.loads(result)
-
               if "html_url" not in created:
-                  raise RuntimeError(
-                      "Issue creation failed: "
-                      + json.dumps(created, ensure_ascii=False)
-                  )
-
+                  raise RuntimeError("Issue creation failed: " + json.dumps(created, ensure_ascii=False))
               print("NEW ALERT:", created["html_url"])
-              return True
+              return True, created["html_url"]
+
 
           def main():
               print("====================================")
-              print("DIVIDEND MONITOR - V8")
+              print("DIVIDEND MONITOR - V8.1")
               print("Morocco time:", datetime.now(MOROCCO).isoformat())
+
               content = get_calendar()
               all_alerts = parse_calendar(content)
               print("Dividend rows found:", len(all_alerts))
-              # A valid calendar with zero rows is not a failure and never clears the ledger.
-              relevant = [a for a in all_alerts if is_relevant(a)]
-              print("Relevant current/future dividends:", len(relevant))
 
-              snapshot_path = pathlib.Path("data/dividend-announcements.json")
+              snapshot_path = Path("data/dividend-announcements.json")
               snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-              previous = {"announcements": []}
+              previous = {"announcements": [], "history": []}
               if snapshot_path.exists():
                   try:
                       previous = json.loads(snapshot_path.read_text(encoding="utf-8"))
-                      if not isinstance(previous, dict) or not isinstance(previous.get("announcements"), list):
+                      if not isinstance(previous, dict) or not isinstance(previous.get("announcements", []), list):
                           raise ValueError("invalid announcements structure")
+                      if not isinstance(previous.get("history", []), list):
+                          raise ValueError("invalid history structure")
                   except Exception as exc:
-                      raise RuntimeError("Existing dividend JSON is invalid; refusing to overwrite: " + str(exc))
-              announcements = list(previous.get("announcements", []))
-              known = {x.get("eventId") for x in announcements if isinstance(x, dict) and x.get("eventId")}
-              by_legacy = set()
-              for item in announcements:
-                  if isinstance(item, dict):
-                      by_legacy.add("|".join([item.get("company",""),item.get("exDate",""),item.get("paymentDate",""),item.get("type",""),item.get("amount","")]).upper())
+                      raise RuntimeError("Existing dividend JSON is invalid; refusing to overwrite: " + str(exc)) from exc
 
-              created = 0
-              for alert in relevant:
-                  eid = event_id(alert)
-                  if eid in known:
-                      print("ALREADY IN JSON:", alert["company"], eid)
+              old_records = []
+              seen_object_ids = set()
+              for record in list(previous.get("history", [])) + list(previous.get("announcements", [])):
+                  if not isinstance(record, dict):
                       continue
-                  legacy = "|".join([alert["company"],alert["ex_date"],alert["payment_date"],alert["dividend_type"],alert["amount"]]).upper()
-                  # Existing snapshot items and existing GitHub issues are both dedupe sources.
-                  url = ""
-                  if legacy in by_legacy:
-                      print("LEGACY DUPLICATE SKIPPED:", alert["company"])
+                  alert = alert_from_record(record)
+                  if not alert["company"] or not alert["ex_date"]:
                       continue
-                  issue_url = create_issue(alert)
-                  if issue_url:
-                      url = issue_url
-                      created += 1
-                  announcements.append({
-                      "eventId": eid, "company": alert["company"],
-                      "exDate": alert["ex_date"], "paymentDate": alert["payment_date"],
-                      "type": alert["dividend_type"], "amount": alert["amount"],
-                      "source": OFFICIAL_URL, "sourceName": "Bourse de Casablanca",
-                      "url": url
+                  stable_id = event_id(alert)
+                  if stable_id in seen_object_ids:
+                      continue
+                  seen_object_ids.add(stable_id)
+                  migrated = dict(record)
+                  migrated.update({
+                      "eventId": stable_id,
+                      "company": alert["company"],
+                      "exDate": alert["ex_date"],
+                      "paymentDate": alert["payment_date"],
+                      "type": alert["dividend_type"],
+                      "amount": alert["amount"],
+                      "source": record.get("source") or OFFICIAL_URL,
+                      "sourceName": record.get("sourceName") or "Bourse de Casablanca",
+                      "url": record.get("url", ""),
+                      "firstSeenAt": record.get("firstSeenAt") or previous.get("updatedAt") or datetime.now(MOROCCO).isoformat(),
                   })
-                  known.add(eid)
-                  by_legacy.add(legacy)
+                  old_records.append(migrated)
+
+              history_by_id = {record["eventId"]: record for record in old_records}
+              now = datetime.now(MOROCCO).isoformat()
+              new_events = 0
+              updated_events = 0
+              reconciled_issues = 0
+
+              for alert in all_alerts:
+                  stable_id = event_id(alert)
+                  existing = history_by_id.get(stable_id)
+                  if existing is not None:
+                      changed = any(existing.get(field) != value for field, value in (
+                          ("company", alert["company"]),
+                          ("exDate", alert["ex_date"]),
+                          ("paymentDate", alert["payment_date"]),
+                          ("type", alert["dividend_type"]),
+                          ("amount", alert["amount"]),
+                      ))
+                      existing.update({
+                          "company": alert["company"],
+                          "exDate": alert["ex_date"],
+                          "paymentDate": alert["payment_date"],
+                          "type": alert["dividend_type"],
+                          "amount": alert["amount"],
+                          "source": OFFICIAL_URL,
+                          "sourceName": "Bourse de Casablanca",
+                          "lastSeenAt": now,
+                      })
+                      if changed:
+                          existing["lastUpdatedAt"] = now
+                          updated_events += 1
+                      if is_relevant(alert) and not existing.get("url"):
+                          created, issue_url = create_issue(alert, stable_id)
+                          existing["url"] = issue_url or ""
+                          if issue_url and not created:
+                              reconciled_issues += 1
+                          if created:
+                              new_events += 1
+                      continue
+
+                  record = {
+                      "eventId": stable_id,
+                      "company": alert["company"],
+                      "exDate": alert["ex_date"],
+                      "paymentDate": alert["payment_date"],
+                      "type": alert["dividend_type"],
+                      "amount": alert["amount"],
+                      "source": OFFICIAL_URL,
+                      "sourceName": "Bourse de Casablanca",
+                      "url": "",
+                      "firstSeenAt": now,
+                      "lastSeenAt": now,
+                      "notificationStatus": "historical_only",
+                  }
+                  if is_relevant(alert):
+                      created, issue_url = create_issue(alert, stable_id)
+                      record["url"] = issue_url or ""
+                      record["notificationStatus"] = "created" if created else "already_exists"
+                      if created:
+                          new_events += 1
+                      elif issue_url:
+                          reconciled_issues += 1
+                  history_by_id[stable_id] = record
+
+              history = list(history_by_id.values())
+              announcements = [record for record in history if is_relevant(alert_from_record(record))]
+              announcements.sort(key=lambda item: (
+                  to_date(item.get("exDate")) or to_date(item.get("paymentDate")) or TODAY,
+                  normalized_key(item.get("company")),
+              ))
+              history.sort(key=lambda item: (
+                  to_date(item.get("exDate")) or to_date(item.get("paymentDate")) or TODAY,
+                  normalized_key(item.get("company")),
+              ))
 
               snapshot = {
-                  "updatedAt": datetime.now(MOROCCO).isoformat(),
+                  "updatedAt": now,
                   "source": OFFICIAL_URL,
-                  "announcements": announcements
+                  "announcements": announcements,
+                  "history": history,
               }
-              snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-              print("Published snapshot rows (history retained):", len(announcements))
-              print("New alerts:", created)
+              snapshot_path.write_text(
+                  json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n",
+                  encoding="utf-8",
+              )
+              print("Current/future snapshot rows:", len(announcements))
+              print("Historical ledger rows:", len(history))
+              print("New alerts:", new_events)
+              print("Updated existing announcements:", updated_events)
+              print("Existing GitHub issues reconciled:", reconciled_issues)
               print("MONITOR COMPLETED SUCCESSFULLY")
 
-          if __name__ == "__main__":
+
+          if _name_ == "_main_":
               main()
           PY
 
