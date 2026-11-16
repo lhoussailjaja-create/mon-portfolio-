@@ -119,18 +119,9 @@ jobs:
               if len(content) < 1000:
                   raise RuntimeError("Calendar content is too short")
 
-              if (
-                  "Financial Calendar" not in content
-                  or "Ex-date" not in content
-                  or "Payment date" not in content
-              ):
-                  print("Unexpected page received.")
-                  print(content[:3000])
-                  raise RuntimeError(
-                      "The official dividend calendar was not found."
-                  )
-
-              print("Official financial calendar confirmed.")
+              # Do not bind validation to the page title or exact English labels.
+              # The parser below validates that a recognizable calendar schema exists.
+              print("Calendar response received; validating its table schema.")
               print("Content length:", len(content))
 
               return content
@@ -142,7 +133,7 @@ jobs:
                   "ex_date": ("ex-date", "ex date", "detachment", "détachement"),
                   "payment_date": ("payment date", "payment", "paiement"),
                   "dividend_type": ("type", "dividend type", "type de dividende"),
-                  "amount": ("amount", "montant", "dividend")
+                  "amount": ("amount", "montant", "dividend", "amount per share", "dividend per share", "dividend amount")
               }
 
               def header_key(value):
@@ -165,7 +156,7 @@ jobs:
                   found = {}
                   for field, aliases in column_aliases.items():
                       for i, key in enumerate(keys):
-                          if key in [header_key(alias) for alias in aliases]:
+                          if any(key == header_key(alias) or key.startswith(header_key(alias) + " ") for alias in aliases):
                               found[field] = i
                               break
                   if all(field in found for field in column_aliases):
@@ -183,6 +174,11 @@ jobs:
                       "dividend_type": row["dividend_type"] or "Unspecified",
                       "amount": row["amount"]
                   })
+              if indexes is None:
+                  print("Calendar preview:")
+                  print(content[:3000])
+                  raise RuntimeError("No recognizable dividend table schema found; preserving prior JSON.")
+
               unique = {}
               for alert in alerts:
                   unique[event_id(alert)] = alert
