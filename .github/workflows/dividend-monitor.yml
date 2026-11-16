@@ -64,8 +64,10 @@ jobs:
                       if "api.github.com" in url else "text/plain",
                   "X-GitHub-Api-Version": "2022-11-28"
               }
+
               if "api.github.com" in url:
                   headers["Authorization"] = "Bearer " + TOKEN
+
               if data is not None:
                   headers["Content-Type"] = "application/json"
 
@@ -76,6 +78,7 @@ jobs:
                   headers=headers,
                   method=method
               )
+
               with urllib.request.urlopen(
                   req, timeout=45, context=SSL_CONTEXT
               ) as response:
@@ -88,16 +91,23 @@ jobs:
 
           def get_calendar():
               print("Reading the official Casablanca Stock Exchange calendar...")
+
               status, content = request(READER_URL)
+
               if status != 200 or len(content) < 100:
-                  raise RuntimeError("Official calendar reader returned invalid content")
+                  raise RuntimeError(
+                      "Official calendar reader returned invalid content"
+                  )
+
               print("Official calendar retrieved. Characters:", len(content))
               return content
 
           def parse_dividend_rows(content):
               alerts = []
+
               for raw_line in content.splitlines():
                   line = raw_line.strip()
+
                   if not line.startswith("|"):
                       continue
 
@@ -105,19 +115,26 @@ jobs:
                       normalize(cell.replace("**", "").replace("`", ""))
                       for cell in line.strip("|").split("|")
                   ]
+
                   if len(cells) < 5:
                       continue
 
                   issuer, ex_date, payment_date, dividend_type, amount = cells[:5]
 
-                  if issuer.lower() in ("issuer", "émetteur", "emetteur", "source", ""):
+                  if issuer.lower() in (
+                      "issuer", "émetteur", "emetteur", "source", ""
+                  ):
                       continue
+
                   if re.fullmatch(r"[-:\s]+", issuer):
                       continue
+
                   if not re.search(r"\d{2}/\d{2}/\d{4}", ex_date):
                       continue
+
                   if not re.search(r"\d{2}/\d{2}/\d{4}", payment_date):
                       continue
+
                   if not re.search(r"\d", amount):
                       continue
 
@@ -130,6 +147,7 @@ jobs:
                   })
 
               unique = {}
+
               for alert in alerts:
                   key = (
                       alert["company"].upper(),
@@ -139,6 +157,7 @@ jobs:
                       alert["amount"]
                   )
                   unique[key] = alert
+
               return list(unique.values())
 
           def create_issue(alert):
@@ -149,6 +168,7 @@ jobs:
                   alert["dividend_type"],
                   alert["amount"]
               ])
+
               fingerprint = hashlib.sha256(
                   identity.upper().encode("utf-8")
               ).hexdigest()[:16]
@@ -162,10 +182,13 @@ jobs:
               query = urllib.parse.urlencode({
                   "q": "repo:" + REPOSITORY + " is:issue " + fingerprint
               })
+
               _, search_result = request(
                   "https://api.github.com/search/issues?" + query
               )
+
               existing = json.loads(search_result)
+
               if existing.get("total_count", 0) > 0:
                   print("Already notified:", title)
                   return False
@@ -199,7 +222,9 @@ jobs:
                   method="POST",
                   data={"title": title, "body": body}
               )
+
               created = json.loads(result)
+
               if "html_url" not in created:
                   raise RuntimeError(
                       "GitHub issue creation failed: "
@@ -213,18 +238,27 @@ jobs:
               print("========================================")
               print("DIVIDEND MONITOR - ALL BVC COMPANIES V6")
               print("========================================")
+
               print("UTC:", datetime.now(timezone.utc).isoformat())
+
               print(
                   "Morocco:",
-                  datetime.now(ZoneInfo("Africa/Casablanca")).isoformat()
+                  datetime.now(
+                      ZoneInfo("Africa/Casablanca")
+                  ).isoformat()
               )
+
               print("SSL verification: ENABLED")
 
               content = get_calendar()
               alerts = parse_dividend_rows(content)
 
               print("Dividend rows found:", len(alerts))
+
               if not alerts:
+                  print("Calendar preview:")
+                  print(content[:3000])
+
                   raise RuntimeError(
                       "No dividend rows were parsed. "
                       "The official calendar format may have changed; "
@@ -232,12 +266,14 @@ jobs:
                   )
 
               created = 0
+
               for alert in alerts:
                   print(
                       "Checking:", alert["company"],
                       "| ex-date:", alert["ex_date"],
                       "| amount:", alert["amount"]
                   )
+
                   if create_issue(alert):
                       created += 1
 
@@ -246,4 +282,4 @@ jobs:
 
           if __name__ == "__main__":
               main()
-            PY
+          PY
