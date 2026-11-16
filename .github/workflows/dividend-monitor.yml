@@ -1,4 +1,4 @@
-name: Dividend Monitor - PEA V3
+name: Dividend Monitor - PEA V4
 
 on:
   schedule:
@@ -26,7 +26,9 @@ jobs:
 
       - name: Install secure CA certificates
         run: |
-          python -m pip install --upgrade certifi
+          sudo apt-get update
+          sudo apt-get install --reinstall -y ca-certificates
+          sudo update-ca-certificates
 
       - name: Monitor official Bourse de Casablanca
         env:
@@ -39,7 +41,6 @@ jobs:
           import re
           import json
           import ssl
-          import certifi
           import hashlib
           import unicodedata
           import urllib.request
@@ -62,9 +63,8 @@ jobs:
               + REPOSITORY
           )
 
-          CONTEXT = ssl.create_default_context(
-              cafile=certifi.where()
-          )
+          # Secure system certificate store.
+          CONTEXT = ssl.create_default_context()
 
           COMPANIES = {
               "ITISSALAT AL MAGHRIB": [
@@ -98,7 +98,9 @@ jobs:
           ]
 
           def normalize(value):
-              value = unicodedata.normalize("NFKD", value)
+              value = unicodedata.normalize(
+                  "NFKD", value
+              )
               value = "".join(
                   c for c in value
                   if not unicodedata.combining(c)
@@ -127,7 +129,7 @@ jobs:
 
           def http_request(url, method="GET", data=None):
               headers = {
-                  "User-Agent": "Mozilla/5.0 MonPortfolioDividendMonitor/3.0",
+                  "User-Agent": "Mozilla/5.0 MonPortfolioDividendMonitor/4.0",
                   "Accept": (
                       "application/vnd.github+json"
                       if url.startswith("https://api.github.com/")
@@ -258,7 +260,7 @@ jobs:
               ).isoformat()
 
               body = "\n".join([
-                  "## Dividend Monitor - PEA V3",
+                  "## Dividend Monitor - PEA V4",
                   "",
                   "Company: " + alert["company"],
                   "",
@@ -298,7 +300,7 @@ jobs:
 
           def main():
               print("================================")
-              print("DIVIDEND MONITOR - PEA V3")
+              print("DIVIDEND MONITOR - PEA V4")
               print("================================")
 
               print(
@@ -314,7 +316,7 @@ jobs:
               )
 
               print("SSL verification: ENABLED")
-              print("CA bundle:", certifi.where())
+              print("CA verification: system trust store")
 
               print("Checking official calendar...")
 
