@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 concurrency:
@@ -19,6 +19,11 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -38,6 +43,7 @@ jobs:
           python - <<'PY'
           import os
           import re
+          import pathlib
           import json
           import ssl
           import hashlib
@@ -323,6 +329,31 @@ jobs:
 
               print("Relevant current/future dividends:", len(relevant))
 
+              snapshot = {
+                  "updatedAt": datetime.now(MOROCCO).isoformat(),
+                  "source": OFFICIAL_URL,
+                  "announcements": [
+                      {
+                          "company": alert["company"],
+                          "exDate": alert["ex_date"],
+                          "paymentDate": alert["payment_date"],
+                          "type": alert["dividend_type"],
+                          "amount": alert["amount"],
+                          "source": OFFICIAL_URL,
+                          "sourceName": "Bourse de Casablanca",
+                          "url": ""
+                      }
+                      for alert in relevant
+                  ]
+              }
+              snapshot_path = pathlib.Path("data/dividend-announcements.json")
+              snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+              snapshot_path.write_text(
+                  json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n",
+                  encoding="utf-8"
+              )
+              print("Published snapshot rows:", len(relevant))
+
               created = 0
 
               for alert in relevant:
@@ -348,3 +379,15 @@ jobs:
           if __name__ == "__main__":
               main()
           PY
+
+      - name: Publish calendar snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/dividend-announcements.json
+          if git diff --cached --quiet; then
+            echo "Calendar snapshot is unchanged."
+          else
+            git commit -m "Update dividend calendar snapshot"
+            git push origin HEAD:main
+          fi
