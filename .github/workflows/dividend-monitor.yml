@@ -1,4 +1,4 @@
-name: Dividend Monitor - PEA V2
+name: Dividend Monitor - PEA V3
 
 on:
   schedule:
@@ -9,9 +9,14 @@ permissions:
   contents: read
   issues: write
 
+concurrency:
+  group: dividend-monitor-pea
+  cancel-in-progress: false
+
 jobs:
   dividend-monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Setup Python
@@ -19,209 +24,342 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Monitor official Bourse calendar
+      - name: Install secure CA certificates
+        run: |
+          python -m pip install --upgrade certifi
+
+      - name: Monitor official Bourse de Casablanca
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+        shell: bash
         run: |
           python - <<'PY'
-          import re
           import os
+          import re
           import json
+          import ssl
+          import certifi
           import hashlib
-          import urllib.request
           import unicodedata
+          import urllib.request
+          import urllib.parse
+
           from html.parser import HTMLParser
           from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
 
           URL = (
               "https://www.casablanca-bourse.com/"
               "fr/emetteurs/calendrier-financier"
           )
 
+          TOKEN = os.environ["GITHUB_TOKEN"]
+          REPOSITORY = os.environ["GITHUB_REPOSITORY"]
+
+          API = (
+              "https://api.github.com/repos/"
+              + REPOSITORY
+          )
+
+          CONTEXT = ssl.create_default_context(
+              cafile=certifi.where()
+          )
+
           COMPANIES = {
-              "AKDITAL": ["AKDITAL"],
-              "MARSA MAROC": ["MARSA MAROC"],
-              "MAROC TELECOM": [
+              "ITISSALAT AL MAGHRIB": [
+                  "ITISSALAT AL MAGHRIB",
                   "MAROC TELECOM",
-                  "ITISSALAT AL-MAGHRIB"
+                  "IAM"
               ],
-              "TOTALENERGIES MAROC": [
+              "AKDITAL": [
+                  "AKDITAL"
+              ],
+              "MARSA MAROC": [
+                  "MARSA MAROC",
+                  "MARSA MAROC SA"
+              ],
+              "TOTALENERGIES MARKETING MAROC": [
+                  "TOTALENERGIES MARKETING MAROC",
                   "TOTALENERGIES MAROC",
-                  "TOTALENERGIES MARKETING MAROC"
+                  "TOTAL MAROC"
               ]
           }
 
-          KEYWORDS = [
-              "dividende",
-              "dividendes",
-              "distribution",
-              "mise en paiement",
-              "paiement du coupon",
-              "coupon",
-              "acompte sur dividende"
+          DIVIDEND_KEYWORDS = [
+              "DIVIDENDE",
+              "DIVIDENDES",
+              "DIVIDEND",
+              "DIVIDENDS",
+              "DISTRIBUTION",
+              "MISE EN PAIEMENT",
+              "DATE DE DETACHEMENT",
+              "DETACHEMENT",
+              "COUPON",
+              "ACOMPTE SUR DIVIDENDE"
           ]
 
-          class TextParser(HTMLParser):
-              def _init_(self):
-                  super()._init_()
-                  self.parts = []
-
-              def handle_data(self, data):
-                  if data.strip():
-                      self.parts.append(data.strip())
-
           def normalize(value):
-              value = unicodedata.normalize("NFKD", value)
+              value = unicodedata.normalize(
+                  "NFKD", value
+              )
               value = "".join(
                   c for c in value
                   if not unicodedata.combining(c)
               )
-              return re.sub(r"\s+", " ", value).upper()
+              return re.sub(
+                  r"\s+", " ", value
+              ).upper().strip()
 
-          print("DIVIDEND MONITOR - PEA V2")
-          print("UTC:", datetime.now(timezone.utc).isoformat())
-          print("Checking:", URL)
+          class TextExtractor(HTMLParser):
+              def _init_(self):
+                  super()._init_()
+                  self.parts = []
+                  self.skip = 0
 
-          request = urllib.request.Request(
-              URL,
-              headers={
-                  "User-Agent": "Mozilla/5.0 MonPortfolioDividendMonitor/2.0"
-              }
-          )
+              def handle_starttag(self, tag, attrs):
+                  if tag in ("script", "style"):
+                      self.skip += 1
 
-          with urllib.request.urlopen(request, timeout=45) as response:
-              if response.status != 200:
-                  raise RuntimeError(
-                      f"Official calendar HTTP {response.status}"
-                  )
-              html = response.read().decode(
-                  "utf-8", errors="replace"
-              )
+              def handle_endtag(self, tag):
+                  if tag in ("script", "style") and self.skip:
+                      self.skip -= 1
 
-          parser = TextParser()
-          parser.feed(html)
-          page = normalize(" ".join(parser.parts))
+              def handle_data(self, data):
+                  if not self.skip and data.strip():
+                      self.parts.append(data.strip())
 
-          if len(page) < 200:
-              raise RuntimeError("Official calendar returned insufficient text")
-
-          print("Page successfully downloaded.")
-          print("Extracted characters:", len(page))
-
-          alerts = []
-
-          for company, aliases in COMPANIES.items():
-              for alias in aliases:
-                  alias = normalize(alias)
-                  for match in re.finditer(
-                      re.escape(alias), page
-                  ):
-                      start = max(0, match.start() - 1200)
-                      end = min(len(page), match.end() + 1200)
-                      context = page[start:end]
-
-                      found = [
-                          word for word in KEYWORDS
-                          if normalize(word) in context
-                      ]
-
-                      if found:
-                          alerts.append({
-                              "company": company,
-                              "alias": alias,
-                              "keywords": found,
-                              "context": context[:1800]
-                          })
-                          break
-
-                  if any(a["company"] == company for a in alerts):
-                      break
-
-          if not alerts:
-              print("No matching dividend information detected.")
-              print("MONITOR COMPLETED")
-              raise SystemExit(0)
-
-          print("Potential dividend matches:", len(alerts))
-
-          repo = os.environ["GITHUB_REPOSITORY"]
-          token = os.environ["GITHUB_TOKEN"]
-
-          content = json.dumps(
-              alerts, ensure_ascii=False, sort_keys=True
-          )
-          digest = hashlib.sha256(
-              content.encode("utf-8")
-          ).hexdigest()[:12]
-
-          title = f"Potential dividend announcement - {digest}"
-
-          api = f"https://api.github.com/repos/{repo}/issues"
-
-          def github_request(url, method="GET", data=None):
+          def http_request(url, method="GET", data=None):
               headers = {
-                  "Authorization": f"Bearer {token}",
+                  "User-Agent": "Mozilla/5.0 MonPortfolioDividendMonitor/3.0",
                   "Accept": "application/vnd.github+json",
-                  "X-GitHub-Api-Version": "2022-11-28",
-                  "User-Agent": "MonPortfolioDividendMonitor"
+                  "X-GitHub-Api-Version": "2022-11-28"
               }
-              body = (
-                  json.dumps(data).encode("utf-8")
-                  if data is not None else None
+
+              if url.startswith("https://api.github.com/"):
+                  headers["Authorization"] = (
+                      "Bearer " + TOKEN
+                  )
+
+              if data is not None:
+                  headers["Content-Type"] = "application/json"
+
+              request = urllib.request.Request(
+                  url,
+                  data=(
+                      json.dumps(data).encode("utf-8")
+                      if data is not None else None
+                  ),
+                  headers=headers,
+                  method=method
               )
-              req = urllib.request.Request(
-                  url, data=body, headers=headers, method=method
+
+              with urllib.request.urlopen(
+                  request,
+                  timeout=45,
+                  context=CONTEXT
+              ) as response:
+                  raw = response.read().decode(
+                      "utf-8", errors="replace"
+                  )
+                  return response.status, raw
+
+          def find_alerts(text):
+              alerts = []
+
+              for company, aliases in COMPANIES.items():
+                  for alias in aliases:
+                      alias = normalize(alias)
+
+                      start = 0
+
+                      while True:
+                          position = text.find(
+                              alias, start
+                          )
+
+                          if position < 0:
+                              break
+
+                          left = max(0, position - 500)
+                          right = min(
+                              len(text), position + len(alias) + 700
+                          )
+
+                          context = text[left:right]
+
+                          matched = [
+                              keyword
+                              for keyword in DIVIDEND_KEYWORDS
+                              if keyword in context
+                          ]
+
+                          for keyword in matched:
+                              snippet = context[:1000]
+
+                              alerts.append({
+                                  "company": company,
+                                  "keyword": keyword,
+                                  "context": snippet
+                              })
+
+                          start = position + len(alias)
+
+              unique = {}
+              for alert in alerts:
+                  key = (
+                      alert["company"],
+                      alert["keyword"],
+                      normalize(alert["context"])
+                  )
+                  unique[key] = alert
+
+              return list(unique.values())
+
+          def create_issue(alert):
+              fingerprint = hashlib.sha256(
+                  (
+                      alert["company"]
+                      + "|"
+                      + alert["keyword"]
+                      + "|"
+                      + normalize(alert["context"])
+                  ).encode("utf-8")
+              ).hexdigest()[:16]
+
+              title = (
+                  "[DIVIDEND] "
+                  + alert["company"]
+                  + " - "
+                  + alert["keyword"]
+                  + " - "
+                  + fingerprint
               )
-              with urllib.request.urlopen(req, timeout=30) as response:
-                  return json.loads(response.read().decode("utf-8"))
 
-          existing = github_request(
-              api + "?state=all&per_page=100"
-          )
+              query = urllib.parse.urlencode({
+                  "q": (
+                      "repo:" + REPOSITORY
+                      + " is:issue "
+                      + fingerprint
+                  )
+              })
 
-          if any(item["title"] == title for item in existing):
-              print("This alert already exists. No duplicate created.")
-              raise SystemExit(0)
+              search_url = (
+                  "https://api.github.com/search/issues?"
+                  + query
+              )
 
-          body = [
-              "## Potential dividend information detected",
-              "",
-              f"Official source: {URL}",
-              "",
-              "Please verify each result against the original official notice.",
-              "",
-              "This is an automated detection, not confirmation of a dividend.",
-              ""
-          ]
+              status, result = http_request(search_url)
+              existing = json.loads(result)
 
-          for alert in alerts:
-              body.extend([
-                  f"### {alert['company']}",
-                  f"Matched keywords: {', '.join(alert['keywords'])}",
+              if existing.get("total_count", 0) > 0:
+                  print("DUPLICATE SKIPPED:", title)
+                  return False
+
+              morocco_time = datetime.now(
+                  ZoneInfo("Africa/Casablanca")
+              ).isoformat()
+
+              body = "\n".join([
+                  "## Dividend Monitor - PEA V3",
                   "",
-                  f"Extracted context: {alert['context']}",
+                  "*Company:* " + alert["company"],
+                  "",
+                  "*Detected keyword:* " + alert["keyword"],
+                  "",
+                  "*Detection date (Morocco):* " + morocco_time,
+                  "",
+                  "*Official source:* " + URL,
+                  "",
+                  "### Extracted context",
+                  "",
+                  alert["context"],
                   "",
                   "---",
-                  ""
+                  "Automatically detected by Mon Portfolio Dividend Monitor."
               ])
 
-          body.extend([
-              f"Detection date: {datetime.now(timezone.utc).isoformat()}",
-              "",
-              "Source checked: Bourse de Casablanca financial calendar."
-          ])
-
-          issue = github_request(
-              api,
-              method="POST",
-              data={
+              issue_data = {
                   "title": title,
-                  "body": "\n".join(body),
-                 
+                  "body": body
               }
-          )
 
-          print("ALERT CREATED:", issue["html_url"])
-          print("MONITOR COMPLETED")
+              status, result = http_request(
+                  API + "/issues",
+                  method="POST",
+                  data=issue_data
+              )
+
+              issue = json.loads(result)
+
+              print(
+                  "ALERT CREATED:",
+                  issue.get("html_url", "Unknown")
+              )
+
+              return True
+
+          def main():
+              print("================================")
+              print("DIVIDEND MONITOR - PEA V3")
+              print("================================")
+
+              print(
+                  "UTC:",
+                  datetime.now(timezone.utc).isoformat()
+              )
+
+              print(
+                  "Morocco:",
+                  datetime.now(
+                      ZoneInfo("Africa/Casablanca")
+                  ).isoformat()
+              )
+
+              print("SSL verification: ENABLED")
+              print("CA bundle:", certifi.where())
+
+              print("Checking official calendar...")
+
+              status, html = http_request(URL)
+
+              print("HTTP:", status)
+              print("Page size:", len(html))
+
+              if status != 200:
+                  raise RuntimeError(
+                      "Official calendar unavailable"
+                  )
+
+              parser = TextExtractor()
+              parser.feed(html)
+
+              page_text = normalize(
+                  " ".join(parser.parts)
+              )
+
+              print("Extracting dividend information...")
+
+              alerts = find_alerts(page_text)
+
+              print("Detected alerts:", len(alerts))
+
+              created = 0
+
+              for alert in alerts:
+                  print(
+                      "Checking:",
+                      alert["company"],
+                      alert["keyword"]
+                  )
+
+                  if create_issue(alert):
+                      created += 1
+
+              print("New alerts:", created)
+              print("Monitor completed successfully.")
+
+          if _name_ == "_main_":
+              main()
+
           PY
