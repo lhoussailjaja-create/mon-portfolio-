@@ -72,9 +72,7 @@ jobs:
                   "MAROC TELECOM",
                   "IAM"
               ],
-              "AKDITAL": [
-                  "AKDITAL"
-              ],
+              "AKDITAL": ["AKDITAL"],
               "MARSA MAROC": [
                   "MARSA MAROC",
                   "MARSA MAROC SA"
@@ -100,9 +98,7 @@ jobs:
           ]
 
           def normalize(value):
-              value = unicodedata.normalize(
-                  "NFKD", value
-              )
+              value = unicodedata.normalize("NFKD", value)
               value = "".join(
                   c for c in value
                   if not unicodedata.combining(c)
@@ -132,7 +128,11 @@ jobs:
           def http_request(url, method="GET", data=None):
               headers = {
                   "User-Agent": "Mozilla/5.0 MonPortfolioDividendMonitor/3.0",
-                  "Accept": "application/vnd.github+json",
+                  "Accept": (
+                      "application/vnd.github+json"
+                      if url.startswith("https://api.github.com/")
+                      else "text/html,application/xhtml+xml"
+                  ),
                   "X-GitHub-Api-Version": "2022-11-28"
               }
 
@@ -170,20 +170,18 @@ jobs:
               for company, aliases in COMPANIES.items():
                   for alias in aliases:
                       alias = normalize(alias)
-
                       start = 0
 
                       while True:
-                          position = text.find(
-                              alias, start
-                          )
+                          position = text.find(alias, start)
 
                           if position < 0:
                               break
 
                           left = max(0, position - 500)
                           right = min(
-                              len(text), position + len(alias) + 700
+                              len(text),
+                              position + len(alias) + 700
                           )
 
                           context = text[left:right]
@@ -195,17 +193,16 @@ jobs:
                           ]
 
                           for keyword in matched:
-                              snippet = context[:1000]
-
                               alerts.append({
                                   "company": company,
                                   "keyword": keyword,
-                                  "context": snippet
+                                  "context": context[:1000]
                               })
 
                           start = position + len(alias)
 
               unique = {}
+
               for alert in alerts:
                   key = (
                       alert["company"],
@@ -263,13 +260,13 @@ jobs:
               body = "\n".join([
                   "## Dividend Monitor - PEA V3",
                   "",
-                  "*Company:* " + alert["company"],
+                  "Company: " + alert["company"],
                   "",
-                  "*Detected keyword:* " + alert["keyword"],
+                  "Detected keyword: " + alert["keyword"],
                   "",
-                  "*Detection date (Morocco):* " + morocco_time,
+                  "Detection date (Morocco): " + morocco_time,
                   "",
-                  "*Official source:* " + URL,
+                  "Official source: " + URL,
                   "",
                   "### Extracted context",
                   "",
