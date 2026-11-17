@@ -1,0 +1,153 @@
+name: Test 05 V3 - Identification robuste des 4 actions PEA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validation-actions-pea:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verifier les cours et dates des quatre actions
+        shell: bash
+        run: |
+          python - <<'PY'
+          import datetime as dt
+          import re
+          import ssl
+          import sys
+          import unicodedata
+          import urllib.request
+          from html.parser import HTMLParser
+
+          URL = 'https://attijarinet.attijariwafa.com/particulier/public/courstitre'
+          class Tables(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.tables=[]; self.table=None; self.row=None; self.cell=None; self.depth=0
+              def handle_starttag(self, tag, attrs):
+                  if tag=='table':
+                      self.depth+=1
+                      if self.depth==1: self.table=[]
+                  elif tag=='tr' and self.depth==1: self.row=[]
+                  elif tag in ('td','th') and self.row is not None: self.cell=[]
+              def handle_data(self, data):
+                  if self.cell is not None: self.cell.append(data)
+              def handle_endtag(self, tag):
+                  if tag in ('td','th') and self.cell is not None and self.row is not None:
+                      self.row.append(' '.join(''.join(self.cell).split())); self.cell=None
+                  elif tag=='tr' and self.row is not None and self.table is not None:
+                      if any(self.row): self.table.append(self.row)
+                      self.row=None
+                  elif tag=='table' and self.depth:
+                      self.depth-=1
+                      if self.depth==0 and self.table is not None:
+                          self.tables.append(self.table); self.table=None
+          def norm(s):
+              s=unicodedata.normalize('NFKD',s)
+              return ''.join(c for c in s if not unicodedata.combining(c)).lower().strip()
+          def number(s):
+              s=s.replace('\u202f','').replace('\xa0','').replace(' ','').replace(',','.')
+              return float(s) if re.fullmatch(r'\d+(?:\.\d{1,3})?',s) else None
+          def date(s):
+              try: return dt.datetime.strptime(s.strip(),'%d.%m.%Y').date()
+              except ValueError: return None
+
+          print('TEST 05 V3 - VALIDATION DES QUATRE ACTIONS PEA')
+          print('Source:', URL)
+          print('Date execution UTC:',dt.datetime.now(dt.timezone.utc).isoformat())
+          print('SSL: verification ACTIVE')
+          req=urllib.request.Request(URL,headers={
+              'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+              'Accept':'text/html,application/xhtml+xml',
+              'Accept-Language':'fr-FR,fr;q=0.9'})
+          try:
+              with urllib.request.urlopen(req,timeout=25,context=ssl.create_default_context()) as r:
+                  if r.status!=200: raise RuntimeError('HTTP '+str(r.status))
+                  page=r.read(2000000).decode(r.headers.get_content_charset() or 'utf-8',errors='replace')
+                  print('HTTP:',r.status,'; URL finale:',r.url)
+          except Exception as e:
+              print('ECHEC CONNEXION:',type(e).__name__,str(e));sys.exit(1)
+          p=Tables();p.feed(page)
+          print('Nombre de tableaux:',len(p.tables))
+          # Correspondances strictes; une ligne par titre, jamais de cours invente.
+          aliases={
+              'AKDITAL': {'AKDITAL'},
+              'ITISSALAT AL MAGHRIB': {'ITISSALAT AL MAGHRIB','IAM','MAROC TELECOM','ITISSALAT AL-MAGHRIB'},
+              'MARSA MAROC': {'MARSA MAROC','SODEP MARSA MAROC','SODEP'},
+              'TOTALENERGIES MAROC': {'TOTALENERGIES MAROC','TOTALENERGIES','TOTAL MAROC','TOTALENERGIES MARKETING MAROC'},
+          }
+          def key(s):
+              return re.sub(r'[^a-z0-9]+',' ',norm(s)).strip()
+          wanted={name:{key(a) for a in names} for name,names in aliases.items()}
+          print("ALIASES NORMALISES:",wanted)
+          results={}; errors=[]
+          today=dt.datetime.now(dt.timezone(dt.timedelta(hours=1))).date()
+          print('En-tetes et exemples de noms detectes:')
+          for ti,table in enumerate(p.tables,1):
+              print('TABLEAU',ti,'lignes',len(table))
+              for ri,row in enumerate(table[:5]):
+                  print('  ligne',ri+1,':',' | '.join(row)[:240])
+          # Meme methode que le Test 04 reussi: rechercher d'abord la ligne,
+          # puis les en-tetes qui la precedent. Ne pas supposer leur position.
+          for name,names in wanted.items():
+              matches=[]
+              for ti,table in enumerate(p.tables,1):
+                  for ri,row in enumerate(table):
+                      # Le Test 04 trouve AKDITAL dans une cellule quelconque.
+                      # Le Test 05 precedent inspectait seulement row[0],
+                      # qui peut etre vide ou contenir un champ technique.
+                      exact_cells=[(ci,cell) for ci,cell in enumerate(row)
+                                   if key(cell) in names]
+                      if exact_cells:
+                          matches.append((ti,ri,row,table))
+                          print("  CORRESPONDANCE",name,"table",ti,"ligne",ri+1,
+                                "cellules",exact_cells[:3])
+              if len(matches)!=1:
+                  print('DIAGNOSTIC',name,'nombre de lignes exactes:',len(matches))
+                  # Afficher quelques candidats pour diagnostiquer les variantes de noms
+                  hints={'AKDITAL':['akdital'], 'ITISSALAT AL MAGHRIB':['iam','telecom','itissalat'],
+                         'MARSA MAROC':['marsa','sodep'], 'TOTALENERGIES MAROC':['total']}[name]
+                  for ti,table in enumerate(p.tables,1):
+                      for ri,row in enumerate(table):
+                          if row and any(h in key(cell) for cell in row for h in hints):
+                              print('  CANDIDAT',ti,ri+1,'|',' | '.join(row)[:200])
+                  errors.append(name+': ligne absente ou ambigue')
+                  continue
+              ti,ri,row,table=matches[0]
+              print('TITRE REPERE:',name,'| tableau',ti,'| ligne',ri+1,'|',' | '.join(row))
+              candidates=[]
+              for hi,header in enumerate(table[:ri]):
+                  labels=[norm(c) for c in header]
+                  pc=[i for i,x in enumerate(labels) if x in ('cours de cloture','dernier cours','cours actuel')]
+                  dc=[i for i,x in enumerate(labels) if x in ('date cours','date de cours','date de cotation')]
+                  if len(pc)==1 and len(dc)==1 and pc[0]!=dc[0]:
+                      candidates.append((hi,pc[0],dc[0]))
+              print('  En-tetes candidats:',candidates)
+              if not candidates:
+                  errors.append(name+': en-tetes non reconnus');continue
+              _,pi,di=candidates[-1]
+              if max(pi,di)>=len(row):
+                  errors.append(name+': colonnes absentes');continue
+              price=number(row[pi]);quoted=date(row[di])
+              if price is None or not (1<=price<=100000) or quoted is None or quoted>today:
+                  print('  VALEURS NON VALIDES:',repr(row[pi]),repr(row[di]))
+                  errors.append(name+': prix ou date invalide');continue
+              results[name]=(price,quoted)
+          print('\n===== RESULTATS TEST 05 V3 =====')
+          for name in aliases:
+              if name in results:
+                  price,quoted=results[name]
+                  print(f'VALIDE | {name} | {price:.2f} MAD | {quoted.isoformat()} | Attijarinet')
+              else:
+                  print(f'NON VALIDE | {name} | verifier diagnostics ci-dessus')
+          print('SOURCE:',URL)
+          print('SSL: ACTIVE | Aucune ecriture GitHub | Aucun changement PEA')
+          if errors:
+              print('ECHEC CONTROLE:', ' ; '.join(sorted(set(errors))))
+              sys.exit(1)
+          print('TEST 05 REUSSI - quatre cours et dates valides, lecture seule.')
+          PY
