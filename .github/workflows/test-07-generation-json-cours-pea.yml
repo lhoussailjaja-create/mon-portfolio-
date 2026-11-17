@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generer-json:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
       - name: Extraire et valider les quatre cours
         shell: bash
         run: |
@@ -139,3 +140,15 @@ jobs:
           path: cours-pea.json
           if-no-files-found: error
           retention-days: 7
+      - name: Publier les cours valides dans le dépôt
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cours-pea.json
+          if git diff --cached --quiet; then
+            echo "Cours inchanges"
+          else
+            git commit -m "Actualiser cours-pea.json"
+            git push
+          fi
