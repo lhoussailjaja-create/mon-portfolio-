@@ -1,0 +1,116 @@
+name: Test 04 - Validation cours AKDITAL
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validation-akdital:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verifier colonnes cours et date AKDITAL
+        shell: bash
+        run: |
+          python - <<'PY'
+          import datetime as dt
+          import re
+          import ssl
+          import sys
+          import unicodedata
+          import urllib.request
+          from html.parser import HTMLParser
+
+          URL = 'https://attijarinet.attijariwafa.com/particulier/public/courstitre'
+          class Tables(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.tables=[]; self.table=None; self.row=None; self.cell=None; self.depth=0
+              def handle_starttag(self, tag, attrs):
+                  if tag=='table':
+                      self.depth+=1
+                      if self.depth==1: self.table=[]
+                  elif tag=='tr' and self.depth==1: self.row=[]
+                  elif tag in ('td','th') and self.row is not None: self.cell=[]
+              def handle_data(self, data):
+                  if self.cell is not None: self.cell.append(data)
+              def handle_endtag(self, tag):
+                  if tag in ('td','th') and self.cell is not None and self.row is not None:
+                      self.row.append(' '.join(''.join(self.cell).split())); self.cell=None
+                  elif tag=='tr' and self.row is not None and self.table is not None:
+                      if any(self.row): self.table.append(self.row)
+                      self.row=None
+                  elif tag=='table' and self.depth:
+                      self.depth-=1
+                      if self.depth==0 and self.table is not None:
+                          self.tables.append(self.table); self.table=None
+          def norm(s):
+              s=unicodedata.normalize('NFKD',s)
+              return ''.join(c for c in s if not unicodedata.combining(c)).lower().strip()
+          def number(s):
+              s=s.replace('\u202f','').replace('\xa0','').replace(' ','').replace(',','.')
+              return float(s) if re.fullmatch(r'\d+(?:\.\d{1,3})?',s) else None
+          def date(s):
+              try: return dt.datetime.strptime(s.strip(),'%d.%m.%Y').date()
+              except ValueError: return None
+
+          print('TEST 04 - VALIDATION STRUCTURELLE AKDITAL')
+          print('Source:', URL)
+          print('Date execution UTC:',dt.datetime.now(dt.timezone.utc).isoformat())
+          print('SSL: verification ACTIVE')
+          req=urllib.request.Request(URL,headers={
+              'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+              'Accept':'text/html,application/xhtml+xml',
+              'Accept-Language':'fr-FR,fr;q=0.9'})
+          try:
+              with urllib.request.urlopen(req,timeout=25,context=ssl.create_default_context()) as r:
+                  if r.status!=200: raise RuntimeError('HTTP '+str(r.status))
+                  page=r.read(2000000).decode(r.headers.get_content_charset() or 'utf-8',errors='replace')
+                  print('HTTP:',r.status,'; URL finale:',r.url)
+          except Exception as e:
+              print('ECHEC CONNEXION:',type(e).__name__,str(e));sys.exit(1)
+          p=Tables();p.feed(page)
+          print('Nombre de tableaux:',len(p.tables))
+          matches=[]
+          for ti,table in enumerate(p.tables,1):
+              for ri,row in enumerate(table):
+                  if any(norm(c)=='akdital' for c in row):
+                      matches.append((ti,ri,row,table))
+          if len(matches)!=1:
+              print('NON VALIDE: nombre de lignes AKDITAL:',len(matches))
+              sys.exit(1)
+          ti,ri,row,table=matches[0]
+          print('Tableau:',ti,'; ligne:',ri+1,'; cellules:',len(row))
+          print('Ligne AKDITAL:', ' | '.join(row))
+          print('Premieres lignes du tableau (pour identifier les en-tetes):')
+          for i,r in enumerate(table[:min(8,ri)]):
+              print('  ligne',i+1,':',' | '.join(r)[:350])
+          # Les en-tetes sont indispensables: ne jamais supposer que la 2e cellule est un cours.
+          price_col=date_col=None
+          for r in table[:ri]:
+              if len(r)!=len(row): continue
+              for i,c in enumerate(r):
+                  label=norm(c)
+                  if re.search(r'\b(cours|dernier cours|cours de cloture|prix)\b',label): price_col=i
+                  if re.search(r'\b(date|seance|cotation)\b',label): date_col=i
+          candidates=[(i,number(c)) for i,c in enumerate(row) if number(c) is not None and number(c)>0]
+          dates=[(i,date(c)) for i,c in enumerate(row) if date(c) is not None]
+          print('Candidats prix positifs:',candidates)
+          print('Candidats dates:',[(i,d.isoformat()) for i,d in dates])
+          print('Colonnes reconnues par EN-TETE - cours:',price_col,'; date:',date_col)
+          if price_col is None or date_col is None or price_col==date_col:
+              print('NON VALIDE: en-tetes cours/date absents ou ambigus. Aucune valeur ne sera publiee.')
+              sys.exit(1)
+          if price_col>=len(row) or date_col>=len(row):
+              print('NON VALIDE: colonnes incompatibles');sys.exit(1)
+          price=number(row[price_col]); quoted=date(row[date_col])
+          today=dt.datetime.now(dt.timezone(dt.timedelta(hours=1))).date()
+          if price is None or not (1<=price<=100000) or quoted is None or quoted>today:
+              print('NON VALIDE: cours ou date incorrects');sys.exit(1)
+          print('COURS VALIDE PAR EN-TETE:',format(price,'.2f'),'MAD')
+          print('DATE DE COTATION VALIDEE:',quoted.isoformat())
+          print('SOURCE:',URL)
+          print('TEST 04 REUSSI - lecture seule, aucun fichier du portefeuille modifie.')
+          PY
