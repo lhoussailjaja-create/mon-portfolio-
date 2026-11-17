@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "retrieved_at_utc": "2026-11-17T17:30:31.174116+00:00",
+  "currency": "MAD",
+  "quotes": {
+    "AKDITAL": {
+      "name": "AKDITAL",
+      "price_mad": 1080.0,
+      "quote_date": "2026-11-16",
+      "source": "Attijarinet",
+      "source_url": "https://attijarinet.attijariwafa.com/particulier/public/courstitre"
+    },
+    "ITISSALAT AL MAGHRIB": {
+      "name": "ITTISSALAT AL MAGHRIB NL 6DH",
+      "price_mad": 90.0,
+      "quote_date": "2026-11-16",
+      "source": "Attijarinet",
+      "source_url": "https://attijarinet.attijariwafa.com/particulier/public/courstitre"
+    },
+    "MARSA MAROC": {
+      "name": "SODEP-MARSA MAROC",
+      "price_mad": 785.0,
+      "quote_date": "2026-11-16",
+      "source": "Attijarinet",
+      "source_url": "https://attijarinet.attijariwafa.com/particulier/public/courstitre"
+    },
+    "TOTALENERGIES MAROC": {
+      "name": "TOTALENERGIES MARKETING MAROC",
+      "price_mad": 1370.0,
+      "quote_date": "2026-11-16",
+      "source": "Attijarinet",
+      "source_url": "https://attijarinet.attijariwafa.com/particulier/public/courstitre"
+    }
+  }
+}
