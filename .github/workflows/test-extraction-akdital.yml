@@ -1,0 +1,107 @@
+name: Test 03 - Extraction cours AKDITAL
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-extraction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Analyser la page Attijarinet et rechercher AKDITAL
+        shell: bash
+        run: |
+          python - <<'PY'
+          import datetime
+          import html
+          import re
+          import ssl
+          import sys
+          import urllib.request
+          from html.parser import HTMLParser
+
+          URL = 'https://attijarinet.attijariwafa.com/particulier/public/courstitre'
+
+          class TableReader(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.tables = []
+                  self.table = None
+                  self.row = None
+                  self.cell = None
+                  self.depth = 0
+              def handle_starttag(self, tag, attrs):
+                  if tag == 'table':
+                      self.depth += 1
+                      if self.depth == 1:
+                          self.table = []
+                  elif tag == 'tr' and self.depth:
+                      self.row = []
+                  elif tag in ('td','th') and self.row is not None:
+                      self.cell = []
+              def handle_data(self, data):
+                  if self.cell is not None:
+                      self.cell.append(data)
+              def handle_endtag(self, tag):
+                  if tag in ('td','th') and self.cell is not None and self.row is not None:
+                      self.row.append(' '.join(''.join(self.cell).split()))
+                      self.cell = None
+                  elif tag == 'tr' and self.row is not None and self.table is not None:
+                      if any(self.row):
+                          self.table.append(self.row)
+                      self.row = None
+                  elif tag == 'table' and self.depth:
+                      self.depth -= 1
+                      if self.depth == 0 and self.table is not None:
+                          self.tables.append(self.table)
+                          self.table = None
+
+          print('TEST 03 — EXTRACTION AKDITAL (diagnostic uniquement)')
+          print('Horodatage UTC:', datetime.datetime.now(datetime.timezone.utc).isoformat())
+          print('Source:', URL)
+          print('SSL: verification ACTIVE')
+          req = urllib.request.Request(URL, headers={
+              'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml',
+              'Accept-Language': 'fr-FR,fr;q=0.9',
+          })
+          try:
+              with urllib.request.urlopen(req, timeout=25, context=ssl.create_default_context()) as resp:
+                  content = resp.read(2_000_000)
+                  charset = resp.headers.get_content_charset() or 'utf-8'
+                  page = content.decode(charset, errors='replace')
+                  print('HTTP:', resp.status)
+                  print('Content-Type:', resp.headers.get('Content-Type', 'inconnu'))
+                  print('Octets reçus:', len(content))
+                  print('URL finale:', resp.url)
+          except Exception as exc:
+              print('ECHEC CONNEXION:', type(exc).__name__, str(exc))
+              sys.exit(1)
+
+          reader = TableReader()
+          reader.feed(page)
+          print('Nombre de tableaux HTML:', len(reader.tables))
+          found = False
+          for index, table in enumerate(reader.tables, 1):
+              for rownum, row in enumerate(table):
+                  if any(re.search(r'AKDITAL', cell, flags=re.I) for cell in row):
+                      found = True
+                      print('\nAKDITAL REPERE dans tableau', index, 'ligne', rownum + 1)
+                      if rownum:
+                          print('En-tete ou ligne precedente:', ' | '.join(table[max(0, rownum-1)])[:900])
+                      print('Ligne AKDITAL:', ' | '.join(row)[:1200])
+                      print('ATTENTION: aucune colonne de prix/date n est encore validee automatiquement')
+          if not found:
+              for match in list(re.finditer('AKDITAL', page, re.I))[:3]:
+                  excerpt = re.sub(r'<[^>]*>', ' ', page[max(0, match.start()-220):match.end()+350])
+                  excerpt = ' '.join(html.unescape(excerpt).split())
+                  print('AKDITAL dans HTML brut (contexte):', excerpt[:500])
+                  found = True
+          if not found:
+              print('AKDITAL INTROUVABLE dans la reponse HTML.')
+              print('La page peut charger les cotations via JavaScript ou une API distincte.')
+          print('\nFIN TEST 03 — aucun cours valide, aucune ecriture GitHub, aucune modification du portefeuille.')
+          PY
