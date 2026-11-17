@@ -1,0 +1,112 @@
+name: Test 05 V5 - Diagnostic noms IAM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic-iam:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Identifier les noms reels et la presence IAM
+        shell: bash
+        run: |
+          python - <<'PY'
+          import datetime as dt
+          import re
+          import ssl
+          import sys
+          import unicodedata
+          import urllib.request
+          from html.parser import HTMLParser
+
+          URL='https://attijarinet.attijariwafa.com/particulier/public/courstitre'
+          class Tables(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.tables=[];self.table=None;self.row=None;self.cell=None;self.depth=0
+              def handle_starttag(self,tag,attrs):
+                  if tag=='table':
+                      self.depth+=1
+                      if self.depth==1:self.table=[]
+                  elif tag=='tr' and self.depth==1:self.row=[]
+                  elif tag in ('td','th') and self.row is not None:self.cell=[]
+              def handle_data(self,data):
+                  if self.cell is not None:self.cell.append(data)
+              def handle_endtag(self,tag):
+                  if tag in ('td','th') and self.cell is not None and self.row is not None:
+                      self.row.append(' '.join(''.join(self.cell).split()));self.cell=None
+                  elif tag=='tr' and self.row is not None and self.table is not None:
+                      if any(self.row):self.table.append(self.row)
+                      self.row=None
+                  elif tag=='table' and self.depth:
+                      self.depth-=1
+                      if self.depth==0 and self.table is not None:
+                          self.tables.append(self.table);self.table=None
+          def norm(s):
+              s=unicodedata.normalize('NFKD',s)
+              return re.sub(r'[^a-z0-9]+',' ',''.join(c for c in s if not unicodedata.combining(c)).lower()).strip()
+          def number(s):
+              s=s.replace('\u202f','').replace('\xa0','').replace(' ','').replace(',','.')
+              return float(s) if re.fullmatch(r'\d+(?:\.\d{1,3})?',s) else None
+          def parse_date(s):
+              try:return dt.datetime.strptime(s.strip(),'%d.%m.%Y').date()
+              except ValueError:return None
+
+          print('TEST 05 V5 - DIAGNOSTIC IAM (LECTURE SEULE)',flush=True)
+          print('Source:',URL,flush=True)
+          print('Execution UTC:',dt.datetime.now(dt.timezone.utc).isoformat(),flush=True)
+          print('SSL: verification ACTIVE',flush=True)
+          req=urllib.request.Request(URL,headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36','Accept':'text/html,application/xhtml+xml','Accept-Language':'fr-FR,fr;q=0.9'})
+          try:
+              with urllib.request.urlopen(req,timeout=25,context=ssl.create_default_context()) as resp:
+                  if resp.status!=200:raise RuntimeError('HTTP '+str(resp.status))
+                  html=resp.read(2000000).decode(resp.headers.get_content_charset() or 'utf-8',errors='replace')
+                  print('HTTP:',resp.status,'URL finale:',resp.url,flush=True)
+          except Exception as exc:
+              print('ERREUR CONNEXION:',type(exc).__name__,str(exc),flush=True)
+              sys.exit(1)
+          parser=Tables();parser.feed(html)
+          print('TABLEAUX:',len(parser.tables),flush=True)
+          all_names=[];matches=[]
+          for ti,table in enumerate(parser.tables,1):
+              header_candidates=[]
+              for ri,row in enumerate(table):
+                  keys=[norm(c) for c in row]
+                  pi=[i for i,x in enumerate(keys) if x in ('cours de cloture','dernier cours','cours actuel')]
+                  di=[i for i,x in enumerate(keys) if x in ('date cours','date de cours','date de cotation')]
+                  vi=[i for i,x in enumerate(keys) if x=='valeur']
+                  if len(pi)==1 and len(di)==1 and len(vi)==1:
+                      header_candidates.append((ri,vi[0],pi[0],di[0]))
+              print('TABLEAU',ti,'lignes:',len(table),'entetes:',header_candidates,flush=True)
+              if not header_candidates:continue
+              for ri,row in enumerate(table):
+                  preceding=[x for x in header_candidates if x[0]<ri]
+                  if not preceding:continue
+                  _,vi,pi,di=preceding[-1]
+                  if max(vi,pi,di)>=len(row):continue
+                  name=row[vi].strip()
+                  if not name:continue
+                  price=number(row[pi]);date=parse_date(row[di])
+                  if price is None or date is None:continue
+                  all_names.append((ti,ri+1,name,price,date.isoformat()))
+                  k=norm(name)
+                  if any(term in k for term in ('iam','telecom','itissalat','ittisalat','maroc tel','maghrib')):
+                      matches.append((ti,ri+1,name,price,date.isoformat()))
+          print('LIGNES AVEC NOM, COURS ET DATE:',len(all_names),flush=True)
+          print('===== CANDIDATS IAM / TELECOM =====',flush=True)
+          if matches:
+              for row in matches:print('CANDIDAT:',row,flush=True)
+          else:
+              print('AUCUN CANDIDAT IAM/TELECOM dans les noms reconnus',flush=True)
+          print('===== NOMS REELS (maximum 270) =====',flush=True)
+          for ti,ri,name,price,date in all_names[:270]:
+              print(f'NOM | table {ti} ligne {ri} | {name} | {price:.2f} MAD | {date}',flush=True)
+          print('FIN TEST 05 V5 - aucun cours du portefeuille modifie, aucune ecriture GitHub',flush=True)
+          if not all_names:
+              print('ECHEC: aucune ligne cours/date reconnue',flush=True)
+              sys.exit(1)
+          PY
