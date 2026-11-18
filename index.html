@@ -120,11 +120,13 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div class="tablewrap"><table><thead><tr><th>Société</th><th>Détachement</th><th>Paiement</th><th>Type</th><th>Brut / action</th><th>Source</th></tr></thead><tbody id="marketDividendRows"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody></table></div>
  </div>
   <div class="card" id="officialDividendHistoryPanel">
-   <div class="section-title"><h3>Historique officiel · Toutes les sociétés cotées</h3><span class="tag" id="officialDividendHistoryCount">0 annonce</span></div>
+   <div class="section-title"><h3>Historique officiel · Toutes les sociétés cotées</h3><span class="tag" id="officialDividendHistoryCount">0 annonce</span><button class="btn" type="button" aria-expanded="false" aria-controls="officialDividendHistoryContent" onclick="toggleOfficialDividendHistory(this)">Afficher les distributions</button></div>
+   <div id="officialDividendHistoryContent" class="hidden">
    <p class="small">Archives issues du fichier GitHub publié par le contrôleur officiel. Ces événements passés ne sont ni des dividendes perçus par votre PEA, ni de nouvelles notifications.</p>
    <div class="actions" style="margin-bottom:12px;align-items:center"><input id="officialHistorySearch" aria-label="Rechercher une société dans les archives" type="search" placeholder="Rechercher une société…" oninput="renderOfficialDividendHistory()" style="min-width:180px;flex:1;background:#101922;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px"><select id="officialHistoryYear" aria-label="Filtrer par année" onchange="renderOfficialDividendHistory()" style="background:#101922;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px"><option value="">Toutes les années</option></select></div>
    <p class="small" id="officialDividendHistoryStatus" aria-live="polite">Archives non encore chargées.</p>
    <div class="tablewrap"><table><thead><tr><th>Société</th><th>Détachement</th><th>Paiement</th><th>Type</th><th>Brut / action</th><th>Source</th></tr></thead><tbody id="officialDividendHistoryRows"><tr><td colspan="6" class="empty">Chargement de l’historique…</td></tr></tbody></table></div>
+   </div>
   </div>
  <div class="card" id="dividendWatchPanel">
   <div class="section-title"><h3>Surveillance des annonces officielles</h3><span class="tag">PEA · Actions détenues</span></div>
@@ -913,6 +915,12 @@ function safeMarketUrl(value,fallback=DIVIDEND_BVC_CALENDAR_URL){
 function marketRow(x){
  const bvc=safeMarketUrl(x.source),issue=x.url?safeMarketUrl(x.url):null;
  return `<tr><td><b>${esc(x.company)}</b></td><td>${esc(x.exDate||'—')}</td><td>${esc(x.paymentDate||'—')}</td><td>${esc(x.type||'—')}</td><td><b>${esc(x.amount||'—')}</b></td><td><a href="${esc(bvc)}" target="_blank" rel="noopener noreferrer">${esc(x.sourceName||'Bourse')}</a>${issue?' · <a href="'+esc(issue)+'" target="_blank" rel="noopener noreferrer">GitHub</a>':''}</td></tr>`;
+}
+function toggleOfficialDividendHistory(button){
+ const content=document.getElementById('officialDividendHistoryContent');
+ const isHidden=content.classList.toggle('hidden');
+ button.setAttribute('aria-expanded',String(!isHidden));
+ button.textContent=isHidden?'Afficher les distributions':'Masquer les distributions';
 }
 function renderOfficialDividendHistory(){
  const host=document.getElementById('officialDividendHistoryRows');if(!host)return;
