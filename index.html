@@ -165,7 +165,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 <div class="card"><h3>2. Excel ↔ Portfolio — synchronisation et sauvegarde</h3><p class="small">Cette fonction est secondaire : utilisez-la pour réimporter un classeur Excel déjà existant ou restaurer une sauvegarde. Elle ne conditionne pas l’importation PDF.</p><div class="field"><label for="excelSyncFile">Classeur Excel Mon Portfolio V2 (.xlsx)</label><input id="excelSyncFile" type="file" accept=".xlsx,.xls" onchange="previewExcelSync(this.files&&this.files[0])"></div><p class="small" id="excelSyncMsg" aria-live="polite">Aucun classeur analysé.</p><div class="actions"><button class="btn primary" id="excelSyncCommit" onclick="commitExcelSync()" disabled>Valider la synchronisation Excel → Portfolio</button><button class="btn" onclick="exportExcelAutomation()">Télécharger le classeur Excel depuis le Portfolio</button></div><div class="notice">La synchronisation ne supprime aucune donnée locale. Les doublons sont ignorés grâce à la clé anti-doublon. Vérifiez le résumé avant validation.</div></div>
 
 <div class="sectiongrid"><div class="card"><h3>Règles d’importation</h3><ul class="small"><li>Lecture selon les intitulés des colonnes, même si leur ordre change.</li><li>Actions et OPCVM restent séparés.</li><li>La valorisation et le +/- latent sont conservés tels qu’affichés dans le PDF.</li><li>Les champs absents restent vides, jamais remplacés par zéro.</li><li>Les lignes déjà présentes sont mises à jour par nom ; les autres positions sont conservées.</li><li>Le tableau fiscal et les frais ne sont pas confondus avec les pertes latentes.</li></ul></div><div class="card"><h3>Important</h3><p class="small">Cette méthode importe le texte sélectionnable du PDF. Si le PDF est une image/scanné et que le texte ne peut pas être sélectionné, il faudra d’abord utiliser la fonction « Copier le texte » ou l’OCR de l’appareil.</p><div class="notice">Vérifiez toujours l’aperçu avant validation. Seules les lignes effectivement détectées seront importées.</div></div></div></section>
-<section class="page" id="notifications"><div class="pagehead"><div><h2>Notifications</h2><p>Alertes de dividendes issues du calendrier général de la Bourse de Casablanca.</p></div><div class="actions"><button class="btn primary" type="button" onclick="refreshMarketDividends()">↻ Actualiser</button></div></div><div class="card"><div class="card-title-row"><h3>Alertes · Toutes les sociétés cotées</h3><span class="tag" id="marketNotificationCount">0 alerte(s)</span></div><p class="small" id="marketNotificationStatus">Chargement des notifications…</p><div id="marketNotificationRows"><div class="empty">Chargement…</div></div></div><div class="card"><p class="small">Une annonce générale ne signifie pas que le PEA détient cette action. Les revenus personnels restent enregistrés séparément dans Dividendes.</p></div></section>
+<section class="page" id="notifications"><div class="pagehead"><div><h2>Notifications</h2><p>Alertes de dividendes issues du calendrier général de la Bourse de Casablanca.</p></div><div class="actions"><button class="btn primary" type="button" onclick="refreshMarketDividends()">↻ Actualiser</button></div></div><div class="card"><div class="card-title-row"><h3>Alertes · Toutes les sociétés cotées</h3><span class="tag" id="marketNotificationCount">0 alerte(s)</span></div><p class="small" id="marketNotificationStatus">Chargement des notifications…</p><div id="marketNotificationRows"><div class="empty">Chargement…</div></div></div><div class="card"><h3>Rappels avant détachement · Actions du PEA</h3><div id="peaExDateReminderRows"></div></div><div class="card"><p class="small">Une annonce générale ne signifie pas que le PEA détient cette action. Les revenus personnels restent enregistrés séparément dans Dividendes.</p></div></section>
 <section class="page" id="parametres"><div class="pagehead"><div><h2>Paramètres</h2><p>Sauvegarde et gestion des données locales.</p></div></div><div class="sectiongrid"><div class="card"><h3>Sauvegarde</h3><p class="small">Exporter les données locales V2 dans un fichier JSON.</p><button class="btn primary" onclick="backup()">Télécharger la sauvegarde</button><div class="field"><label>Restaurer une sauvegarde JSON</label><input type="file" id="restoreFile" accept="application/json"></div><button class="btn" onclick="restoreBackup()">Restaurer</button><p id="backupMsg" class="small"></p></div><div class="card"><h3>Configuration</h3><div class="allocrow"><span>Compte</span><b class="positive">PEA</b></div><div class="allocrow"><span>Architecture</span><b>V2 indépendante</b></div><div class="allocrow"><span>Stockage</span><b>Local au navigateur</b></div><div class="notice">Conserver une sauvegarde avant toute réinitialisation du navigateur.</div></div></div></section>
 </main></div><div class="footer">Mon Portfolio V2 · PEA uniquement · Mise à jour technique · 16/11/2026 · Données source : 15/11/2026</div></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -214,7 +214,7 @@ if(localStorage.getItem('monPortfolioV2PEA_statement_2026-11-15')!=='done'){
 
 function save(){localStorage.setItem(KEY,JSON.stringify(state));render()}
 const fmt=(n,d=2)=>Number(n).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
-function go(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b.dataset.page===id));window.scrollTo({top:0,behavior:'smooth'})}
+function go(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b.dataset.page===id));if(id==='notifications')renderPeaExDateReminders();window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
 function parseWafaNumber(v){if(v===null||v===undefined||v==='')return null;if(typeof v==='number')return Number.isFinite(v)?v:null;let x=String(v).trim().replace(/\u00a0/g,' ').replace(/\s/g,'').replace(/DH|MAD|%/gi,'');if(!x)return null;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'')}else if(x.includes(','))x=x.replace(',','.');const n=Number(x);return Number.isFinite(n)?n:null}
 let pendingWafaCsvPositions=[];
@@ -916,7 +916,31 @@ function renderOfficialDividendHistory(){
  host.innerHTML=visible.length?visible.map(marketRow).join(''):'<tr><td colspan="6" class="empty">Aucune annonce historique pour ce filtre.</td></tr>';
  const count=document.getElementById('officialDividendHistoryCount');if(count)count.textContent=all.length+' annonce(s)';
 }
+function upcomingPeaExDateReminders(announcements,positions,today){
+ const issuers=new Set(positions.map(p=>dividendIssuerKey(p.name)));
+ const todayMs=Date.parse(today+'T00:00:00Z');
+ const reminders=new Map();
+ for(const event of announcements){
+  const issuer=dividendIssuerKey(event.company),date=marketIsoDate(event.exDate);
+  if(!issuers.has(issuer)||!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;
+  const ms=Date.parse(date+'T00:00:00Z'),days=(ms-todayMs)/86400000;
+  if(!(days>=1&&days<=3)||new Date(ms).toISOString().slice(0,10)!==date)continue;
+  const key=marketEventKey({...event,company:issuer});
+  reminders.set(key,{event,date,days});
+ }
+ return [...reminders.values()].sort((a,b)=>a.days-b.days);
+}
+function renderPeaExDateReminders(){
+ const host=document.getElementById('peaExDateReminderRows');
+ if(!host)return;
+ const parts=new Intl.DateTimeFormat('fr-FR',{timeZone:'Africa/Casablanca',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ const part=type=>parts.find(p=>p.type===type).value;
+ const today=[part('year'),part('month'),part('day')].join('-');
+ const rows=upcomingPeaExDateReminders(state.marketDividends||[],dividendEligiblePositions(),today);
+ host.innerHTML=rows.length?rows.map(({event,date,days})=>'<div class="notice"><b>'+esc(event.company)+'</b> · Détachement le '+esc(date.split('-').reverse().join('/'))+' (dans '+days+' j)<br><a href="'+esc(safeMarketUrl(event.url||event.source))+'" target="_blank" rel="noopener noreferrer">Consulter l’annonce</a></div>').join(''):'<div class="empty">Aucun détachement annoncé dans les trois prochains jours pour vos actions.</div>';
+}
 function renderMarketNotifications(){
+ renderPeaExDateReminders();
  const host=document.getElementById('marketNotificationRows'),count=document.getElementById('marketNotificationCount');if(!host)return;
  const items=Array.isArray(state.marketNotifications)?state.marketNotifications:[];
  if(count)count.textContent=items.length+' nouvelle(s) alerte(s)';
