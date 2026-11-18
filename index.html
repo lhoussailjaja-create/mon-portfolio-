@@ -142,7 +142,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div class="card"><div class="metric-label">Prochain paiement</div><div class="metric-value" id="dNextPayment">—</div><div class="metric-sub" id="dNextPaymentSub">Aucun paiement futur enregistré</div></div>
   <div class="card"><div class="metric-label">Nombre de paiements</div><div class="metric-value" id="dCount">0</div></div>
   <div class="card"><div class="metric-label">Revenu mensuel moyen</div><div class="metric-value" id="dMonthlyAverage">—</div><div class="metric-sub">Moyenne des mois avec paiements</div></div>
-  <div class="card"><div class="metric-label">Yield on Cost</div><div class="metric-value" id="dYieldCost">—</div><div class="metric-sub">Calcul si quantité et coût d’acquisition sont disponibles</div></div>
+  <div class="card"><div class="metric-label">Yield on Cost</div><div class="metric-value" id="dYieldCost">—</div><div class="metric-sub">Dividendes perçus cette année / coût d’achat des positions actuelles correspondantes</div></div>
   <div class="card"><div class="metric-label">Paiements à venir</div><div class="metric-value" id="dUpcomingCount">0</div><div class="metric-sub">Prévisionnels futurs enregistrés</div></div>
  </div>
  <div class="grid div-analytics-grid">
@@ -1032,6 +1032,23 @@ function renderDividendWatchlist(){
   return '<div class="allocrow"><span><strong>'+esc(name)+'</strong><small class="small" style="display:block">Quantité actuelle : '+fmt(qty,3)+'</small>'+details+'</span><span class="tag">'+(rows.length?'Estimation selon la quantité actuelle':'Aucun paiement annoncé à venir')+'</span></div>';
  }).join(''):'<div class="empty">Aucune action détenue détectée dans Positions.</div>';
 }
+function dividendYieldOnCost(received,positions,year){
+ const incomeByIssuer=new Map(),costByIssuer=new Map();
+ for(const d of received){
+  if(String(d.date||'').slice(0,4)!==String(year))continue;
+  const key=dividendIssuerKey(d.name),amount=Number(d.amount);
+  if(key&&Number.isFinite(amount)&&amount>0)incomeByIssuer.set(key,(incomeByIssuer.get(key)||0)+amount);
+ }
+ for(const p of positions){
+  const key=dividendIssuerKey(p.name),cost=Number(p.cmp)*Number(p.qty);
+  if(incomeByIssuer.has(key)&&Number(p.cmp)>0&&Number(p.qty)>0&&Number.isFinite(cost)){
+   costByIssuer.set(key,(costByIssuer.get(key)||0)+cost);
+  }
+ }
+ let income=0,cost=0;
+ for(const [key,basis] of costByIssuer){income+=incomeByIssuer.get(key);cost+=basis;}
+ return cost>0?income/cost*100:null;
+}
 function renderDividendAnalytics(){
  renderDividendWatchlist();
  const list=(Array.isArray(state.dividends)?state.dividends:[]).filter(dividendIsConfirmed),received=list.filter(d=>d.status==='Perçu'),forecast=list.filter(d=>d.status==='Prévisionnel');
@@ -1043,7 +1060,7 @@ function renderDividendAnalytics(){
  if(el('dNextPaymentSub'))el('dNextPaymentSub').textContent=upcoming.length?upcoming[0].name+' · '+upcoming[0].date:'Aucun paiement futur enregistré';
  const byMonth={};received.forEach(d=>{const k=String(d.date||'').slice(0,7);if(k)byMonth[k]=(byMonth[k]||0)+(Number(d.amount)||0)});
  const vals=Object.values(byMonth),avg=el('dMonthlyAverage');if(avg)avg.textContent=vals.length?fmt(vals.reduce((a,b)=>a+b,0)/vals.length)+' DH':'—';
- let yoc=null;const eligible=received.filter(d=>Number(d.perShare)>0&&Number(d.qty)>0);if(eligible.length){let income=0,cost=0;eligible.forEach(d=>{const p=state.positions.find(x=>String(x.name).toLowerCase()===String(d.name).toLowerCase());if(p&&Number(p.cmp)>0){income+=Number(d.perShare)*Number(d.qty);cost+=Number(p.cmp)*Number(d.qty)}});if(cost>0)yoc=income/cost*100}
+ const yoc=dividendYieldOnCost(received,dividendEligiblePositions(),year);
  if(el('dYieldCost'))el('dYieldCost').textContent=yoc===null?'—':fmt(yoc)+'%';
  if(el('dUpcomingCount'))el('dUpcomingCount').textContent=String(upcoming.length);
  if(el('dUpcoming'))el('dUpcoming').innerHTML=upcoming.length?upcoming.slice(0,6).map(d=>`<div class="div-upcoming-item"><div><strong>${esc(d.name)}</strong><small>${esc(d.date)}</small></div><b>${fmt(Number(d.amount)||0)} DH</b></div>`).join(''):'<div class="empty">Aucun paiement prévisionnel futur enregistré.</div>';
