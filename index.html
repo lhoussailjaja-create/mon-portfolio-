@@ -989,7 +989,7 @@ async function refreshMarketDividends(){
   if(gh.status==='fulfilled'||bvc.status==='fulfilled'){
    try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){console.warn('Cache local indisponible',e)}
   }
-  renderMarketDividends();renderMarketNotifications();renderOfficialDividendHistory();
+  renderMarketDividends();renderMarketNotifications();renderOfficialDividendHistory();renderDividendWatchlist();
   const stamp=new Date().toLocaleString('fr-FR');
   const ghMsg=gh.status==='fulfilled'?`GitHub : ${gh.value.length} annonce(s)`:`GitHub : erreur (${gh.reason?.message||'inconnue'})`;
   const bvcMsg=bvc.status==='fulfilled'?`Bourse : ${bvc.value.announcements.length} annonce(s)`:`Bourse : indisponible (${bvc.reason?.message||'inconnue'})`;
@@ -999,19 +999,37 @@ async function refreshMarketDividends(){
   if(hstatus)hstatus.textContent=bvc.status==='fulfilled'?`Synchronisation GitHub : ${state.officialDividendHistory.length} annonce(s) historiques. Mis à jour : ${bvc.value.updatedAt||'date non fournie'}.`:`Archives conservées depuis le dernier chargement · ${bvc.reason?.message||'source indisponible'}.`;
  }finally{marketRefreshInProgress=false}
 }
+function dividendIssuerKey(value){
+ const key=String(value??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+ const aliases={'MAROC TELECOM':'ITISSALAT AL MAGHRIB','TOTALENERGIES MARKETING MAROC':'TOTALENERGIES MAROC','TOTAL ENERGIES MAROC':'TOTALENERGIES MAROC'};
+ return aliases[key]||key;
+}
 function renderDividendWatchlist(){
  const host=document.getElementById('dividendWatchList');
  if(!host)return;
- const positions=(Array.isArray(state.positions)?state.positions:[]).filter(p=>{
-  const category=String(p.category||p.type||'').toLowerCase();
-  const name=String(p.name||p.value||'').trim();
-  return name && (category.includes('action') || (!category.includes('opcv') && !category.includes('fonds')));
- });
- const unique=[...new Map(positions.map(p=>[String(p.name||p.value).trim().toUpperCase(),p])).values()];
- host.innerHTML=unique.length?unique.map(p=>{
-  const name=String(p.name||p.value||'');
-  const qty=Number(p.qty??p.quantity??0);
-  return `<div class="allocrow"><span><strong>${esc(name)}</strong><small class="small" style="display:block">Quantité détenue : ${Number.isFinite(qty)?fmt(qty):'—'} · Surveillance des annonces</small></span><span class="tag">À vérifier</span></div>`;
+ const positions=new Map();
+ for(const p of dividendEligiblePositions()){
+  const name=String(p.name||'').trim(),key=dividendIssuerKey(name),qty=Number(p.qty);
+  if(!key||!Number.isFinite(qty)||qty<=0)continue;
+  const prior=positions.get(key);
+  positions.set(key,{name:prior?.name||name,qty:(prior?.qty||0)+qty});
+ }
+ const events=new Map();
+ const now=new Date();
+ const today=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
+ for(const item of state.marketDividends||[]){
+  const key=dividendIssuerKey(item.company),pay=marketIsoDate(item.paymentDate);
+  const raw=marketAmountKey(item.amount),amount=/^\d+(?:\.\d+)?$/.test(raw)?Number(raw):NaN;
+  if(!positions.has(key)||!/^\d{4}-\d{2}-\d{2}$/.test(pay)||pay<today||!(amount>0)||!Number.isFinite(amount))continue;
+  const group=events.get(key)||new Map();
+  const eventKey=marketEventKey({...item,company:key});
+  group.set(eventKey,{pay,amount});
+  events.set(key,group);
+ }
+ host.innerHTML=positions.size?[...positions].map(([key,{name,qty}])=>{
+  const rows=[...(events.get(key)?.values()||[])].sort((a,b)=>a.pay.localeCompare(b.pay));
+  const details=rows.map(({pay,amount})=>'<small class="small" style="display:block">Paiement : '+esc(pay.split('-').reverse().join('/'))+' · Brut estimé : '+fmt(qty*amount,2)+' DH</small>').join('');
+  return '<div class="allocrow"><span><strong>'+esc(name)+'</strong><small class="small" style="display:block">Quantité actuelle : '+fmt(qty,3)+'</small>'+details+'</span><span class="tag">'+(rows.length?'Estimation selon la quantité actuelle':'Aucun paiement annoncé à venir')+'</span></div>';
  }).join(''):'<div class="empty">Aucune action détenue détectée dans Positions.</div>';
 }
 function renderDividendAnalytics(){
