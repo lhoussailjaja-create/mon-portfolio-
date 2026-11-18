@@ -76,7 +76,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Profit / Loss latent</span><span class="kpi-icon">↘</span></div><div class="metric-value negative" id="dashProfit">−408,84 DH</div><div class="metric-sub" id="dashProfitMeta">Relevé Titres · Source : 15/11/2026</div></div>
  <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label" id="dashTodayLabel">Variation entre valorisations</span><span class="kpi-icon">◷</span></div><div class="metric-value neutral" id="dashToday">—</div><div class="metric-sub" id="dashTodayMeta">En attente de deux valorisations datées</div></div>
  <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Performance du jour</span><span class="kpi-icon">◷</span></div><div class="metric-value neutral" id="dashDaily">—</div><div class="metric-sub" id="dashDailyMeta">Valorisations du jour et de la veille requises</div></div>
- <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Dividend Yield</span><span class="kpi-icon">◆</span></div><div class="metric-value neutral" id="dashYield">—</div><div class="metric-sub">Indisponible · données de dividendes à compléter</div></div>
+ <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Rendement perçu depuis le début de l’année</span><span class="kpi-icon">◆</span></div><div class="metric-value neutral" id="dashYield">—</div><div class="metric-sub">Dividendes perçus / valeur des actions du PEA</div></div>
 </div>
 <div class="card chart-card">
  <div class="chart-head"><div><h3>Évolution du portefeuille</h3><p class="small">Historique basé exclusivement sur les snapshots enregistrés</p></div><button class="btn" onclick="captureSnapshot()">＋ Enregistrer un snapshot</button></div>
@@ -722,7 +722,21 @@ function renderDailyPerformance(){
  el.textContent=sign+fmt(Math.abs(v.delta))+' DH ('+sign+fmt(Math.abs(v.percent))+' %)';
  if(meta)meta.textContent=date(v.yesterday)+' → '+date(v.today)+' · Variation brute, apports/retraits non neutralisés';
 }
+function dividendReceivedYield(dividends,positions,year){
+ if(!positions.length)return null;
+ let value=0;
+ for(const p of positions){
+  const valuation=Number(p.importedValue)>0?Number(p.importedValue):Number(p.qty)*Number(p.price);
+  if(!Number.isFinite(valuation)||valuation<=0)return null;
+  value+=valuation;
+ }
+ const income=dividends.filter(d=>dividendIsConfirmed(d)&&d.status==='Perçu'&&d.date.slice(0,4)===String(year)).reduce((sum,d)=>sum+Number(d.amount),0);
+ return income/value*100;
+}
 function renderDashboardMetrics(){
+ const yieldCard=document.getElementById('dashYield');
+ const receivedYield=dividendReceivedYield(state.dividends,dividendEligiblePositions(),new Date().getFullYear());
+ if(yieldCard)yieldCard.textContent=receivedYield===null?'—':fmt(receivedYield,2)+' %';
  renderDailyPerformance();
  renderSnapshotVariation();
  const m=portfolioMetrics();
