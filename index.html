@@ -173,7 +173,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 'use strict';
 const KEY='monPortfolioV2PEA';
 const state=loadState();
-function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY))||{};const all=Array.isArray(x.positions)?x.positions:[];const archived=Array.isArray(x.importIssues)?x.importIssues:[];const bad=all.filter(p=>/^\d+(?:[.,]\d+)?$/.test(String(p.name||'').trim()));const good=all.filter(p=>!bad.includes(p));const issues=[...archived,...bad.map(p=>({...p,issue:'Ligne numérique sans nom de valeur, issue d’un ancien import PDF incorrect; archivée sans suppression.'}))];const result={positions:good,dividends:Array.isArray(x.dividends)?x.dividends:[],operations:Array.isArray(x.operations)?x.operations:[],snapshots:Array.isArray(x.snapshots)?x.snapshots:[],marketDividends:Array.isArray(x.marketDividends)?x.marketDividends:[],marketNotifications:Array.isArray(x.marketNotifications)?x.marketNotifications:[],officialDividendHistory:Array.isArray(x.officialDividendHistory)?x.officialDividendHistory:[],marketSeenKeys:Array.isArray(x.marketSeenKeys)?x.marketSeenKeys:null,importIssues:issues,wafaAccountSummary:x.wafaAccountSummary||null};if(bad.length){try{localStorage.setItem(KEY,JSON.stringify(result));}catch(e){}}return result}catch(e){return{positions:[],dividends:[],operations:[],snapshots:[],marketDividends:[],marketNotifications:[],officialDividendHistory:[],marketSeenKeys:null,importIssues:[]}}}
+function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY))||{};const all=Array.isArray(x.positions)?x.positions:[];const archived=Array.isArray(x.importIssues)?x.importIssues:[];const bad=all.filter(p=>/^\d+(?:[.,]\d+)?$/.test(String(p.name||'').trim()));const good=all.filter(p=>!bad.includes(p));const issues=[...archived,...bad.map(p=>({...p,issue:'Ligne numérique sans nom de valeur, issue d’un ancien import PDF incorrect; archivée sans suppression.'}))];const result={positions:good,dividends:Array.isArray(x.dividends)?x.dividends:[],operations:Array.isArray(x.operations)?x.operations:[],snapshots:Array.isArray(x.snapshots)?x.snapshots:[],marketDividends:Array.isArray(x.marketDividends)?x.marketDividends:[],marketNotifications:Array.isArray(x.marketNotifications)?x.marketNotifications:[],officialDividendHistory:Array.isArray(x.officialDividendHistory)?x.officialDividendHistory:[],marketSeenKeys:Array.isArray(x.marketSeenKeys)?x.marketSeenKeys:null,marketInitializedSources:Array.isArray(x.marketInitializedSources)?x.marketInitializedSources:[],importIssues:issues,wafaAccountSummary:x.wafaAccountSummary||null};if(bad.length){try{localStorage.setItem(KEY,JSON.stringify(result));}catch(e){}}return result}catch(e){return{positions:[],dividends:[],operations:[],snapshots:[],marketDividends:[],marketNotifications:[],officialDividendHistory:[],marketSeenKeys:null,importIssues:[]}}}
 const PEA_BASELINE_DATE='2026-11-15';
 const PEA_BASELINE=[
  {id:'pea_20261115_attijari_al_moucharaka',name:'ATTIJARI AL MOUCHARAKA',type:'OPCVM',qty:0.565,price:1291.84,importedValue:729.89,cmp:1415.73,sourcePerf:-8.75,sourcePl:-70.00,sourceWeight:5.61,buyFees:null,source:'Wafa Bourse PDF',sourceDate:PEA_BASELINE_DATE},
@@ -870,7 +870,14 @@ function marketEventKey(x){
  // Stable identity independent of source, ID format and date separators.
  const norm=v=>String(v??'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
  const date=v=>{const raw=String(v||'').trim();const m=raw.match(/^(\d{2})[\/.-](\d{2})[\/.-](\d{4})$/);return m?`${m[3]}-${m[2]}-${m[1]}`:raw.slice(0,10)};
- return [norm(x.company),date(x.exDate),date(x.paymentDate),norm(x.type),norm(x.amount)].join('|');
+ return [norm(x.company),date(x.exDate),date(x.paymentDate),norm(x.type),marketAmountKey(x.amount)].join('|');
+}
+function marketAmountKey(value){
+ const raw=String(value??'').trim().replace(/\s*(?:MAD|DHS?|DIRHAMS?)\.?$/i,'').replace(/[\s\u00a0\u202f]/g,'');
+ if(!/^\d+(?:[.,]\d+)?$/.test(raw))return String(value??'').trim().toLowerCase();
+ const [whole,decimal='']=raw.replace(',','.').split('.');
+ const fraction=decimal.replace(/0+$/,'');
+ return whole.replace(/^0+(?=\d)/,'')+(fraction?'.'+fraction:'');
 }
 function marketIsoDate(value){
  const v=String(value||'').trim(),m=v.match(/^(\d{2})[\/.-](\d{2})[\/.-](\d{4})$/);
@@ -956,12 +963,22 @@ async function refreshMarketDividends(){
    const previous=Array.isArray(state.marketDividends)?state.marketDividends:[];
    const keys=Array.isArray(state.marketSeenKeys)?new Set(state.marketSeenKeys):null;
    const seen=keys||new Set([...previous,...(state.marketNotifications||[])].map(marketEventKey));
-   const fresh=keys?items.filter(x=>!seen.has(marketEventKey(x))):[];
+   // A source that responds for the first time establishes its own baseline.
+   const initialized=new Set(state.marketInitializedSources||[]);
+   const alertable=new Set();
+   for(const [source,result] of [['github',gh],['bvc',bvc]]){
+    if(result.status!=='fulfilled')continue;
+    const events=source==='github'?result.value:result.value.announcements;
+    if(initialized.has(source))events.forEach(x=>alertable.add(marketEventKey(x)));
+    initialized.add(source);
+   }
+   const fresh=items.filter(x=>alertable.has(marketEventKey(x))&&!seen.has(marketEventKey(x)));
+   state.marketInitializedSources=[...initialized];
    items.forEach(x=>seen.add(marketEventKey(x)));
    state.marketSeenKeys=[...seen];
    state.marketDividends=items;
    // Notifications remain a separate, deduplicated ledger of NEW observed events.
-   const old=keys?(Array.isArray(state.marketNotifications)?state.marketNotifications:[]):[];
+   const old=Array.isArray(state.marketNotifications)?state.marketNotifications:[];
    state.marketNotifications=[...new Map([...old,...fresh].map(x=>[marketEventKey(x),x])).values()];
   }
   if(bvc.status==='fulfilled'){
