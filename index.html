@@ -151,7 +151,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  </div>
  <div class="grid div-analytics-grid">
   <div class="card"><div class="section-title"><h3>Sources des revenus</h3><span class="small">Par valeur</span></div><div id="dIncomeSources" class="div-source-list"><div class="empty">Aucune donnée disponible.</div></div></div>
-  <div class="card"><div class="section-title"><h3>Top payeurs</h3><span class="small">Selon les montants enregistrés</span></div><div id="dTopPayers" class="div-source-list"><div class="empty">Aucun dividende enregistré.</div></div></div>
+  <div class="card"><div class="section-title"><h3>Top payeurs</h3><span class="small">Selon les montants perçus</span></div><div id="dTopPayers" class="div-source-list"><div class="empty">Aucun dividende enregistré.</div></div></div>
  </div>
  <div class="card"><div class="section-title"><h3>Dividend Calendar · Calendrier</h3><span class="small">Paiements perçus et à venir</span></div><div class="tablewrap"><table><thead><tr><th>Valeur</th><th>Date ex-dividende</th><th>Date de paiement</th><th>Montant (DH)</th><th>Statut</th><th>Source</th></tr></thead><tbody id="dCalendarRows"><tr><td colspan="6" class="empty">Aucune date enregistrée.</td></tr></tbody></table></div></div>
  <div class="card"><div class="section-title"><h3>Income Projection · Simulation</h3><span class="tag">Scénario indicatif</span></div><p class="small">Les résultats dépendent des hypothèses saisies et ne constituent pas une garantie.</p><div class="formrow div-projection-fields"><div class="field"><label>Revenu annuel de départ (DH)</label><input id="projStart" type="number" min="0" step="0.01" placeholder="À renseigner"></div><div class="field"><label>Croissance annuelle estimée (%)</label><input id="projGrowth" type="number" step="0.1" value="0"></div><div class="field"><label>Rendement de réinvestissement (%)</label><input id="projYield" type="number" min="0" step="0.1" value="0"></div><div class="field"><label>Horizon</label><select id="projYears"><option value="5">5 ans</option><option value="10">10 ans</option><option value="20">20 ans</option></select></div></div><button class="btn primary" type="button" onclick="calculateDividendProjection()">Calculer la simulation</button><div id="dProjectionResult" class="div-projection-result">Renseignez un revenu annuel de départ pour lancer la simulation.</div></div>
@@ -1132,11 +1132,21 @@ function renderDividendAnalytics(){
  if(el('dYieldCost'))el('dYieldCost').textContent=yoc===null?'—':fmt(yoc)+'%';
  if(el('dUpcomingCount'))el('dUpcomingCount').textContent=String(upcoming.length);
  if(el('dUpcoming'))el('dUpcoming').innerHTML=upcoming.length?upcoming.map(d=>`<div class="div-upcoming-item"><div><strong>${esc(d.name)}</strong><small>${esc(d.date.split('-').reverse().join('/'))} · ${esc(d.source)}</small></div><b>${fmt(d.amount)} DH</b></div>`).join(''):'<div class="empty">Aucun paiement futur annoncé ou saisi.</div>';
- const map={};list.forEach(d=>{const k=String(d.name||'Valeur non renseignée');map[k]=(map[k]||0)+(Number(d.amount)||0)});
- const items=Object.entries(map).sort((a,b)=>b[1]-a[1]),max=items.length?Math.max(...items.map(x=>x[1])):0;
- const renderItems=arr=>arr.length?arr.map(([n,v],i)=>`<div class="div-source-item"><div class="div-source-head"><strong>${i+1}. ${esc(n)}</strong><b>${fmt(v)} DH</b></div><div class="div-source-track"><span style="width:${max? v/max*100:0}%"></span></div></div>`).join(''):'<div class="empty">Aucune donnée disponible.</div>';
- if(el('dIncomeSources'))el('dIncomeSources').innerHTML=renderItems(items);
- if(el('dTopPayers'))el('dTopPayers').innerHTML=renderItems(items.slice(0,5));
+ const sources=new Map();
+ function addIncome(d,field){
+  const key=dividendIssuerKey(d.name)||'';
+  const row=sources.get(key)||{name:d.name||'Valeur non renseignée',received:0,upcoming:0};
+  row[field]+=Number(d.amount);
+  sources.set(key,row);
+ }
+ received.forEach(d=>addIncome(d,'received'));
+ upcoming.forEach(d=>addIncome(d,'upcoming'));
+ const rows=[...sources.values()];
+ const sourcesOrder=rows.slice().sort((a,b)=>b.received-a.received||b.upcoming-a.upcoming);
+ const top=rows.filter(row=>row.received>0).sort((a,b)=>b.received-a.received).slice(0,5);
+ const empty='<div class="empty">Aucune donnée disponible.</div>';
+ if(el('dIncomeSources'))el('dIncomeSources').innerHTML=sourcesOrder.map(row=>`<div class="div-source-item"><strong>${esc(row.name)}</strong><small>Perçu : ${fmt(row.received)} DH · À venir : ${fmt(row.upcoming)} DH</small></div>`).join('')||empty;
+ if(el('dTopPayers'))el('dTopPayers').innerHTML=top.map((row,i)=>`<div class="div-source-item"><div class="div-source-head"><strong>${i+1}. ${esc(row.name)}</strong><b>${fmt(row.received)} DH</b></div></div>`).join('')||empty;
  const calendar=[...received,...upcoming];
  if(el('dCalendarRows'))el('dCalendarRows').innerHTML=calendar.length?calendar.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(d=>`<tr><td>${esc(d.name||'—')}</td><td>${d.exDate?esc(d.exDate):'—'}</td><td>${esc(d.date||'—')}</td><td>${fmt(Number(d.amount)||0)} DH</td><td><span class="tag">${esc(d.status||'—')}</span></td><td>${esc(d.confirmationSource||'—')}</td></tr>`).join(''):'<tr><td class="empty" colspan="6">Aucune date de distribution confirmée.</td></tr>';
  if(el('divIncomeChart')){const keys=[];for(let i=0;i<12;i++)keys.push(year+'-'+String(i+1).padStart(2,'0'));const r={},f={};received.forEach(d=>{const k=String(d.date||'').slice(0,7);if(k)r[k]=(r[k]||0)+(Number(d.amount)||0)});upcoming.forEach(d=>{const k=d.date.slice(0,7);f[k]=(f[k]||0)+d.amount});const mx=Math.max(1,...keys.flatMap(k=>[r[k]||0,f[k]||0])),months=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];el('divIncomeChart').innerHTML=keys.map((k,i)=>{const a=r[k]||0,b=f[k]||0;return `<div class="div-bar-group"><div class="div-bar-value">${a+b>0?fmt(a+b,0):''}</div><div class="div-bars"><div class="div-bar received" title="Perçu ${fmt(a)} DH" style="height:${a?Math.max(3,a/mx*100):0}%"></div><div class="div-bar forecast" title="Prévisionnel ${fmt(b)} DH" style="height:${b?Math.max(3,b/mx*100):0}%"></div></div><div class="div-bar-label">${months[i]}</div></div>`}).join('')}
