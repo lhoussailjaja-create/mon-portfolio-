@@ -18,11 +18,11 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .layout{display:block}.sidebar{position:static;display:flex;align-items:center;gap:7px;padding:7px 9px;margin-bottom:15px;background:#0d131b;border-color:#303a43;overflow-x:auto;white-space:nowrap}.sidebar .navlabel,.sidebar .sidefoot{display:none}.nav{width:auto;flex:0 0 auto;margin:0;padding:10px 17px;border-radius:11px;color:#d2dbe2}.nav.active{background:linear-gradient(110deg,#b8f51b,#70c900);color:#101900;box-shadow:0 0 20px #9ce91435}.ico{display:inline-block}.content{min-width:0}.pagehead{align-items:center}.pagehead h2{font-size:26px}.pagehead p{color:#a5b1bb}
 .card{background:linear-gradient(145deg,#151e27,#0d141c);border-color:#39434d;box-shadow:0 10px 28px #0005}.dash-kpis{gap:12px}.dash-kpi{min-height:126px;padding:17px}.kpi-icon{background:#26391a;color:var(--mint);border-radius:50%;width:37px;height:37px}.dash-kpi:nth-child(2) .kpi-icon{background:#3a2026;color:var(--red)}.dash-kpi:nth-child(3) .kpi-icon{background:#26391a;color:var(--mint)}.dash-kpi:nth-child(4) .kpi-icon{background:#3d3516;color:var(--gold)}.dash-kpi .metric-value{font-size:clamp(20px,2vw,29px)}
 .chart-card{padding:19px 20px}.chart-mode.active,.period.active{background:#b8f51b;color:#172000;border-color:#b8f51b;box-shadow:0 0 14px #b8f51b45}.chart-mode,.period{background:#111a23;border-color:#39444e;color:#d5dce2}.chart-area svg{max-height:270px}.chart-summary strong{font-size:20px}.chart-foot{color:#93a2ad}
-.dash-bottom{grid-template-columns:1.2fr .8fr}.heatmap{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:minmax(76px,auto);gap:5px}.heat-tile{border:1px solid #ffffff22;border-radius:10px;padding:10px;display:flex;flex-direction:column;justify-content:space-between;min-width:0;color:#fff;overflow:hidden}.heat-tile b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.heat-tile strong{font-size:16px}.heat-tile small{font-size:10px;opacity:.9}.heat-empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed #45515c;border-radius:12px;grid-column:1/-1}
+.dash-bottom{grid-template-columns:1.2fr .8fr}.heatmap,.heat-row{display:grid;min-width:0}.heat-row{grid-template-rows:minmax(0,1fr);min-height:0}.heat-tile{position:relative;min-width:0;min-height:0;border-radius:10px;box-shadow:inset 0 0 0 1px #ffffff33;color:#fff;overflow:hidden}.heat-tile-content{position:absolute;inset:0;padding:8px;display:flex;flex-direction:column;justify-content:center;gap:3px;overflow:hidden}.heat-tile b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.heat-tile strong{font-size:16px;white-space:nowrap}.heat-tile small{font-size:10px;opacity:.9;white-space:nowrap}.heat-empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed #45515c;border-radius:12px;grid-column:1/-1}
 .donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.donut{width:166px;height:166px;border-radius:50%;position:relative;flex:0 0 auto;background:#34414c}.donut:after{content:attr(data-total);position:absolute;inset:25px;border-radius:50%;background:#101820;display:grid;place-items:center;text-align:center;font-weight:800;font-size:15px;padding:8px}.donut-legend{flex:1;min-width:160px}.legendline{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #27343e;font-size:12px}.legendline:last-child{border:0}
 .positive{color:#b8f51b}.negative{color:#ff6471}.neutral{color:#f6d51a}.info{background:#18251a;border-color:#536a2a;color:#d5e8b6}.notice{background:#2b2518}
-@media(max-width:900px){.dash-bottom{grid-template-columns:1fr}.heatmap{grid-template-columns:repeat(3,minmax(0,1fr))}.sidebar{border-radius:13px}}
-@media(max-width:560px){.app{padding:11px 9px 25px}.brand h1{font-size:17px}.brand p{font-size:10px}.top{gap:8px}.pill{font-size:9px;padding:6px 9px}.nav{padding:9px 12px;font-size:12px}.ico{display:inline-block}.dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.dash-kpi{padding:12px;min-height:112px}.dash-kpi .metric-value{font-size:18px}.metric-sub{font-size:10px}.chart-card{padding:13px}.chart-summary{gap:14px}.chart-summary strong{font-size:14px}.heatmap{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:78px}.donut{width:135px;height:135px}.donut:after{inset:21px;font-size:12px}}
+@media(max-width:900px){.dash-bottom{grid-template-columns:1fr}.sidebar{border-radius:13px}}
+@media(max-width:560px){.app{padding:11px 9px 25px}.brand h1{font-size:17px}.brand p{font-size:10px}.top{gap:8px}.pill{font-size:9px;padding:6px 9px}.nav{padding:9px 12px;font-size:12px}.ico{display:inline-block}.dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.dash-kpi{padding:12px;min-height:112px}.dash-kpi .metric-value{font-size:18px}.metric-sub{font-size:10px}.chart-card{padding:13px}.chart-summary{gap:14px}.chart-summary strong{font-size:14px}.heat-tile-content{padding:5px}.heat-tile strong{font-size:13px}.donut{width:135px;height:135px}.donut:after{inset:21px;font-size:12px}}
 
 
 .div-extra-kpis{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:14px}
@@ -209,7 +209,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 <div class="portfolio-group">
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioHeatmapPanel" aria-expanded="false" onclick="togglePortfolioGroup(this)">Gains/pertes</button>
  <div class="portfolio-group-content" id="portfolioHeatmapPanel">
-<div class="card"><div class="card-title-row"><h3>Gains/pertes</h3><button class="btn" onclick="go('positions')">Voir les positions</button></div><div id="portfolioHeatmap" class="heatmap"><div class="heat-empty">Les tuiles apparaîtront après l’importation des positions détaillées.</div></div><p class="small" style="margin:10px 0 0">Taille des tuiles : poids de chaque ligne · Couleur : gain ou perte latente calculable.</p></div>
+<div class="card"><div class="card-title-row"><h3>Gains/pertes</h3><button class="btn" onclick="go('positions')">Voir les positions</button></div><div id="portfolioHeatmap" class="heatmap"><div class="heat-empty">Les tuiles apparaîtront après l’importation des positions détaillées.</div></div><p class="small" style="margin:10px 0 0">Surface proportionnelle à la valorisation de chaque position · Couleur selon le gain ou la perte latente.</p></div>
  </div>
 </div>
 <div class="portfolio-group">
@@ -1012,10 +1012,41 @@ function renderChart(){
 
 }
 function renderHeatmap(){
- const host=document.getElementById('portfolioHeatmap');if(!host)return;
- const rows=(state.positions||[]).map(p=>{const qty=Number(p.qty)||0,price=p.price===null||p.price===undefined?null:Number(p.price),cmp=p.cmp===null||p.cmp===undefined?null:Number(p.cmp),value=p.importedValue!==null&&p.importedValue!==undefined&&Number.isFinite(Number(p.importedValue))?Number(p.importedValue):(price===null?null:qty*price),pl=p.sourcePl!==null&&p.sourcePl!==undefined&&Number.isFinite(Number(p.sourcePl))?Number(p.sourcePl):((price===null||cmp===null)?null:(price-cmp)*qty-(Number(p.buyFees)||0));return {...p,value,pl}}).filter(p=>p.value!==null&&p.value>0).sort((a,b)=>b.value-a.value);
- if(!rows.length){host.innerHTML='<div class="heat-empty">Aucune position détaillée avec cours disponible. Importez le relevé Titres pour afficher la Heatmap.</div>';return}
- const total=rows.reduce((a,p)=>a+p.value,0);host.innerHTML=rows.map(p=>{const weight=total?p.value/total:0,share=Math.max(1,Math.round(weight*100)),gain=p.pl===null?null:p.pl/Math.max(1,p.value);const bg=gain===null?'#46515d':gain>=0?`rgba(77,190,0,${Math.min(.92,.35+Math.abs(gain)*2)})`:`rgba(235,45,60,${Math.min(.92,.35+Math.abs(gain)*2)})`;return `<div class="heat-tile" style="background:${bg};grid-column:span ${share>=22?2:1};grid-row:span ${share>=22?2:1}" title="${esc(p.name)} · ${fmt(p.value)} DH"><b>${esc(p.name)}</b><strong>${p.pl===null?'—':(p.pl>=0?'+':'')+fmt(p.pl)+' DH'}</strong><small>${fmt(weight*100)}% du portefeuille titres</small></div>`}).join('');
+ const host=document.getElementById('portfolioHeatmap');
+ if(!host)return;
+ const rows=state.positions.map(position=>{
+  const {qty,price,cmp,buyFees,sourcePl}=position;
+  const reportedResult=sourcePl!=null&&Number.isFinite(Number(sourcePl));
+  const pl=reportedResult?Number(sourcePl):price==null||cmp==null?null:
+   (Number(price)-Number(cmp))*Number(qty)-(Number(buyFees)||0);
+  return {...position,value:portfolioPositionValue(position),pl};
+ }).filter(position=>position.value>0).sort((a,b)=>b.value-a.value);
+ if(!rows.length){
+  host.style.height='';
+  host.style.gridTemplateRows='';
+  host.innerHTML='<div class="heat-empty">Aucune position avec une valorisation disponible.</div>';
+  return;
+ }
+ const sum=positions=>positions.reduce((total,position)=>total+position.value,0);
+ const total=sum(rows);
+ const rowSize=Math.ceil(rows.length/Math.ceil(rows.length/4));
+ const groups=[];
+ for(let index=0;index<rows.length;index+=rowSize)groups.push(rows.slice(index,index+rowSize));
+ const track=value=>'minmax(0,'+value+'fr)';
+ host.style.height=Math.min(160*groups.length,Math.max(98*groups.length,80*total/Math.min(...groups.map(sum))))+'px';
+ host.style.gridTemplateRows=groups.map(group=>track(sum(group))).join(' ');
+ host.innerHTML=groups.map(group=>{
+  const columns=group.map(position=>track(position.value)).join(' ');
+  const tiles=group.map(position=>{
+   const {name,value,pl}=position;
+   const ratio=pl===null?null:pl/Math.max(1,value);
+   const opacity=Math.min(.92,.35+Math.abs(ratio)*2);
+   const background=ratio===null?'#46515d':ratio>=0?`rgba(77,190,0,${opacity})`:`rgba(235,45,60,${opacity})`;
+   const result=pl===null?'—':(pl>=0?'+':'')+fmt(pl)+' DH';
+   return `<div class="heat-tile" style="background:${background}" title="${esc(name)} · ${fmt(value)} DH · ${result}"><div class="heat-tile-content"><b>${esc(name)}</b><strong>${result}</strong><small>${fmt(value/total*100)} % du portefeuille titres</small></div></div>`;
+  }).join('');
+  return `<div class="heat-row" style="grid-template-columns:${columns}">${tiles}</div>`;
+ }).join('');
 }
 
 const PEA_CASH_REFERENCE = 1134.42;
