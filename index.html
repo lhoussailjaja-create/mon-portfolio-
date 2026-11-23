@@ -18,7 +18,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .layout{display:block}.sidebar{position:static;display:flex;align-items:center;gap:7px;padding:7px 9px;margin-bottom:15px;background:#0d131b;border-color:#303a43;overflow-x:auto;white-space:nowrap}.sidebar .navlabel,.sidebar .sidefoot{display:none}.nav{width:auto;flex:0 0 auto;margin:0;padding:10px 17px;border-radius:11px;color:#d2dbe2}.nav.active{background:linear-gradient(110deg,#b8f51b,#70c900);color:#101900;box-shadow:0 0 20px #9ce91435}.ico{display:inline-block}.content{min-width:0}.pagehead{align-items:center}.pagehead h2{font-size:26px}.pagehead p{color:#a5b1bb}
 .card{background:linear-gradient(145deg,#151e27,#0d141c);border-color:#39434d;box-shadow:0 10px 28px #0005}.dash-kpis{gap:12px}.dash-kpi{min-height:126px;padding:17px}.kpi-icon{background:#26391a;color:var(--mint);border-radius:50%;width:37px;height:37px}.dash-kpi:nth-child(2) .kpi-icon{background:#3a2026;color:var(--red)}.dash-kpi:nth-child(3) .kpi-icon{background:#26391a;color:var(--mint)}.dash-kpi:nth-child(4) .kpi-icon{background:#3d3516;color:var(--gold)}.dash-kpi .metric-value{font-size:clamp(20px,2vw,29px)}
 .chart-card{padding:19px 20px}.chart-mode.active,.period.active{background:#b8f51b;color:#172000;border-color:#b8f51b;box-shadow:0 0 14px #b8f51b45}.chart-mode,.period{background:#111a23;border-color:#39444e;color:#d5dce2}.chart-area svg{max-height:270px}.chart-summary strong{font-size:20px}.chart-foot{color:#93a2ad}
-.dash-bottom{grid-template-columns:1.2fr .8fr}.heatmap{display:grid;gap:10px}.heat-row{display:grid;gap:4px;min-width:0}.heat-row-label{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px}.heat-row-label strong{white-space:nowrap}.heat-track{height:12px;overflow:hidden;border-radius:5px;background:#ffffff14}.heat-fill{display:block;height:100%;background:#eb2d3c}.heat-fill.positive{background:#4dbe00}.heat-empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed #45515c;border-radius:12px;grid-column:1/-1}
+.dash-bottom{grid-template-columns:1.2fr .8fr}.heatmap{--heat-unit:104px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,132px),1fr));gap:14px}.heat-tile{display:grid;grid-template-rows:var(--heat-unit) auto;justify-items:center;align-items:start;gap:8px;min-width:0;text-align:center}.heat-square{align-self:end;aspect-ratio:1;background:#eb2d3c;border-radius:4px}.heat-square.positive{background:#4dbe00}.heat-tile-label{display:grid;gap:3px;font-size:12px;overflow-wrap:anywhere}.heat-tile-label strong{white-space:nowrap}.heat-empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed #45515c;border-radius:12px;grid-column:1/-1}
 .donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.donut{width:166px;height:166px;border-radius:50%;position:relative;flex:0 0 auto;background:#34414c}.donut:after{content:attr(data-total);position:absolute;inset:25px;border-radius:50%;background:#101820;display:grid;place-items:center;text-align:center;font-weight:800;font-size:15px;padding:8px}.donut-legend{flex:1;min-width:160px}.legendline{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #27343e;font-size:12px}.legendline:last-child{border:0}
 .positive{color:#b8f51b}.negative{color:#ff6471}.neutral{color:#f6d51a}.info{background:#18251a;border-color:#536a2a;color:#d5e8b6}.notice{background:#2b2518}
 @media(max-width:900px){.dash-bottom{grid-template-columns:1fr}.sidebar{border-radius:13px}}
@@ -209,7 +209,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 <div class="portfolio-group">
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioHeatmapPanel" aria-expanded="false" onclick="togglePortfolioGroup(this)">Gains/pertes</button>
  <div class="portfolio-group-content" id="portfolioHeatmapPanel">
-<div class="card"><div class="card-title-row"><h3>Gains/pertes</h3><button class="btn" onclick="go('positions')">Voir les positions</button></div><div id="portfolioHeatmap" class="heatmap"><div class="heat-empty">Les tuiles apparaîtront après l’importation des positions détaillées.</div></div><p class="small" style="margin:10px 0 0">Longueur proportionnelle au montant du gain ou de la perte latente en DH.</p></div>
+<div class="card"><div class="card-title-row"><h3>Gains/pertes</h3><button class="btn" onclick="go('positions')">Voir les positions</button></div><div id="portfolioHeatmap" class="heatmap"><div class="heat-empty">Les tuiles apparaîtront après l’importation des positions détaillées.</div></div><p class="small" style="margin:10px 0 0">Surface proportionnelle au montant du gain ou de la perte latente en DH.</p></div>
  </div>
 </div>
 <div class="portfolio-group">
@@ -1028,11 +1028,10 @@ function renderHeatmap(){
  }
  const max=rows[0].magnitude;
  host.innerHTML=rows.map(({name,pl,magnitude})=>{
-  const width=max?magnitude/max*100:0;
+  const scale=max?Math.sqrt(magnitude/max):0;
   const tone=pl===null||pl===0?'neutral':pl>0?'positive':'negative';
   const text=pl===null?'Non calculé':(pl<0?'−':pl>0?'+':'')+fmt(magnitude)+' DH';
-  const bar=pl===null?'':`<div class="heat-track" aria-hidden="true"><span class="heat-fill ${tone}" style="width:${width}%"></span></div>`;
-  return `<div class="heat-row"><div class="heat-row-label"><b>${esc(name)}</b><strong class="${tone}">${esc(text)}</strong></div>${bar}</div>`;
+  return `<div class="heat-tile"><span class="heat-square ${tone}" style="width:calc(var(--heat-unit) * ${scale})" aria-hidden="true"></span><div class="heat-tile-label"><b>${esc(name)}</b><strong class="${tone}">${esc(text)}</strong></div></div>`;
  }).join('');
 }
 
