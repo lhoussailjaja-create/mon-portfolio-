@@ -18,7 +18,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .layout{display:block}.sidebar{position:static;display:flex;align-items:center;gap:7px;padding:7px 9px;margin-bottom:15px;background:#0d131b;border-color:#303a43;overflow-x:auto;white-space:nowrap}.sidebar .navlabel,.sidebar .sidefoot{display:none}.nav{width:auto;flex:0 0 auto;margin:0;padding:10px 17px;border-radius:11px;color:#d2dbe2}.nav.active{background:linear-gradient(110deg,#b8f51b,#70c900);color:#101900;box-shadow:0 0 20px #9ce91435}.ico{display:inline-block}.content{min-width:0}.pagehead{align-items:center}.pagehead h2{font-size:26px}.pagehead p{color:#a5b1bb}
 .card{background:linear-gradient(145deg,#151e27,#0d141c);border-color:#39434d;box-shadow:0 10px 28px #0005}.dash-kpis{gap:12px}.dash-kpi{min-height:126px;padding:17px}.kpi-icon{background:#26391a;color:var(--mint);border-radius:50%;width:37px;height:37px}.dash-kpi:nth-child(2) .kpi-icon{background:#3a2026;color:var(--red)}.dash-kpi:nth-child(3) .kpi-icon{background:#26391a;color:var(--mint)}.dash-kpi:nth-child(4) .kpi-icon{background:#3d3516;color:var(--gold)}.dash-kpi .metric-value{font-size:clamp(20px,2vw,29px)}
 .chart-card{padding:19px 20px}.chart-mode.active,.period.active{background:#b8f51b;color:#172000;border-color:#b8f51b;box-shadow:0 0 14px #b8f51b45}.chart-mode,.period{background:#111a23;border-color:#39444e;color:#d5dce2}.chart-area svg{max-height:270px}.chart-summary strong{font-size:20px}.chart-foot{color:#93a2ad}
-.dash-bottom{grid-template-columns:1.2fr .8fr}.heatmap,.heat-row{display:grid;min-width:0}.heat-row{grid-template-rows:minmax(0,1fr);min-height:0}.heat-tile{position:relative;min-width:0;min-height:0;border-radius:10px;box-shadow:inset 0 0 0 1px #ffffff33;color:#fff;overflow:hidden}.heat-tile-content{position:absolute;inset:0;padding:8px;display:flex;flex-direction:column;justify-content:center;gap:3px;overflow:hidden}.heat-tile b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.heat-tile strong{font-size:16px;white-space:nowrap}.heat-tile small{font-size:10px;opacity:.9;white-space:nowrap}.heat-empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed #45515c;border-radius:12px;grid-column:1/-1}
+.dash-bottom{grid-template-columns:1.2fr .8fr}.heatmap,.heat-row{display:grid;min-width:0}.heatmap{gap:5px}.heat-row{grid-template-rows:84px;min-height:0}.heat-tile{position:relative;min-width:0;min-height:0;border-radius:10px;box-shadow:inset 0 0 0 1px #ffffff33;color:#fff;overflow:hidden}.heat-tile-content{position:absolute;inset:0;padding:8px;display:flex;flex-direction:column;justify-content:center;gap:3px;overflow:hidden}.heat-tile b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.heat-tile strong{font-size:16px;white-space:nowrap}.heat-tile small{font-size:10px;opacity:.9;white-space:nowrap}.heat-empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed #45515c;border-radius:12px;grid-column:1/-1}
 .donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.donut{width:166px;height:166px;border-radius:50%;position:relative;flex:0 0 auto;background:#34414c}.donut:after{content:attr(data-total);position:absolute;inset:25px;border-radius:50%;background:#101820;display:grid;place-items:center;text-align:center;font-weight:800;font-size:15px;padding:8px}.donut-legend{flex:1;min-width:160px}.legendline{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #27343e;font-size:12px}.legendline:last-child{border:0}
 .positive{color:#b8f51b}.negative{color:#ff6471}.neutral{color:#f6d51a}.info{background:#18251a;border-color:#536a2a;color:#d5e8b6}.notice{background:#2b2518}
 @media(max-width:900px){.dash-bottom{grid-template-columns:1fr}.sidebar{border-radius:13px}}
@@ -209,7 +209,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 <div class="portfolio-group">
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioHeatmapPanel" aria-expanded="false" onclick="togglePortfolioGroup(this)">Gains/pertes</button>
  <div class="portfolio-group-content" id="portfolioHeatmapPanel">
-<div class="card"><div class="card-title-row"><h3>Gains/pertes</h3><button class="btn" onclick="go('positions')">Voir les positions</button></div><div id="portfolioHeatmap" class="heatmap"><div class="heat-empty">Les tuiles apparaîtront après l’importation des positions détaillées.</div></div><p class="small" style="margin:10px 0 0">Surface proportionnelle à la valorisation de chaque position · Couleur selon le gain ou la perte latente.</p></div>
+<div class="card"><div class="card-title-row"><h3>Gains/pertes</h3><button class="btn" onclick="go('positions')">Voir les positions</button></div><div id="portfolioHeatmap" class="heatmap"><div class="heat-empty">Les tuiles apparaîtront après l’importation des positions détaillées.</div></div><p class="small" style="margin:10px 0 0">Largeur proportionnelle à la valorisation, sur la même échelle pour toutes les lignes · Couleur selon le gain ou la perte latente.</p></div>
  </div>
 </div>
 <div class="portfolio-group">
@@ -1022,8 +1022,6 @@ function renderHeatmap(){
   return {...position,value:portfolioPositionValue(position),pl};
  }).filter(position=>position.value>0).sort((a,b)=>b.value-a.value);
  if(!rows.length){
-  host.style.height='';
-  host.style.gridTemplateRows='';
   host.innerHTML='<div class="heat-empty">Aucune position avec une valorisation disponible.</div>';
   return;
  }
@@ -1032,11 +1030,11 @@ function renderHeatmap(){
  const rowSize=Math.ceil(rows.length/Math.ceil(rows.length/4));
  const groups=[];
  for(let index=0;index<rows.length;index+=rowSize)groups.push(rows.slice(index,index+rowSize));
+ const rowValue=Math.max(...groups.map(sum));
  const track=value=>'minmax(0,'+value+'fr)';
- host.style.height=Math.min(160*groups.length,Math.max(98*groups.length,80*total/Math.min(...groups.map(sum))))+'px';
- host.style.gridTemplateRows=groups.map(group=>track(sum(group))).join(' ');
  host.innerHTML=groups.map(group=>{
-  const columns=group.map(position=>track(position.value)).join(' ');
+  const remainingValue=rowValue-sum(group);
+  const columns=[...group.map(position=>track(position.value)),track(remainingValue)].join(' ');
   const tiles=group.map(position=>{
    const {name,value,pl}=position;
    const ratio=pl===null?null:pl/Math.max(1,value);
