@@ -182,6 +182,8 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .div-calendar-company-logo{position:relative;display:inline-grid;place-items:center;flex:none;width:16px;height:16px;overflow:hidden;border-radius:4px;background:#253f53;color:#edf5fb;font-size:8px;font-weight:700;line-height:1}
 .div-calendar-company-logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#eef4f8}
 .div-calendar-company .div-calendar-company-logo{width:32px;height:32px;border-radius:7px;font-size:11px}
+.portfolio-masi-chart{display:block;width:100%;height:clamp(245px,34vw,360px);margin-top:10px;border:0}
+#portfolioMasiPanel a{color:#83b5ff}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -265,6 +267,16 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div id="masiComparisonResult" aria-live="polite"></div>
  </details>
 </div>
+ </div>
+</div>
+<div class="portfolio-group">
+ <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioMasiPanel" aria-expanded="false" onclick="togglePortfolioGroup(this)">MASI · Marché de Casablanca</button>
+ <div class="portfolio-group-content" id="portfolioMasiPanel">
+  <div class="card">
+   <div class="card-title-row"><h3>Indice MASI</h3><span class="tag">Données différées</span></div>
+   <iframe class="portfolio-masi-chart" title="Indice MASI : valeur, variation et graphique TradingView" src="https://www.tradingview-widget.com/embed-widget/mini-symbol-overview/?locale=fr#%7B%22symbol%22%3A%22CSEMA%3AMASI%22%2C%22width%22%3A%22100%25%22%2C%22height%22%3A%22100%25%22%2C%22locale%22%3A%22fr%22%2C%22dateRange%22%3A%2212M%22%2C%22colorTheme%22%3A%22dark%22%2C%22autosize%22%3Atrue%2C%22isTransparent%22%3Atrue%2C%22largeChartUrl%22%3A%22%22%2C%22chartOnly%22%3Afalse%2C%22noTimeScale%22%3Afalse%2C%22trendLineColor%22%3A%22%2355e0bd%22%2C%22underLineColor%22%3A%22%2355e0bd38%22%2C%22underLineBottomColor%22%3A%22%2355e0bd00%22%7D" loading="lazy" referrerpolicy="no-referrer"></iframe>
+   <p class="small"><a href="https://fr.tradingview.com/symbols/CSEMA-MASI/" target="_blank" rel="noopener noreferrer">Indice MASI sur TradingView ↗</a></p>
+  </div>
  </div>
 </div>
 <div class="portfolio-group">
