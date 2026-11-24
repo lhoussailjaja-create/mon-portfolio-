@@ -194,6 +194,10 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .masi-point-button:hover .masi-point-target,.masi-point-button:focus-visible .masi-point-target,.masi-point-button[aria-pressed="true"] .masi-point-target{stroke:#b8f51b;stroke-width:1;stroke-dasharray:4 3}
 .masi-selection{margin:8px 0 0}
 .masi-selection a{color:#83b5ff}
+.snapshot-flows{margin:12px 0}
+.snapshot-flows h4{margin:0}
+.snapshot-flows input{max-width:140px;padding:8px;color:var(--text);border:1px solid var(--line);border-radius:7px;background:var(--bg)}
+.snapshot-flow-actions{margin-top:10px}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -239,7 +243,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioEvolution" aria-expanded="false" onclick="togglePortfolioGroup(this)">Évolution et snapshots</button>
  <div class="portfolio-group-content" id="portfolioEvolution">
 <div class="card chart-card">
- <div class="chart-head"><div><h3>Évolution du portefeuille</h3><p class="small">Historique basé exclusivement sur les snapshots enregistrés</p></div><button class="btn" onclick="openSnapshotForm()">＋ Enregistrer un snapshot</button><button type="button" class="btn" id="snapshotManagerToggle" aria-controls="snapshotManager" aria-expanded="false" onclick="toggleSnapshotManager()">Gérer les snapshots</button><button type="button" class="btn" onclick="recordSnapshotFlows()">Renseigner les apports / retraits</button></div>
+ <div class="chart-head"><div><h3>Évolution du portefeuille</h3><p class="small">Historique basé exclusivement sur les snapshots enregistrés</p></div><button class="btn" onclick="openSnapshotForm()">＋ Enregistrer un snapshot</button><button type="button" class="btn" id="snapshotManagerToggle" aria-controls="snapshotManager" aria-expanded="false" onclick="toggleSnapshotManager()">Gérer les snapshots</button><button type="button" class="btn" id="snapshotFlowsToggle" aria-controls="snapshotFlowsForm" aria-expanded="false" onclick="toggleSnapshotFlows()">Renseigner les apports / retraits</button></div>
  <form id="snapshotForm" class="hidden" onsubmit="event.preventDefault(); captureSnapshot()">
   <div class="formrow">
    <div class="field"><label for="snapshotDate">Date de valorisation</label><input id="snapshotDate" type="date" required></div>
@@ -253,6 +257,13 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div id="snapshotManagerRows"></div>
   <p class="small" id="snapshotManagerStatus" role="status"></p>
  </section>
+ <form id="snapshotFlowsForm" class="hidden card snapshot-flows" onsubmit="saveSnapshotFlows(event)">
+  <h4>Apports et retraits entre les valorisations</h4>
+  <p class="small">Indiquez les apports moins les retraits externes en DH. Saisissez 0 pour confirmer une période sans flux. Une case vide reste à renseigner.</p>
+  <div class="tablewrap"><table><thead><tr><th>Période</th><th>Flux net (DH)</th></tr></thead><tbody id="snapshotFlowsRows"></tbody></table></div>
+  <div class="actions snapshot-flow-actions"><button class="btn primary" id="snapshotFlowsSave" type="submit">Enregistrer les flux</button><button class="btn" type="button" onclick="toggleSnapshotFlows()">Fermer</button></div>
+  <p class="small" id="snapshotFlowsStatus" role="status"></p>
+ </form>
  <div class="chart-controls"><div class="chart-modes" role="group" aria-label="Mode du graphique"><button class="chart-mode active" data-chart-mode="value" onclick="setChartMode('value')">Valeur</button><button class="chart-mode" data-chart-mode="performance" onclick="setChartMode('performance')">Sans dividendes</button><button class="chart-mode" data-chart-mode="withDividends" onclick="setChartMode('withDividends')">Avec dividendes</button></div>
  <div class="chart-modes" role="group" aria-label="Présentation du graphique">
   <button type="button" class="chart-mode active" data-chart-view="columns" aria-pressed="true" onclick="setChartView('columns')">Colonnes</button>
@@ -1054,21 +1065,76 @@ function captureSnapshot(){
  render();
  document.getElementById('snapshotManagerStatus').textContent='Valorisation du '+date.split('-').reverse().join('/')+' enregistrée.';
 }
-function recordSnapshotFlows(){
+function snapshotFlowConfirmed(previous,current){
+ return current.flowFrom===previous.date&&Number.isFinite(current.netExternalFlow);
+}
+function snapshotFlowPeriod(previous,current){
+ const date=value=>value.split('-').reverse().join('/');
+ return date(previous.date)+' → '+date(current.date);
+}
+function renderSnapshotFlowRows(){
  const rows=chartSnapshots();
- if(rows.length<2){alert('Enregistrez au moins deux snapshots.');return;}
- const date=prompt('Date du snapshot de fin (AAAA-MM-JJ)',rows.at(-1).date);
- if(date===null)return;
- const index=rows.findIndex(row=>row.date===date.trim());
- if(index<1){alert('Choisissez la date d’un snapshot ayant un précédent.');return;}
- const previous=rows[index-1],current=rows[index];
- const input=prompt('Du '+previous.date+' (exclu) au '+current.date+' (inclus), indiquez les versements moins les retraits externes en DH. Exemple : 2500 pour un versement, -500 pour un retrait, 0 si aucun flux. Les dividendes crédités sur le PEA sont exclus.',current.flowFrom===previous.date?String(current.netExternalFlow):'');
- if(input===null)return;
- const amount=Number(input.trim().replace(/\s/g,'').replace(',','.'));
- if(!input.trim()||!Number.isFinite(amount)){alert('Indiquez un montant valide, y compris 0 si aucun flux.');return;}
- current.netExternalFlow=amount;
- current.flowFrom=previous.date;
- save();
+ const host=document.getElementById('snapshotFlowsRows');
+ document.getElementById('snapshotFlowsSave').disabled=rows.length<2;
+ host.innerHTML=rows.length<2?'<tr><td colspan="2" class="empty">Deux valorisations datées sont nécessaires.</td></tr>':
+  rows.slice(1).map((current,index)=>{
+   const previous=rows[index],period=snapshotFlowPeriod(previous,current);
+   const value=snapshotFlowConfirmed(previous,current)?String(current.netExternalFlow):'';
+   return '<tr><td>'+esc(period)+'</td><td><input type="text" inputmode="decimal" data-flow-from="'+previous.date+
+    '" data-flow-to="'+current.date+'" data-original="'+value+'" aria-label="Flux net du '+esc(period)+'" placeholder="À renseigner" value="'+value+'"></td></tr>';
+  }).join('');
+}
+function toggleSnapshotFlows(open){
+ const form=document.getElementById('snapshotFlowsForm'),button=document.getElementById('snapshotFlowsToggle');
+ const show=open??form.classList.contains('hidden');
+ form.classList.toggle('hidden',!show);
+ button.setAttribute('aria-expanded',String(show));
+ if(show){
+  renderSnapshotFlowRows();
+  document.getElementById('snapshotFlowsStatus').textContent='';
+  (form.querySelector('input[data-original=""]')||form.querySelector('input'))?.focus();
+ }else button.focus();
+}
+function saveSnapshotFlows(event){
+ event.preventDefault();
+ const form=event.currentTarget, status=document.getElementById('snapshotFlowsStatus');
+ const rows=chartSnapshots();
+ const byDate=new Map(rows.slice(1).map((current,index)=>[current.date,{current,previous:rows[index]}]));
+ const changes=new Map();
+ for(const field of form.querySelectorAll('input[data-flow-to]')){
+  const raw=field.value.trim();
+  const number=Number(raw.replace(/\s/g,'').replace(',','.'));
+  if(raw&&!Number.isFinite(number)){
+   status.textContent='Montant invalide pour la période '+field.dataset.flowFrom+' → '+field.dataset.flowTo+'.';
+   field.focus();
+   return;
+  }
+  const normalized=raw?String(number):'';
+  if(normalized===field.dataset.original)continue;
+  const interval=byDate.get(field.dataset.flowTo);
+  if(!interval||interval.previous.date!==field.dataset.flowFrom||
+   (snapshotFlowConfirmed(interval.previous,interval.current)?String(interval.current.netExternalFlow):'')!==field.dataset.original){
+   status.textContent='Les valorisations ou les flux ont changé. Rouvrez le formulaire avant de modifier ce montant.';
+   return;
+  }
+  const updated={...interval.current};
+  if(raw){
+   updated.flowFrom=interval.previous.date;
+   updated.netExternalFlow=number;
+  }else{
+   delete updated.flowFrom;
+   delete updated.netExternalFlow;
+  }
+  changes.set(interval.current,updated);
+ }
+ if(!changes.size){status.textContent='Aucune modification à enregistrer.';return;}
+ const snapshots=state.snapshots.map(row=>changes.get(row)||row);
+ try{localStorage.setItem(KEY,JSON.stringify({...state,snapshots}));}
+ catch(error){status.textContent='Enregistrement impossible. '+error.message;return;}
+ state.snapshots=snapshots;
+ render();
+ renderSnapshotFlowRows();
+ status.textContent=changes.size+' période(s) mise(s) à jour.';
 }
 function chartPerformance(rows,dividends,withDividends){
  const payments=dividends.filter(d=>dividendIsConfirmed(d)&&d.status==='Perçu');
@@ -1076,7 +1142,7 @@ function chartPerformance(rows,dividends,withDividends){
  const values=[0];
  for(let i=1;i<rows.length;i++){
   const previous=rows[i-1],current=rows[i];
-  if(current.flowFrom!==previous.date||!Number.isFinite(current.netExternalFlow))return null;
+  if(!snapshotFlowConfirmed(previous,current))return null;
   external+=current.netExternalFlow;
   received+=payments.reduce((sum,d)=>sum+(d.date>previous.date&&d.date<=current.date?Number(d.amount):0),0);
   const result=Number(current.total)-Number(rows[0].total)-external-(withDividends?0:received);
@@ -1195,7 +1261,14 @@ function renderMasiComparison(rows){
  const formatDate=date=>date.split('-').reverse().join('/');
  if(!result.points){
   const messages=[];
-  if(result.needsFlows)messages.push('Renseignez les apports et retraits pour chaque intervalle de la période.');
+  if(result.needsFlows){
+   const pending=rows.slice(1).flatMap((row,index)=>snapshotFlowConfirmed(rows[index],row)?[]:[snapshotFlowPeriod(rows[index],row)]);
+   messages.push('Flux à renseigner : '+pending.join(' · ')+'.');
+   if(!result.missing.length){
+    host.innerHTML='<p>'+esc(messages[0])+'</p><button type="button" class="btn" onclick="toggleSnapshotFlows(true)">Renseigner les apports / retraits</button>';
+    return;
+   }
+  }
   if(result.missing.length)messages.push('Clôtures MASI à saisir : '+result.missing.map(formatDate).join(', ')+'.');
   host.textContent=messages.join(' ');
   return;
