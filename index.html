@@ -157,6 +157,10 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .chart-snapshot-bar:focus-visible .chart-snapshot-hit,.chart-snapshot-bar[aria-pressed="true"] .chart-snapshot-hit{stroke:#b8f51b;stroke-width:2;vector-effect:non-scaling-stroke}
 .chart-snapshot-details{margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:8px}
 .chart-snapshot-details p{margin:4px 0 0}
+.masi-comparison{margin-top:16px;padding:12px;border:1px solid var(--line);border-radius:10px}
+.masi-comparison summary{cursor:pointer;font-weight:700}
+.masi-comparison textarea{width:100%;min-height:90px}
+.masi-comparison .chart-area{margin-top:8px}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -222,6 +226,19 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div id="portfolioChart" class="empty">Aucun historique enregistré. Le graphique apparaîtra après plusieurs snapshots.</div>
  <div id="chartSnapshotDetails" class="chart-snapshot-details hidden" role="status"></div>
  <div class="chart-foot" id="chartFoot">Les valeurs historiques ne sont pas reconstituées à partir des données actuelles.</div>
+ <details class="masi-comparison">
+  <summary>Comparer le PEA au MASI</summary>
+  <p class="small">Même période que le graphique · Base 100 · PEA sans dividendes ni flux externes. Les flux sont supposés intervenir en fin d’intervalle.</p>
+  <form id="masiImportForm" onsubmit="saveMasiCloses(event)">
+   <div class="field"><label for="masiClosesInput">Clôtures du MASI (date ; points)</label>
+    <textarea id="masiClosesInput" placeholder="AAAA-MM-JJ ; points" required></textarea>
+   </div>
+   <p class="small">Une ligne par séance, séparée par un point-virgule ou une tabulation. <a href="https://www.casablanca-bourse.com/fr/historique-des-indices" target="_blank" rel="noopener noreferrer">Historique officiel des indices ↗</a></p>
+   <button type="submit" class="btn">Enregistrer les clôtures</button>
+   <p class="small" id="masiImportStatus" role="status"></p>
+  </form>
+  <div id="masiComparisonResult" aria-live="polite"></div>
+ </details>
 </div>
  </div>
 </div>
@@ -405,7 +422,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 'use strict';
 const KEY='monPortfolioV2PEA';
 const state=loadState();
-function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY))||{};const all=Array.isArray(x.positions)?x.positions:[];const archived=Array.isArray(x.importIssues)?x.importIssues:[];const bad=all.filter(p=>/^\d+(?:[.,]\d+)?$/.test(String(p.name||'').trim()));const good=all.filter(p=>!bad.includes(p));const issues=[...archived,...bad.map(p=>({...p,issue:'Ligne numérique sans nom de valeur, issue d’un ancien import PDF incorrect; archivée sans suppression.'}))];const result={positions:good,dividends:Array.isArray(x.dividends)?x.dividends:[],operations:Array.isArray(x.operations)?x.operations:[],snapshots:Array.isArray(x.snapshots)?x.snapshots:[],marketDividends:Array.isArray(x.marketDividends)?x.marketDividends:[],marketNotifications:Array.isArray(x.marketNotifications)?x.marketNotifications:[],officialDividendHistory:Array.isArray(x.officialDividendHistory)?x.officialDividendHistory:[],marketSeenKeys:Array.isArray(x.marketSeenKeys)?x.marketSeenKeys:null,marketInitializedSources:Array.isArray(x.marketInitializedSources)?x.marketInitializedSources:[],importIssues:issues,wafaAccountSummary:x.wafaAccountSummary||null,wafaSyncHistory:Array.isArray(x.wafaSyncHistory)?x.wafaSyncHistory:null};if(bad.length){try{localStorage.setItem(KEY,JSON.stringify(result));}catch(e){}}return result}catch(e){return{positions:[],dividends:[],operations:[],snapshots:[],marketDividends:[],marketNotifications:[],officialDividendHistory:[],marketSeenKeys:null,importIssues:[]}}}
+function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY))||{};const all=Array.isArray(x.positions)?x.positions:[];const archived=Array.isArray(x.importIssues)?x.importIssues:[];const bad=all.filter(p=>/^\d+(?:[.,]\d+)?$/.test(String(p.name||'').trim()));const good=all.filter(p=>!bad.includes(p));const issues=[...archived,...bad.map(p=>({...p,issue:'Ligne numérique sans nom de valeur, issue d’un ancien import PDF incorrect; archivée sans suppression.'}))];const result={positions:good,dividends:Array.isArray(x.dividends)?x.dividends:[],operations:Array.isArray(x.operations)?x.operations:[],snapshots:Array.isArray(x.snapshots)?x.snapshots:[],masiCloses:validateMasiCloses(x.masiCloses),marketDividends:Array.isArray(x.marketDividends)?x.marketDividends:[],marketNotifications:Array.isArray(x.marketNotifications)?x.marketNotifications:[],officialDividendHistory:Array.isArray(x.officialDividendHistory)?x.officialDividendHistory:[],marketSeenKeys:Array.isArray(x.marketSeenKeys)?x.marketSeenKeys:null,marketInitializedSources:Array.isArray(x.marketInitializedSources)?x.marketInitializedSources:[],importIssues:issues,wafaAccountSummary:x.wafaAccountSummary||null,wafaSyncHistory:Array.isArray(x.wafaSyncHistory)?x.wafaSyncHistory:null};if(bad.length){try{localStorage.setItem(KEY,JSON.stringify(result));}catch(e){}}return result}catch(e){return{positions:[],dividends:[],operations:[],snapshots:[],marketDividends:[],marketNotifications:[],officialDividendHistory:[],marketSeenKeys:null,importIssues:[]}}}
 const PEA_BASELINE_DATE='2026-11-15';
 const PEA_BASELINE=[
  {id:'pea_20261115_attijari_al_moucharaka',name:'ATTIJARI AL MOUCHARAKA',type:'OPCVM',qty:0.565,price:1291.84,importedValue:729.89,cmp:1415.73,sourcePerf:-8.75,sourcePl:-70.00,sourceWeight:5.61,buyFees:null,source:'Wafa Bourse PDF',sourceDate:PEA_BASELINE_DATE},
@@ -1023,6 +1040,99 @@ function showChartSnapshot(bar,row,previous){
 }
 function setChartMode(mode){chartMode=mode;document.querySelectorAll('[data-chart-mode]').forEach(b=>b.classList.toggle('active',b.dataset.chartMode===mode));renderChart()}
 function setChartPeriod(period){chartPeriod=period;document.querySelectorAll('[data-period]').forEach(b=>b.classList.toggle('active',b.dataset.period===period));renderChart()}
+function validMasiDate(value){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+ const time=Date.parse(value+'T00:00:00Z');
+ return Number.isFinite(time)&&new Date(time).toISOString().slice(0,10)===value;
+}
+function validateMasiCloses(value){
+ if(!value||typeof value!=='object'||Array.isArray(value))return {};
+ return Object.fromEntries(Object.entries(value).filter(([date,close])=>validMasiDate(date)&&Number.isFinite(close)&&close>0));
+}
+function saveMasiCloses(event){
+ event.preventDefault();
+ const input=document.getElementById('masiClosesInput');
+ const status=document.getElementById('masiImportStatus');
+ const entries=new Map();
+ try{
+  for(const [index,line] of input.value.trim().split(/\r?\n/).entries()){
+   const cells=csvCells(line,line.includes('\t')?'\t':';');
+   if(index===0&&/^date$/i.test(cells[0]))continue;
+   const date=marketIsoDate(cells[0]);
+   const close=parseWafaNumber(cells[1]);
+   if(cells.length!==2||!validMasiDate(date)||!Number.isFinite(close)||close<=0){
+    throw new Error('Ligne '+(index+1)+' : indiquez une date valide et une clôture positive.');
+   }
+   if(entries.has(date)&&entries.get(date)!==close)throw new Error('Deux clôtures différentes pour le '+date+'.');
+   entries.set(date,close);
+  }
+  if(!entries.size)throw new Error('Saisissez au moins une clôture.');
+  const masiCloses={...state.masiCloses,...Object.fromEntries(entries)};
+  localStorage.setItem(KEY,JSON.stringify({...state,masiCloses}));
+  state.masiCloses=masiCloses;
+ }catch(error){
+  status.textContent='Enregistrement impossible. '+error.message;
+  return;
+ }
+ input.value='';
+ status.textContent=entries.size+' clôture(s) enregistrée(s).';
+ renderChart();
+}
+function masiSessionDate(value){
+ const date=new Date(value+'T00:00:00Z');
+ const day=date.getUTCDay();
+ if(day===0||day===6)date.setUTCDate(date.getUTCDate()-(day===0?2:1));
+ return date.toISOString().slice(0,10);
+}
+function portfolioMasiSeries(rows,dividends,closes){
+ const adjusted=chartPerformance(rows,dividends,false);
+ const sessions=rows.map(row=>masiSessionDate(row.date));
+ const missing=[...new Set(sessions.filter(date=>!Number.isFinite(closes[date])||closes[date]<=0))];
+ if(!adjusted||missing.length)return {missing,needsFlows:!adjusted};
+ const base=closes[sessions[0]];
+ let pea=100;
+ const points=rows.map((row,index)=>{
+  if(index){
+   const gain=adjusted[index]-adjusted[index-1];
+   pea*=1+gain/Number(rows[index-1].total);
+  }
+  return {date:row.date,pea,masi:100*closes[sessions[index]]/base};
+ });
+ return {points,missing,needsFlows:false};
+}
+function renderMasiComparison(rows){
+ const host=document.getElementById('masiComparisonResult');
+ if(!host)return;
+ if(rows.length<2){
+  host.textContent='Deux valorisations datées sont nécessaires sur la période choisie.';
+  return;
+ }
+ const result=portfolioMasiSeries(rows,state.dividends,state.masiCloses||{});
+ const formatDate=date=>date.split('-').reverse().join('/');
+ if(!result.points){
+  const messages=[];
+  if(result.needsFlows)messages.push('Renseignez les apports et retraits pour chaque intervalle de la période.');
+  if(result.missing.length)messages.push('Clôtures MASI à saisir : '+result.missing.map(formatDate).join(', ')+'.');
+  host.textContent=messages.join(' ');
+  return;
+ }
+ const points=result.points,last=points.at(-1);
+ const values=points.flatMap(point=>[point.pea,point.masi]);
+ const low=Math.min(...values,99.5),high=Math.max(...values,100.5);
+ const from=Date.parse(points[0].date),to=Date.parse(last.date);
+ const x=date=>65+700*(Date.parse(date)-from)/(to-from);
+ const y=value=>163-140*(value-low)/(high-low);
+ const series=(key,color)=>'<polyline fill="none" stroke="'+color+'" stroke-width="3" points="'+points.map(point=>x(point.date)+','+y(point[key])).join(' ')+'"/>';
+ const signed=value=>(value>0?'+':value<0?'−':'')+fmt(Math.abs(value));
+ host.innerHTML='<p><strong style="color:#55e0bd">PEA '+signed(last.pea-100)+' %</strong> · <strong style="color:#75d9ff">MASI '+signed(last.masi-100)+' %</strong> · Écart '+signed(last.pea-last.masi)+' points de pourcentage</p>'+
+  '<div class="chart-area"><svg viewBox="0 0 800 200" role="img" aria-label="PEA et MASI en base 100">'+
+  '<line x1="65" x2="765" y1="'+y(100)+'" y2="'+y(100)+'" stroke="#8296a3" stroke-dasharray="4 5"/>'+
+  '<text x="51" y="'+(y(100)+4)+'" text-anchor="end" fill="#b6cbd6" font-size="13">100</text>'+
+  series('pea','#55e0bd')+series('masi','#75d9ff')+
+  '<text x="65" y="188" fill="#b6cbd6" font-size="13">'+formatDate(points[0].date)+'</text>'+
+  '<text x="765" y="188" text-anchor="end" fill="#b6cbd6" font-size="13">'+formatDate(last.date)+'</text></svg></div>'+
+  '<p class="small">Clôture du vendredi pour un snapshot de week-end.</p>';
+}
 function renderChart(){
  const el=document.getElementById('portfolioChart');if(!el)return;
  const history=chartSnapshots();
@@ -1032,6 +1142,7 @@ function renderChart(){
  details.textContent='';
  const now=new Date(),cut=new Date(now);if(chartPeriod==='1D')cut.setDate(cut.getDate()-1);else if(chartPeriod==='1W')cut.setDate(cut.getDate()-7);else if(chartPeriod==='1M')cut.setMonth(cut.getMonth()-1);else if(chartPeriod==='3M')cut.setMonth(cut.getMonth()-3);else if(chartPeriod==='1Y')cut.setFullYear(cut.getFullYear()-1);else if(chartPeriod==='YTD')cut.setMonth(0,1);
  if(chartPeriod!=='ALL')rows=rows.filter(x=>new Date(x.date+'T23:59:59')>=cut);
+ renderMasiComparison(rows);
  const count=document.getElementById('chartCount');if(count)count.textContent=rows.length+' snapshot'+(rows.length>1?'s':'');
  const main=document.getElementById('chartMainValue'),label=document.getElementById('chartMainLabel'),foot=document.getElementById('chartFoot');
  const isValue=chartMode==='value';
@@ -1485,7 +1596,7 @@ function render(){
 }
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function backup(){const blob=new Blob([JSON.stringify({app:'Mon Portfolio V2',account:'PEA',exportedAt:new Date().toISOString(),data:state},null,2)],{type:'application/json'});downloadBlob(blob,'Mon_Portfolio_V2_PEA_backup.json')}
-function restoreBackup(){const f=document.getElementById('restoreFile').files[0];if(!f){alert('Choisissez un fichier JSON.');return}const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result),d=j.data||j;if(!Array.isArray(d.positions)||!Array.isArray(d.dividends))throw Error('Format incompatible');state.positions=d.positions;state.dividends=d.dividends;state.operations=Array.isArray(d.operations)?d.operations:[];state.snapshots=Array.isArray(d.snapshots)?d.snapshots:[];state.wafaAccountSummary=d.wafaAccountSummary||null;save();document.getElementById('backupMsg').textContent='Sauvegarde restaurée.'}catch(e){alert('Fichier invalide ou format non reconnu.')}};r.readAsText(f)}
+function restoreBackup(){const f=document.getElementById('restoreFile').files[0];if(!f){alert('Choisissez un fichier JSON.');return}const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result),d=j.data||j;if(!Array.isArray(d.positions)||!Array.isArray(d.dividends))throw Error('Format incompatible');state.positions=d.positions;state.dividends=d.dividends;state.operations=Array.isArray(d.operations)?d.operations:[];state.snapshots=Array.isArray(d.snapshots)?d.snapshots:[];state.masiCloses=validateMasiCloses(d.masiCloses);state.wafaAccountSummary=d.wafaAccountSummary||null;save();document.getElementById('backupMsg').textContent='Sauvegarde restaurée.'}catch(e){alert('Fichier invalide ou format non reconnu.')}};r.readAsText(f)}
 
 let pendingExcelSync=null;
 function excelNorm(v){return String(v??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
