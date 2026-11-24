@@ -1063,10 +1063,11 @@ function renderChart(){
  const bars=plotted.map((value,index)=>{
   const row=rows[index],x=offset+step*(index+.5),yv=y(value),color=value<0?'#ff647c':'#55e0bd';
   const label=row.date.split('-').reverse().join('/')+' · '+fmt(Number(row.total))+' DH';
+  const labelY=value<0?Math.min(yv+18,bottom-6):yv-12;
   return '<g class="chart-snapshot-bar" role="button" tabindex="0" aria-pressed="false" aria-label="'+esc(label)+'">'+
    '<rect class="chart-snapshot-hit" x="'+(x-step/2+2)+'" y="'+(top-22)+'" width="'+(step-4>0?step-4:step)+'" height="'+(bottom-top+53)+'" fill="transparent" rx="4"/>'+
    '<rect x="'+(x-bw/2)+'" y="'+Math.min(yv,baseline)+'" width="'+bw+'" height="'+Math.max(1,Math.abs(baseline-yv))+'" rx="4" fill="'+color+'"><title>'+esc(label)+'</title></rect>'+
-   '<text x="'+x+'" y="'+(value<0?yv+18:yv-12)+'" text-anchor="middle" fill="#edf6fa" font-size="12">'+fmt(value)+' DH</text>'+
+   '<text x="'+x+'" y="'+labelY+'" text-anchor="middle" fill="#edf6fa" font-size="12">'+fmt(value)+' DH</text>'+
    '<text x="'+x+'" y="'+(bottom+22)+'" text-anchor="middle" fill="#b6cbd6" font-size="12">'+esc(row.date)+'</text></g>';
  }).join('');
  const delta=plotted.at(-1)-plotted[0],pct=delta/vals[0]*100,sign=delta>0?'+':delta<0?'−':'';
