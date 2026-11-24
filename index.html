@@ -198,6 +198,9 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .snapshot-flows h4{margin:0}
 .snapshot-flows input{max-width:140px;padding:8px;color:var(--text);border:1px solid var(--line);border-radius:7px;background:var(--bg)}
 .snapshot-flow-actions{margin-top:10px}
+.masi-import-disclosure{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.masi-import-disclosure form{margin-top:10px}
+.masi-import-disclosure a{color:#83b5ff}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -277,15 +280,18 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <details class="masi-comparison">
   <summary>Comparer le PEA au MASI</summary>
   <p class="small">Même période que le graphique · Base 100 · PEA sans dividendes ni flux externes. Les flux sont supposés intervenir en fin d’intervalle.</p>
-  <form id="masiImportForm" onsubmit="saveMasiCloses(event)">
-   <div class="field"><label for="masiClosesInput">Clôtures du MASI (date ; points)</label>
-    <textarea id="masiClosesInput" placeholder="AAAA-MM-JJ ; points" required></textarea>
-   </div>
-   <p class="small">Une ligne par séance, séparée par un point-virgule ou une tabulation. <a href="https://www.casablanca-bourse.com/fr/historique-des-indices" target="_blank" rel="noopener noreferrer">Historique officiel des indices ↗</a></p>
-   <button type="submit" class="btn">Enregistrer les clôtures</button>
-   <p class="small" id="masiImportStatus" role="status"></p>
-  </form>
   <div id="masiComparisonResult" aria-live="polite"></div>
+  <details class="masi-import-disclosure">
+   <summary>Saisir des clôtures MASI</summary>
+   <form id="masiImportForm" onsubmit="saveMasiCloses(event)">
+    <div class="field"><label for="masiClosesInput">Clôtures du MASI (date ; points)</label>
+     <textarea id="masiClosesInput" placeholder="AAAA-MM-JJ ; points" required></textarea>
+    </div>
+    <p class="small">Une ligne par séance, séparée par un point-virgule ou une tabulation. <a href="https://www.casablanca-bourse.com/fr/historique-des-indices" target="_blank" rel="noopener noreferrer">Historique officiel des indices ↗</a></p>
+    <button type="submit" class="btn">Enregistrer les clôtures</button>
+    <p class="small" id="masiImportStatus" role="status"></p>
+   </form>
+  </details>
  </details>
 </div>
  </div>
