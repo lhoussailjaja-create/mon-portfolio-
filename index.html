@@ -811,7 +811,13 @@ let pendingPdfPositions=[];
 let pendingPdfOperations=[];
 function clearPdfPaste(){document.getElementById('pdfPaste').value='';const pf=document.getElementById('pdfFile');if(pf)pf.value='';document.getElementById('pdfPreviewCard').classList.add('hidden');document.getElementById('pdfImportMsg').textContent='Zone de texte effacée.';pendingPdfPositions=[];pendingPdfOperations=[]}
 function pdfNum(v){if(v===null||v===undefined)return null;let x=String(v).trim().replace(/[\u00a0\u202f]/g,' ').replace(/\s/g,'').replace(/%|DH|MAD/gi,'');if(!x)return null;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'')}else if(x.includes(','))x=x.replace(',','.');const n=Number(x);return Number.isFinite(n)?n:null}
-function inferPdfType(name){const n=String(name||'').toUpperCase();if(/OPCVM|FUND|MOUCHARAKA|ATTIJARI ACTIONS|LOW VOLATILITY FACTOR/.test(n))return 'OPCVM';if(/AKDITAL|ITISSALAT|IAM|MARSA MAROC|TOTALENERGIES|SODEP|CIH|S2M/.test(n))return 'Action';return 'À classifier'}
+function inferPdfType(name){
+ const label=quoteKey(name||'');
+ if(/OPCVM|FUND|MOUCHARAKA|ATTIJARI ACTIONS|LOW VOLATILITY FACTOR/.test(label))return 'OPCVM';
+ if(label==='BCP'||label==='BANQUE CENTRALE POPULAIRE')return 'Action';
+ if(/AKDITAL|ITISSALAT|IAM|MARSA MAROC|TOTALENERGIES|SODEP|CIH|S2M/.test(label))return 'Action';
+ return 'À classifier';
+}
 function parsePdfPositionLine(line){let cells=[];if(line.includes('\t'))cells=line.split(/\t+/).map(x=>x.trim()).filter(Boolean);if(cells.length<8){const num='(-?\\d+(?:[ \\u00a0]\\d{3})*(?:[.,]\\d+)?%?)';const re=new RegExp('^(.+?)\s+'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s*$');const m=line.trim().match(re);if(m)cells=[m[1],...m.slice(2)];}
  if(cells.length<8)return null;
  // The source PDF column order is: Valeur, Quantité, Cours/VL, Montant, PRMP, Perf., +/- Values latentes, Poids.
