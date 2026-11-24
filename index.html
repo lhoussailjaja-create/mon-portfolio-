@@ -142,16 +142,29 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 
 .div-calendar-controls{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
 .div-calendar-controls .btn[aria-pressed="true"]{border-color:var(--mint);color:var(--mint)}
+.div-calendar-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+.div-calendar-kpi,.div-calendar-detail{min-width:0;padding:12px;border:1px solid var(--line);border-radius:10px;background:#101922}
+.div-calendar-kpi span,.div-calendar-kpi strong{display:block;overflow-wrap:anywhere}
+.div-calendar-kpi strong{margin-top:4px;font-size:1rem}
+.div-calendar-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,235px);align-items:start;gap:12px;margin:10px 0 16px}
 .div-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
 .div-calendar-weekday{text-align:center;color:var(--muted);font-size:.75rem}
-.div-calendar-day{display:grid;justify-items:center;align-content:center;gap:3px;min-height:42px;padding:3px 0;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--text);font:inherit;cursor:pointer}
-.div-calendar-day[aria-pressed="true"]{border-color:var(--mint);background:#55e0bd22}
+.div-calendar-day{display:grid;grid-template-rows:auto 1fr;align-content:start;gap:4px;min-width:0;min-height:78px;padding:5px;border:1px solid var(--line);border-radius:7px;background:#14212b;color:var(--text);text-align:left;font:inherit;font-size:.8rem;cursor:pointer}
+.div-calendar-day[aria-pressed="true"]{border-color:var(--mint);background:#55e0bd18}
 .div-calendar-day:focus-visible{outline:2px solid var(--mint);outline-offset:1px}
-.div-calendar-count{display:flex;justify-content:center;gap:4px;font-size:.68rem}
-.div-calendar-detachment{color:#75D9FF}
+.div-calendar-chips{display:grid;align-content:start;gap:3px;min-width:0}
+.div-calendar-chip{display:block;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:2px 4px;border-radius:4px;font-size:.69rem;line-height:1.25}
+.div-calendar-detachment{color:#a6ddff}
 .div-calendar-payment{color:var(--mint)}
-.div-calendar-events{display:grid;gap:8px;padding-inline-start:20px}
-.div-calendar-events li{overflow-wrap:anywhere}
+.div-calendar-chip.div-calendar-detachment{background:#123649}
+.div-calendar-chip.div-calendar-payment{background:#173d32}
+.div-calendar-more{color:var(--muted);font-size:.68rem}
+.div-calendar-detail h4{margin:0 0 8px}
+.div-calendar-events{display:grid;gap:8px;list-style:none;margin:0;padding:0}
+.div-calendar-events li{overflow-wrap:anywhere;border-top:1px solid var(--line);padding-top:8px}
+.div-calendar-events li strong{display:block}
+@media(max-width:900px){.div-calendar-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:560px){.div-calendar-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.div-calendar-day{min-height:64px;padding:3px 2px}.div-calendar-chip{padding:2px}.div-calendar-detail{padding:10px}}
 .chart-snapshot-bar{cursor:pointer}
 .chart-snapshot-bar:focus{outline:none}
 .chart-snapshot-bar:focus-visible .chart-snapshot-hit,.chart-snapshot-bar[aria-pressed="true"] .chart-snapshot-hit{stroke:#b8f51b;stroke-width:2;vector-effect:non-scaling-stroke}
@@ -349,11 +362,15 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
     <button class="btn" type="button" aria-label="Mois précédent" onclick="shiftDividendCalendar(-1)">‹</button>
     <strong id="divCalendarMonth" aria-live="polite"></strong>
     <button class="btn" type="button" aria-label="Mois suivant" onclick="shiftDividendCalendar(1)">›</button>
+    <button class="btn" type="button" onclick="resetDividendCalendarDay()">Aujourd’hui</button>
    </div>
   </div>
+  <div class="div-calendar-kpis" id="divCalendarSummary" aria-label="Résumé du mois"></div>
   <p class="small"><span class="div-calendar-detachment">D · Détachement</span> · <span class="div-calendar-payment">P · Paiement</span></p>
-  <div class="div-calendar-grid" id="divCalendarDays" role="group" aria-label="Jours du mois"></div>
-  <div id="divCalendarEvents" aria-live="polite"></div>
+  <div class="div-calendar-layout">
+   <div class="div-calendar-grid" id="divCalendarDays" role="group" aria-label="Jours du mois"></div>
+   <div class="div-calendar-detail" id="divCalendarEvents" aria-live="polite"></div>
+  </div>
   <div class="tablewrap"><table><thead><tr><th>Société</th><th>Détachement</th><th>Paiement</th><th>Type</th><th>Brut / action</th><th>Source</th></tr></thead><tbody id="marketDividendRows"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody></table></div>
  </div>
   <div class="card" id="officialDividendHistoryPanel">
@@ -1735,7 +1752,14 @@ function parseMarketDividendIssue(issue){
  if(!company||!exDate||!paymentDate||!amount)return null;
  return {id:issue.number,company,exDate,paymentDate,type,amount,source,url:issue.html_url,createdAt:issue.created_at};
 }
-const dividendCalendar = {scope:'market', day:new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Casablanca'}).format(new Date())};
+function dividendCalendarToday(){
+ return new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Casablanca'}).format(new Date());
+}
+const dividendCalendar = {scope:'market', day:dividendCalendarToday()};
+function resetDividendCalendarDay(){
+ dividendCalendar.day=dividendCalendarToday();
+ renderDividendCalendar();
+}
 function setDividendCalendarScope(scope){
  dividendCalendar.scope=scope;
  renderDividendCalendar();
@@ -1767,6 +1791,21 @@ function dividendCalendarEvents(){
  }
  return events;
 }
+function renderDividendCalendarSummary(events,month){
+ const host=document.getElementById('divCalendarSummary');
+ if(!host)return;
+ const list=[...events].filter(([day])=>day.startsWith(month)).flatMap(([,entries])=>entries);
+ const payments=list.filter(event=>event.kind==='Paiement').length;
+ const confirmed=(state.dividends||[]).filter(entry=>dividendIsConfirmed(entry)&&entry.date.startsWith(month));
+ const netTotal=status=>confirmed.filter(entry=>entry.status===status).reduce((sum,entry)=>sum+Number(entry.amount),0);
+ const cards=[
+  ['Paiements annoncés',payments],
+  ['Détachements annoncés',list.length-payments],
+  ['PEA · Net prévu enregistré',fmt(netTotal('Prévisionnel'))+' DH'],
+  ['PEA · Net perçu enregistré',fmt(netTotal('Perçu'))+' DH']
+ ];
+ host.innerHTML=cards.map(([name,value])=>'<div class="div-calendar-kpi"><span class="small">'+name+'</span><strong>'+value+'</strong></div>').join('');
+}
 function renderDividendCalendar(){
  const grid=document.getElementById('divCalendarDays');
  if(!grid)return;
@@ -1774,6 +1813,8 @@ function renderDividendCalendar(){
  const start=new Date(Date.UTC(year,month-1,1));
  const dayLabel=new Intl.DateTimeFormat('fr-MA',{dateStyle:'full',timeZone:'UTC'});
  const events=dividendCalendarEvents();
+ const today=dividendCalendarToday();
+ renderDividendCalendarSummary(events,dividendCalendar.day.slice(0,7));
  document.getElementById('divCalendarMonth').textContent=start.toLocaleDateString('fr-MA',{year:'numeric',month:'long',timeZone:'UTC'});
  document.getElementById('divCalendarPea').setAttribute('aria-pressed',String(dividendCalendar.scope==='pea'));
  document.getElementById('divCalendarMarket').setAttribute('aria-pressed',String(dividendCalendar.scope==='market'));
@@ -1786,14 +1827,22 @@ function renderDividendCalendar(){
   const detachments=entries.filter(event=>event.kind==='Détachement').length;
   const payments=entries.length-detachments;
   const summary=entries.length?' · '+detachments+' détachement(s), '+payments+' paiement(s)':' · Aucun événement';
-  return `<button class="div-calendar-day" type="button" aria-pressed="${day===dividendCalendar.day}" aria-label="${esc(dayLabel.format(date)+summary)}" onclick="selectDividendCalendarDay('${day}')"><span>${index+1}</span><span class="div-calendar-count" aria-hidden="true">${detachments?`<span class="div-calendar-detachment">D${detachments}</span>`:''}${payments?`<span class="div-calendar-payment">P${payments}</span>`:''}</span></button>`;
+  const chips=entries.slice(0,2).map(({item,kind})=>{
+   const payment=kind==='Paiement';
+   const label=(payment?'P · ':'D · ')+item.company;
+   return `<span class="div-calendar-chip ${payment?'div-calendar-payment':'div-calendar-detachment'}" title="${esc(label)}">${esc(label)}</span>`;
+  }).join('');
+  const more=entries.length>2?`<small class="div-calendar-more">+${entries.length-2}</small>`:'';
+  const current=day===today?' aria-current="date"':'';
+  return `<button class="div-calendar-day" type="button"${current} aria-pressed="${day===dividendCalendar.day}" aria-label="${esc(dayLabel.format(date)+summary)}" onclick="selectDividendCalendarDay('${day}')"><span>${index+1}</span><span class="div-calendar-chips" aria-hidden="true">${chips}${more}</span></button>`;
  }).join('');
  grid.innerHTML=weekdays+emptyDays+monthDays;
  const selected=events.get(dividendCalendar.day)||[];
  const selectedLabel=dayLabel.format(new Date(dividendCalendar.day+'T00:00:00Z'));
  const details=selected.map(({item,kind})=>{
   const amount=item.amount?'<br><small>Brut par action · '+esc(item.amount)+'</small>':'';
-  return `<li><strong>${esc(item.company)}</strong> · ${kind}${amount} · <a href="${esc(safeMarketUrl(item.source||DIVIDEND_BVC_CALENDAR_URL))}" target="_blank" rel="noopener noreferrer">Source</a></li>`;
+  const typeClass=kind==='Paiement'?'div-calendar-payment':'div-calendar-detachment';
+  return `<li><strong>${esc(item.company)}</strong><span class="${typeClass}">${kind}</span>${amount} · <a href="${esc(safeMarketUrl(item.source||DIVIDEND_BVC_CALENDAR_URL))}" target="_blank" rel="noopener noreferrer">Source</a></li>`;
  }).join('');
  document.getElementById('divCalendarEvents').innerHTML=`<h4>${esc(selectedLabel)}</h4>`+(details?'<ul class="div-calendar-events">'+details+'</ul>':'<p class="small">Aucun événement disponible pour cette date.</p>');
 }
