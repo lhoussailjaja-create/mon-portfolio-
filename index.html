@@ -1874,8 +1874,16 @@ function renderPortfolioJournal(){
   return;
  }
  const amount=value=>value!=null&&value!==''&&Number.isFinite(Number(value))?fmt(Number(value)):'—';
+ const cashMovement=operation=>{
+  const net=operation.net;
+  if(net==null||net===''||!Number.isFinite(Number(net)))return net;
+  const type=String(operation.type||'').trim().toLowerCase();
+  if(type==='achat')return -Math.abs(Number(net));
+  if(type==='vente')return Math.abs(Number(net));
+  return net;
+ };
  host.innerHTML='<div class="tablewrap"><table><thead><tr><th>Date</th><th>Type</th><th>Valeur</th><th>Quantité</th><th>Prix unitaire (DH)</th><th>Frais (DH)</th><th>Montant net (DH)</th><th>Gain / perte réalisé (DH)</th></tr></thead><tbody>'+
-  operations.map(o=>'<tr><td>'+esc(o.date||'—')+'</td><td>'+esc(o.type||'—')+'</td><td>'+esc(o.name||'—')+'</td><td>'+esc(o.qty??'—')+'</td><td>'+amount(o.price)+'</td><td>'+amount(o.fees)+'</td><td>'+amount(o.net)+'</td><td>'+amount(o.realized)+'</td></tr>').join('')+
+  operations.map(o=>'<tr><td>'+esc(o.date||'—')+'</td><td>'+esc(o.type||'—')+'</td><td>'+esc(o.name||'—')+'</td><td>'+esc(o.qty??'—')+'</td><td>'+amount(o.price)+'</td><td>'+amount(o.fees)+'</td><td>'+amount(cashMovement(o))+'</td><td>'+amount(o.realized)+'</td></tr>').join('')+
   '</tbody></table></div>';
 }
 function render(){
