@@ -954,16 +954,12 @@ function commitPdfPositions(){
  });
  for(const p of incoming.values()){merged.push(p);posAdded++}
  state.positions=merged;
- const existingCounts=new Map(),incomingCounts=new Map();
- state.operations.forEach(o=>{const k=operationFingerprint(o);existingCounts.set(k,(existingCounts.get(k)||0)+1)});
- for(const o of ops){
-  const k=operationFingerprint(o),seen=(incomingCounts.get(k)||0)+1;incomingCounts.set(k,seen);
-  const exactKey=o.dedupeKey&&state.operations.some(existing=>(existing.dedupeKey||existing.key)===o.dedupeKey);
-  if(exactKey||seen<=(existingCounts.get(k)||0)){opsSkipped++;continue}
-  state.operations.push(o);opsAdded++;
- }
+ const journal=mergeJournalOperations(state.operations,ops);
+ state.operations=journal.operations;
+ opsAdded=journal.added;
+ opsSkipped=journal.skipped;
  save();
- const summary=`PDF importé : ${posAdded} position(s) ajoutée(s), ${posUpdated} mise(s) à jour, ${opsAdded} opération(s) ajoutée(s), ${opsSkipped} doublon(s) ignoré(s). Historique conservé.`;
+ const summary=`PDF importé : ${posAdded} position(s) ajoutée(s), ${posUpdated} mise(s) à jour, ${opsAdded} opération(s) ajoutée(s), ${journal.reconciled} rapprochée(s), ${opsSkipped} doublon(s) ignoré(s). Historique conservé.`;
  document.getElementById('pdfImportMsg').textContent=summary;
  document.getElementById('pdfPreviewCard').classList.add('hidden');
  pendingPdfPositions=[];pendingPdfOperations=[];
@@ -1662,6 +1658,83 @@ function openPortfolioQuotes(){
 function operationFingerprint(o){
  return [String(o.date||'').slice(0,10),String(o.type||'').toLowerCase(),String(o.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(),o.qty??'',o.price??'',o.net??''].join('|');
 }
+function tradeExecutionKey(operation){
+ const type=String(operation.type||'').trim().toLowerCase().replace(/\s+/g,' ');
+ const side=type==='achat opcvm'?'achat':type==='vente opcvm'?'vente':type;
+ if(!['achat','vente'].includes(side))return '';
+ const qty=Number(operation.qty),price=Number(operation.price);
+ const date=String(operation.date||'').slice(0,10);
+ const label=quoteKey(operation.name||'');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!label||!Number.isFinite(qty)||qty<=0||!Number.isFinite(price)||price<=0)return '';
+ const aliases={
+  'BANQUE CENTRALE POPULAIRE':'BCP',
+  'SODEP MARSA':'MARSA MAROC',
+  'SOCIETE D EXPLOITATION DES PORTS MARSA MAROC':'MARSA MAROC',
+  'ITTISSALAT AL MAGH':'ITISSALAT AL MAGHRIB',
+  'TOTALENERGIES MARKETING MAROC':'TOTALENERGIES MAROC',
+  'AKT':'AKDITAL'
+ };
+ return [date,side,aliases[label]||label,qty,price].join('|');
+}
+function journalSourceKey(operation){
+ return operation.dedupeKey||operation.key||'';
+}
+function isManualJournalTrade(operation){
+ return typeof operation.id==='string'&&operation.id.startsWith('manual_trade_')&&!!tradeExecutionKey(operation);
+}
+function mergeJournalOperations(existing,incoming){
+ const operations=existing.slice();
+ const exactKeys=new Set();
+ const existingCounts=new Map(),incomingCounts=new Map();
+ const unmatchedManual=new Map();
+ for(const [index,row] of existing.entries()){
+  if(!row)continue;
+  const storedKey=journalSourceKey(row);
+  if(storedKey)exactKeys.add(storedKey);
+  if(isManualJournalTrade(row)&&!row.brokerRecord){
+   const key=tradeExecutionKey(row);
+   if(!unmatchedManual.has(key))unmatchedManual.set(key,new Set());
+   unmatchedManual.get(key).add(index);
+   continue;
+  }
+  const broker=row.brokerRecord||row;
+  const brokerKey=journalSourceKey(broker);
+  if(brokerKey)exactKeys.add(brokerKey);
+  const key=operationFingerprint(broker);
+  existingCounts.set(key,(existingCounts.get(key)||0)+1);
+ }
+ let added=0,reconciled=0,skipped=0;
+ for(const row of incoming){
+  const fingerprint=operationFingerprint(row);
+  const seen=(incomingCounts.get(fingerprint)||0)+1;
+  incomingCounts.set(fingerprint,seen);
+  const key=journalSourceKey(row);
+  if(key&&exactKeys.has(key)||seen<=(existingCounts.get(fingerprint)||0)){
+   skipped++;
+   continue;
+  }
+  const candidates=unmatchedManual.get(tradeExecutionKey(row));
+  if(!isManualJournalTrade(row)&&candidates?.size===1){
+   const index=candidates.values().next().value;
+   operations[index]={...operations[index],brokerRecord:row};
+   candidates.delete(index);
+   reconciled++;
+  }else{
+   operations.push(row);
+   added++;
+  }
+  if(key)exactKeys.add(key);
+ }
+ return {operations,added,reconciled,skipped};
+}
+function excelJournalOperation(row,file,index){
+ const key=String(row.Clé_Anti_Doublon||row.ID_Operation||'').trim();
+ return {id:String(row.ID_Operation||key||('excelop_'+Date.now()+'_'+index)),
+  date:excelDate(row.Date_Operation),type:row.Type_Operation||'',name:row.Valeur||'',category:row.Catégorie||'',
+  qty:row.Quantité===null?null:Number(row.Quantité),price:row.Prix_Unitaire_DH===null?null:Number(row.Prix_Unitaire_DH),
+  gross:row.Montant_Brut_DH===null?null:Number(row.Montant_Brut_DH),fees:row.Frais_DH===null?null:Number(row.Frais_DH),
+  net:row.Montant_Net_DH===null?null:Number(row.Montant_Net_DH),dedupeKey:key,source:row.Source_Fichier||file};
+}
 function tradeEntryToday(){
  return new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Casablanca',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 }
@@ -1786,7 +1859,7 @@ function planPortfolioTrade(form,id){
  const fields=Object.fromEntries(new FormData(form));
  const trade=makePortfolioTrade(fields,tradeEntryToday());
  const applyTrade=fields.applyTrade==='on';
- const matching=state.operations.some(operation=>operation&&operationFingerprint(operation)===operationFingerprint(trade));
+ const matching=state.operations.some(operation=>operation&&tradeExecutionKey(operation)===tradeExecutionKey(trade));
  let positions=state.positions;
  let cash=null;
  let quantities=null;
@@ -1883,7 +1956,11 @@ function renderPortfolioJournal(){
   return net;
  };
  host.innerHTML='<div class="tablewrap"><table><thead><tr><th>Date</th><th>Type</th><th>Valeur</th><th>Quantité</th><th>Prix unitaire (DH)</th><th>Frais (DH)</th><th>Montant net (DH)</th><th>Gain / perte réalisé (DH)</th></tr></thead><tbody>'+
-  operations.map(o=>'<tr><td>'+esc(o.date||'—')+'</td><td>'+esc(o.type||'—')+'</td><td>'+esc(o.name||'—')+'</td><td>'+esc(o.qty??'—')+'</td><td>'+amount(o.price)+'</td><td>'+amount(o.fees)+'</td><td>'+amount(cashMovement(o))+'</td><td>'+amount(o.realized)+'</td></tr>').join('')+
+  operations.map(o=>{
+   const detail=o.brokerRecord||o;
+   const provenance=o.brokerRecord?' <small class="tag" title="Montants du relevé rapproché">Relevé rapproché</small>':'';
+   return '<tr><td>'+esc(o.date||'—')+'</td><td>'+esc(o.type||'—')+'</td><td>'+esc(o.name||'—')+provenance+'</td><td>'+esc(o.qty??'—')+'</td><td>'+amount(o.price)+'</td><td>'+amount(detail.fees)+'</td><td>'+amount(cashMovement(detail))+'</td><td>'+amount(o.realized)+'</td></tr>';
+  }).join('')+
   '</tbody></table></div>';
 }
 function render(){
@@ -1922,12 +1999,12 @@ async function previewExcelSync(file){
   const validPos=pos.filter(x=>x.Valeur&&x.Catégorie);
   const validOps=ops.filter(x=>x.ID_Operation||x.Clé_Anti_Doublon||x.Valeur);
   const validDivs=divs.filter(x=>(x.ID_Dividende||x.Valeur)&&String(x.Source_Confirmation||'').trim()&&['Perçu','Prévisionnel'].includes(String(x.Statut||''))&&excelDate(x.Date||x.Date_Paiement)&&Number(x.Montant_Net_DH??x.Montant_DH)>0);
-  const knownOps=new Set(state.operations.map(o=>o.dedupeKey||o.key||o['Clé_Anti_Doublon']).filter(Boolean));
-  const freshOps=validOps.filter(o=>{const k=String(o.Clé_Anti_Doublon||o.ID_Operation||'').trim();return !k||!knownOps.has(k)});
+  const preparedOps=validOps.map((row,index)=>excelJournalOperation(row,file.name,index));
+  const journalPreview=mergeJournalOperations(state.operations,preparedOps);
   const knownDivs=new Set(state.dividends.map(d=>d.dedupeKey||d.key).filter(Boolean));
   const freshDivs=validDivs.filter(d=>{const k=String(d.Clé_Anti_Doublon||d.ID_Dividende||'').trim();return !k||!knownDivs.has(k)});
-  pendingExcelSync={pos:validPos,ops:freshOps,divs:freshDivs,file:file.name};
-  const rejectedDivs=divs.length-validDivs.length;msg.textContent=`Classeur reconnu : ${validPos.length} positions, ${validOps.length} opérations (${freshOps.length} nouvelles), ${validDivs.length} dividendes confirmés (${freshDivs.length} nouveaux). ${rejectedDivs} ligne(s) de dividendes ignorée(s) faute de statut valide, date, montant positif ou source officielle. Aucune donnée n’a encore été modifiée.`;
+  pendingExcelSync={pos:validPos,ops:preparedOps,divs:freshDivs,file:file.name};
+  const rejectedDivs=divs.length-validDivs.length;msg.textContent=`Classeur reconnu : ${validPos.length} positions, ${validOps.length} opérations (${journalPreview.added} nouvelles, ${journalPreview.reconciled} rapprochées), ${validDivs.length} dividendes confirmés (${freshDivs.length} nouveaux). ${rejectedDivs} ligne(s) de dividendes ignorée(s) faute de statut valide, date, montant positif ou source officielle. Aucune donnée n’a encore été modifiée.`;
   btn.disabled=false;
  }catch(e){msg.textContent='Erreur de lecture Excel : '+(e.message||e);btn.disabled=true}
 }
@@ -1944,19 +2021,16 @@ function commitExcelSync(){
   const next={id:id|| (old&&old.id)||('excel_'+excelNorm(name).replace(/\s/g,'_')),name,type,qty:num(x.Quantité),price:num(x.Cours_VL_DH),importedValue:num(x.Montant_Relevé_DH),cmp:num(x.PRMP_DH),sourcePerf:num(x['Performance_Source_%']),sourcePl:num(x['Plus_Moins_Latent_DH']),sourceWeight:num(x['Poids_Source_%']),buyFees:num(x.Frais_Achat_DH),source:x.Source||'Classeur Excel',sourceDate:excelDate(x.Date_Source)||''};
   if(old){Object.assign(old,Object.fromEntries(Object.entries(next).filter(([k,v])=>v!==null&&v!=='')));posUpdated++}else{state.positions.push(next);posAdded++}
  });
- p.ops.forEach(x=>{
-  const key=String(x.Clé_Anti_Doublon||x.ID_Operation||'').trim();
-  if(key&&state.operations.some(o=>(o.dedupeKey||o.key)===key))return;
-  state.operations.push({id:String(x.ID_Operation||key||('excelop_'+Date.now()+'_'+opsAdded)),date:excelDate(x.Date_Operation),type:x.Type_Operation||'',name:x.Valeur||'',category:x.Catégorie||'',qty:x.Quantité===null?null:Number(x.Quantité),price:x.Prix_Unitaire_DH===null?null:Number(x.Prix_Unitaire_DH),gross:x.Montant_Brut_DH===null?null:Number(x.Montant_Brut_DH),fees:x.Frais_DH===null?null:Number(x.Frais_DH),net:x.Montant_Net_DH===null?null:Number(x.Montant_Net_DH),dedupeKey:key,source:x.Source_Fichier||p.file});
-  opsAdded++;
- });
+ const journal=mergeJournalOperations(state.operations,p.ops);
+ state.operations=journal.operations;
+ opsAdded=journal.added;
  p.divs.forEach(x=>{
   const key=String(x.Clé_Anti_Doublon||x.ID_Dividende||'').trim();
   if(key&&state.dividends.some(d=>(d.dedupeKey||d.key)===key))return;
   state.dividends.push({id:String(x.ID_Dividende||key||('exceldiv_'+Date.now()+'_'+divAdded)),name:x.Valeur||'',date:excelDate(x.Date||x.Date_Paiement),amount:Number(x.Montant_Net_DH??x.Montant_DH),status:x.Statut||'',confirmationSource:String(x.Source_Confirmation||'').trim(),confirmed:true,sourceType:'Excel confirmé',dedupeKey:key});
   divAdded++;
  });
- const summary=`Synchronisation terminée : ${posAdded} position(s) ajoutée(s), ${posUpdated} mise(s) à jour, ${opsAdded} opération(s) ajoutée(s), ${divAdded} dividende(s) ajouté(s). Les anciennes données ont été conservées.`;
+ const summary=`Synchronisation terminée : ${posAdded} position(s) ajoutée(s), ${posUpdated} mise(s) à jour, ${opsAdded} opération(s) ajoutée(s), ${journal.reconciled} rapprochée(s), ${divAdded} dividende(s) ajouté(s). Les anciennes données ont été conservées.`;
  save();
  document.getElementById('excelSyncMsg').textContent=summary;
  document.getElementById('excelSyncCommit').disabled=true;
