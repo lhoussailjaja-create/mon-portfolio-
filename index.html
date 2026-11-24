@@ -377,6 +377,15 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
    <div class="div-calendar-grid" id="divCalendarDays" role="group" aria-label="Jours du mois"></div>
    <div class="div-calendar-detail" id="divCalendarEvents" aria-live="polite"></div>
   </div>
+  <details class="card div-disclosure" id="divCalendarYearPanel">
+   <summary>Calendrier annuel des distributions</summary>
+   <div class="actions" style="align-items:center;margin:10px 0">
+    <label for="divCalendarYear">Année</label>
+    <select id="divCalendarYear" onchange="renderDividendCalendar()"></select>
+   </div>
+   <p class="small" id="divCalendarYearSummary" aria-live="polite"></p>
+   <div class="tablewrap"><table><thead><tr><th>Société</th><th>Détachement</th><th>Paiement</th><th>Brut / action</th><th>Source</th></tr></thead><tbody id="divCalendarYearRows"></tbody></table></div>
+  </details>
   <div class="tablewrap"><table><thead><tr><th>Société</th><th>Détachement</th><th>Paiement</th><th>Type</th><th>Brut / action</th><th>Source</th></tr></thead><tbody id="marketDividendRows"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody></table></div>
  </div>
   <div class="card" id="officialDividendHistoryPanel">
@@ -1755,7 +1764,7 @@ function parseMarketDividendIssue(issue){
  const type=issueField(body,'Type',['Type de dividende']);
  const amount=issueField(body,'Montant brut par action',['Montant par action','Dividende par action','DPS']);
  const source=(body.match(/(?:\*\*\s*)?Source officielle(?:\s*\*\*)?\s*:?\s*(https?:\/\/[^\s)]+)/i)||[])[1]||'https://www.casablanca-bourse.com/fr/emetteurs/calendrier-financier';
- if(!company||!exDate||!paymentDate||!amount)return null;
+ if(!company||(!exDate&&!paymentDate)||!amount)return null;
  return {id:issue.number,company,exDate,paymentDate,type,amount,source,url:issue.html_url,createdAt:issue.created_at};
 }
 function dividendCalendarToday(){
@@ -1819,6 +1828,35 @@ function dividendCalendarCompanyLogo(company){
  const logo=immorente?'<img src="https://boursenews.ma/uploads/actualites/6996bc57679e4_68aeb0e55812c_Immorente%20logo.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">':'';
  return '<span class="div-calendar-company-logo" aria-hidden="true"><span>'+esc(initials)+'</span>'+logo+'</span>';
 }
+function renderDividendCalendarYear(events){
+ const picker=document.getElementById('divCalendarYear');
+ const host=document.getElementById('divCalendarYearRows');
+ if(!picker||!host)return;
+ const selectedYear=picker.value;
+ const calendarYear=dividendCalendar.day.slice(0,4);
+ const years=[...new Set([calendarYear,...[...events.keys()].map(day=>day.slice(0,4))])].sort().reverse();
+ picker.innerHTML=years.map(year=>'<option value="'+year+'">'+year+'</option>').join('');
+ picker.value=years.includes(selectedYear)?selectedYear:calendarYear;
+ const announcements=new Map();
+ for(const [day,entries] of events){
+  if(!day.startsWith(picker.value+'-'))continue;
+  for(const {item} of entries)announcements.set(marketEventKey(item),item);
+ }
+ const rows=[...announcements.values()].sort((a,b)=>a.company.localeCompare(b.company,'fr')||
+  marketIsoDate(a.exDate||a.paymentDate).localeCompare(marketIsoDate(b.exDate||b.paymentDate)));
+ const companyCount=new Set(rows.map(item=>quoteKey(item.company))).size;
+ document.getElementById('divCalendarYearSummary').textContent=rows.length+' annonce(s) · '+companyCount+' société(s) · '+(dividendCalendar.scope==='pea'?'Mon PEA':'Tout le marché');
+ const linkedDate=value=>{
+  const day=marketIsoDate(value);
+  if(!events.has(day))return '—';
+  return '<button class="btn" type="button" onclick="selectDividendCalendarDay(\''+day+'\')">'+
+   day.split('-').reverse().join('/')+'</button>';
+ };
+ host.innerHTML=rows.length?rows.map(item=>'<tr><td><div class="div-calendar-company">'+dividendCalendarCompanyLogo(item.company)+'<strong>'+esc(item.company)+'</strong></div></td>'+
+  '<td>'+linkedDate(item.exDate)+'</td><td>'+linkedDate(item.paymentDate)+'</td><td>'+esc(item.amount||'—')+'</td>'+
+  '<td><a href="'+esc(safeMarketUrl(item.source||DIVIDEND_BVC_CALENDAR_URL))+'" target="_blank" rel="noopener noreferrer">Source</a></td></tr>').join(''):
+  '<tr><td colspan="5" class="empty">Aucune annonce disponible pour cette année et ce filtre.</td></tr>';
+}
 function renderDividendCalendar(){
  const grid=document.getElementById('divCalendarDays');
  if(!grid)return;
@@ -1828,6 +1866,7 @@ function renderDividendCalendar(){
  const events=dividendCalendarEvents();
  const today=dividendCalendarToday();
  renderDividendCalendarSummary(events,dividendCalendar.day.slice(0,7));
+ renderDividendCalendarYear(events);
  document.getElementById('divCalendarMonth').textContent=start.toLocaleDateString('fr-MA',{year:'numeric',month:'long',timeZone:'UTC'});
  document.getElementById('divCalendarPea').setAttribute('aria-pressed',String(dividendCalendar.scope==='pea'));
  document.getElementById('divCalendarMarket').setAttribute('aria-pressed',String(dividendCalendar.scope==='market'));
@@ -1943,7 +1982,7 @@ async function fetchBvcDividendAnnouncements(){
   source:x.source||payload.source||DIVIDEND_BVC_CALENDAR_URL,
   sourceName:'Bourse de Casablanca',
   url:x.url||''
- })).filter(x=>x.company&&x.exDate&&x.paymentDate);
+ })).filter(x=>x.company&&(x.exDate||x.paymentDate));
  return {announcements:convert(payload.announcements,'current'),history:convert(payload.history,'history'),updatedAt:payload.updatedAt||null};
 }
 async function refreshMarketDividends(){
