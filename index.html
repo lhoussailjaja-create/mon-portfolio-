@@ -1124,11 +1124,11 @@ function renderMasiComparison(rows){
  const y=value=>163-140*(value-low)/(high-low);
  const series=(key,color)=>'<polyline fill="none" stroke="'+color+'" stroke-width="3" points="'+points.map(point=>x(point.date)+','+y(point[key])).join(' ')+'"/>';
  const signed=value=>(value>0?'+':value<0?'−':'')+fmt(Math.abs(value));
- host.innerHTML='<p><strong style="color:#55e0bd">PEA '+signed(last.pea-100)+' %</strong> · <strong style="color:#75d9ff">MASI '+signed(last.masi-100)+' %</strong> · Écart '+signed(last.pea-last.masi)+' points de pourcentage</p>'+
+ host.innerHTML='<p><strong style="color:#55e0bd">PEA '+signed(last.pea-100)+' %</strong> · <strong style="color:#83b5ff">MASI '+signed(last.masi-100)+' %</strong> · Écart '+signed(last.pea-last.masi)+' points de pourcentage</p>'+
   '<div class="chart-area"><svg viewBox="0 0 800 200" role="img" aria-label="PEA et MASI en base 100">'+
   '<line x1="65" x2="765" y1="'+y(100)+'" y2="'+y(100)+'" stroke="#8296a3" stroke-dasharray="4 5"/>'+
   '<text x="51" y="'+(y(100)+4)+'" text-anchor="end" fill="#b6cbd6" font-size="13">100</text>'+
-  series('pea','#55e0bd')+series('masi','#75d9ff')+
+  series('pea','#55e0bd')+series('masi','#83b5ff')+
   '<text x="65" y="188" fill="#b6cbd6" font-size="13">'+formatDate(points[0].date)+'</text>'+
   '<text x="765" y="188" text-anchor="end" fill="#b6cbd6" font-size="13">'+formatDate(last.date)+'</text></svg></div>'+
   '<p class="small">Clôture du vendredi pour un snapshot de week-end.</p>';
@@ -1161,7 +1161,10 @@ function renderChart(){
  const margin=Math.max(1,(maximum-minimum)*.18);
  const low=isValue?Math.max(0,minimum-margin):Math.min(0,minimum);
  const high=isValue?maximum+margin:Math.max(0,maximum);
- if(foot&&isValue)foot.textContent='Valorisations enregistrées · Base de l’axe : '+fmt(low)+' DH.';
+ if(foot){
+  if(isValue)foot.textContent='Valorisations enregistrées · Base de l’axe : '+fmt(low)+' DH.';
+  foot.textContent+=' Le pourcentage de chaque colonne correspond à la variation depuis la valorisation précédente.';
+ }
  const range=high-low||1;
  const y=v=>bottom-(v-low)/range*(bottom-top),baseline=y(isValue?low:0);
  const plotWidth=w-left-right,step=Math.min(150,plotWidth/rows.length),offset=left+(plotWidth-step*rows.length)/2,bw=Math.min(82,step*.55);
@@ -1171,14 +1174,23 @@ function renderChart(){
   '<line x1="'+left+'" y1="'+bottom+'" x2="'+(w-right)+'" y2="'+bottom+'" stroke="#7c9aaa"/>'+
   '<text x="19" y="'+((top+bottom)/2)+'" text-anchor="middle" fill="#b6cbd6" font-size="12" transform="rotate(-90 19 '+((top+bottom)/2)+')">Valeur (DH)</text>'+
   '<text x="'+((left+w-right)/2)+'" y="'+(h-9)+'" text-anchor="middle" fill="#b6cbd6" font-size="12">Dates</text>';
+ const historyIndex=new Map(history.map((row,index)=>[row.date,index]));
  const bars=plotted.map((value,index)=>{
-  const row=rows[index],x=offset+step*(index+.5),yv=y(value),color=value<0?'#ff647c':'#55e0bd';
-  const label=row.date.split('-').reverse().join('/')+' · '+fmt(Number(row.total))+' DH';
-  const labelY=value<0?Math.min(yv+18,bottom-6):yv-12;
+  const row=rows[index],x=offset+step*(index+.5),yv=y(value);
+  const previous=isValue?history[historyIndex.get(row.date)-1]:rows[index-1];
+  const difference=previous?value-(isValue?Number(previous.total):plotted[index-1]):0;
+  const percent=previous?difference/Number(previous.total)*100:null;
+  const sign=difference>0?'+':difference<0?'−':'';
+  const percentLabel=percent===null?'':sign+fmt(Math.abs(percent))+' %';
+  const color=difference>0?'#55e0bd':difference<0?'#ff647c':'#7d9db0';
+  const label=row.date.split('-').reverse().join('/')+' · '+fmt(value)+' DH'+(percentLabel?' · '+percentLabel:'');
+  const labelY=value<0?Math.min(yv+18,bottom-6):yv-9;
+  const amountY=percentLabel?labelY-14:labelY;
   return '<g class="chart-snapshot-bar" role="button" tabindex="0" aria-pressed="false" aria-label="'+esc(label)+'">'+
    '<rect class="chart-snapshot-hit" x="'+(x-step/2+2)+'" y="'+(top-22)+'" width="'+(step-4>0?step-4:step)+'" height="'+(bottom-top+53)+'" fill="transparent" rx="4"/>'+
    '<rect x="'+(x-bw/2)+'" y="'+Math.min(yv,baseline)+'" width="'+bw+'" height="'+Math.max(1,Math.abs(baseline-yv))+'" rx="4" fill="'+color+'"><title>'+esc(label)+'</title></rect>'+
-   '<text x="'+x+'" y="'+labelY+'" text-anchor="middle" fill="#edf6fa" font-size="12">'+fmt(value)+' DH</text>'+
+   '<text x="'+x+'" y="'+amountY+'" text-anchor="middle" fill="#edf6fa" font-size="12">'+fmt(value)+' DH</text>'+
+   (percentLabel?'<text x="'+x+'" y="'+labelY+'" text-anchor="middle" fill="#edf6fa" font-size="12">'+percentLabel+'</text>':'')+
    '<text x="'+x+'" y="'+(bottom+22)+'" text-anchor="middle" fill="#b6cbd6" font-size="12">'+esc(row.date)+'</text></g>';
  }).join('');
  const delta=plotted.at(-1)-plotted[0],pct=delta/vals[0]*100,sign=delta>0?'+':delta<0?'−':'';
@@ -1186,7 +1198,6 @@ function renderChart(){
  el.className='chart-area';el.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" role="group" aria-label="Graphique interactif des valorisations">'+comparison+axes+bars+'</svg>';
  details.classList.remove('hidden');
  details.textContent='Sélectionnez une colonne pour voir le détail de la valorisation.';
- const historyIndex=new Map(history.map((row,index)=>[row.date,index]));
  el.querySelectorAll('.chart-snapshot-bar').forEach((bar,index)=>{
   const row=rows[index],previous=history[historyIndex.get(row.date)-1];
   const select=()=>showChartSnapshot(bar,row,previous);
