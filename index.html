@@ -356,7 +356,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <summary class="btn"><span class="positions-show">Afficher les positions</span><span class="positions-hide">Masquer les positions</span></summary>
  <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>Catégorie</th><th>Quantité</th><th>Cours / VL</th><th>Valorisation</th><th>PRMP</th><th>Performance</th><th>+/- latent</th><th>Frais achat</th><th>Poids</th><th>Action</th></tr></thead><tbody id="positionRows"><tr><td colspan="11" class="empty">Les positions détaillées seront chargées depuis le relevé Titres après validation de l’importateur.</td></tr></tbody></table></div><p class="small">Les données absentes restent vides. Les OPCVM sont identifiés séparément des actions. Les lignes synchronisées conservent la valorisation et le +/- latent du relevé source.</p>
 </details></section>
-<section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" onsubmit="recordPortfolioTrade(event)">
+<section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" oninput="clearPortfolioTradePreview()" onsubmit="previewPortfolioTrade(event)">
  <h3>Enregistrer un achat / une vente</h3>
  <p class="small">Saisissez une opération déjà exécutée chez votre courtier.</p>
  <div class="formrow">
@@ -376,7 +376,12 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <label for="tradeCategory">Catégorie de la nouvelle position</label>
   <select id="tradeCategory" name="category"><option value="">Choisir une catégorie</option><option>Action</option><option>OPCVM</option></select>
  </div>
- <div class="actions"><button type="submit" class="btn primary">Enregistrer l’opération</button><button type="button" class="btn" onclick="document.getElementById('portfolioTradeForm').classList.add('hidden')">Fermer</button></div>
+ <div class="actions"><button type="submit" class="btn primary">Vérifier l’opération</button><button type="button" class="btn" onclick="clearPortfolioTradePreview();this.form.classList.add('hidden')">Fermer</button></div>
+ <section id="portfolioTradePreview" class="card hidden" aria-labelledby="portfolioTradePreviewTitle">
+  <h4 id="portfolioTradePreviewTitle">Récapitulatif avant enregistrement</h4>
+  <div id="portfolioTradeReview"></div>
+  <div class="actions"><button class="btn primary" id="portfolioTradeConfirm" type="button" onclick="confirmPortfolioTrade(this.form)">Confirmer l’enregistrement</button><button class="btn" type="button" onclick="clearPortfolioTradePreview();document.getElementById('tradeType').focus()">Modifier</button></div>
+ </section>
  <p class="small" id="portfolioTradeMessage" role="status"></p>
 </form><div class="card"><div id="portfolioJournalRecords"></div></div></section>
 <section class="page" id="analyse"><div class="pagehead"><div><h2>Analyse du portefeuille</h2><p>Concentration, allocation, performance et historique.</p></div></div><div class="sectiongrid"><div class="card"><h3>Indicateurs à calculer</h3><div class="allocrow"><span>Concentration par ligne</span><span class="tag">À connecter</span></div><div class="allocrow"><span>Performance par position</span><span class="tag">À connecter</span></div><div class="allocrow"><span>Drawdown historique</span><span class="tag">Historique requis</span></div><div class="allocrow"><span>Évolution du portefeuille</span><span class="tag">Snapshots requis</span></div></div><div class="card"><h3>Règles de calcul</h3><p class="small">Les performances seront calculées à partir des PRMP, cours/VL, frais et opérations réellement importés. Aucun rendement historique ne sera extrapolé en l’absence de snapshots.</p></div></div></section>
@@ -1683,6 +1688,7 @@ function updateTradeForm(){
 }
 function openTradeEntry(){
  go('journal');
+ clearPortfolioTradePreview();
  const form=document.getElementById('portfolioTradeForm');
  const date=document.getElementById('tradeDate');
  date.max=tradeEntryToday();
@@ -1770,31 +1776,88 @@ function applyPortfolioPurchase(trade,positions,statementDate,category,id){
  if(!position)next.push(updated);
  return next;
 }
-function recordPortfolioTrade(event){
+let pendingPortfolioTrade=null;
+function clearPortfolioTradePreview(){
+ pendingPortfolioTrade=null;
+ document.getElementById('portfolioTradePreview').classList.add('hidden');
+ document.getElementById('portfolioTradeMessage').textContent='';
+}
+function planPortfolioTrade(form,id){
+ const fields=Object.fromEntries(new FormData(form));
+ const trade=makePortfolioTrade(fields,tradeEntryToday());
+ const applyTrade=fields.applyTrade==='on';
+ const matching=state.operations.some(operation=>operation&&operationFingerprint(operation)===operationFingerprint(trade));
+ let positions=state.positions;
+ let cash=null;
+ let quantities=null;
+ if(applyTrade){
+  const statementDate=state.wafaAccountSummary?.sourceDate||'';
+  const previous=portfolioMetrics().cash;
+  const getQuantity=rows=>Number(rows.find(row=>excelNorm(row.name)===excelNorm(trade.name))?.qty||0);
+  const before=getQuantity(positions);
+  positions=trade.type==='Vente'?applyPortfolioSale(trade,positions,statementDate):
+   applyPortfolioPurchase(trade,positions,statementDate,fields.category,id);
+  quantities={before,after:getQuantity(positions)};
+  cash={before:previous,after:Math.round((previous+(trade.type==='Vente'?trade.net:-trade.net))*100)/100};
+ }
+ return {trade,applyTrade,matching,positions,cash,quantities};
+}
+function previewPortfolioTrade(event){
  event.preventDefault();
- const form=event.currentTarget,message=document.getElementById('portfolioTradeMessage');
- let next;
- let trade;
+ clearPortfolioTradePreview();
+ const message=document.getElementById('portfolioTradeMessage');
  try{
-  const fields=Object.fromEntries(new FormData(form));
-  trade=makePortfolioTrade(fields,tradeEntryToday());
-  const applyTrade=fields.applyTrade==='on';
-  const matching=state.operations.some(o=>o&&operationFingerprint(o)===operationFingerprint(trade));
-  if(matching&&!confirm('Une opération identique figure déjà au journal. Confirmez uniquement s’il s’agit d’une autre exécution.'))return;
   const id='manual_trade_'+(globalThis.crypto?.randomUUID?.()??Date.now()+'_'+Math.random().toString(36).slice(2));
-  let positions=state.positions;
+  const plan=planPortfolioTrade(event.currentTarget,id);
+  const {trade,applyTrade,matching,cash,quantities}=plan;
+  const amount=value=>fmt(value)+' DH';
+  const rows=[
+   ['Opération',trade.type+' · '+trade.name],
+   ['Date d’exécution',trade.date.split('-').reverse().join('/')],
+   ['Quantité et prix unitaire',trade.qty+' × '+amount(trade.price)],
+   ['Montant brut',amount(trade.gross)],
+   ['Frais totaux',amount(trade.fees)],
+   [trade.type==='Vente'?'Montant net reçu':'Montant net débité',amount(trade.net)]
+  ];
   if(applyTrade){
-   const statementDate=state.wafaAccountSummary?.sourceDate||'';
-   positions=trade.type==='Vente'?applyPortfolioSale(trade,positions,statementDate):
-    applyPortfolioPurchase(trade,positions,statementDate,fields.category,id);
-   trade.recordedAt=new Date().toISOString();
+   rows.push(['Quantité détenue',quantities.before+' → '+quantities.after],
+    ['Espèces estimées après l’opération',amount(cash.before)+' → '+amount(cash.after)]);
+   if(trade.type==='Vente')rows.push(['Gain / perte réalisé',amount(trade.realized)]);
+  }else{
+   rows.push(['Enregistrement','Journal des opérations']);
   }
-  next={...state,positions,operations:[...state.operations,{...trade,id,dedupeKey:id}]};
+  document.getElementById('portfolioTradeReview').innerHTML=rows.map(([label,value])=>
+   '<div class="allocrow"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong></div>').join('')+
+   (matching?'<p class="small">Une opération identique figure au journal. Confirmez uniquement s’il s’agit d’une autre exécution.</p>':'');
+  pendingPortfolioTrade={id,signature:JSON.stringify(plan)};
+  document.getElementById('portfolioTradePreview').classList.remove('hidden');
+  document.getElementById('portfolioTradeConfirm').focus();
+ }catch(error){message.textContent='Vérification impossible. '+error.message;}
+}
+function confirmPortfolioTrade(form){
+ const pending=pendingPortfolioTrade;
+ if(!pending||!form.reportValidity())return;
+ const message=document.getElementById('portfolioTradeMessage');
+ let next,trade;
+ try{
+  const plan=planPortfolioTrade(form,pending.id);
+  if(JSON.stringify(plan)!==pending.signature){
+   clearPortfolioTradePreview();
+   message.textContent='Les données ont changé. Vérifiez à nouveau l’opération.';
+   return;
+  }
+  trade=plan.trade;
+  if(plan.applyTrade)trade.recordedAt=new Date().toISOString();
+  next={...state,positions:plan.positions,operations:[...state.operations,{...trade,id:pending.id,dedupeKey:pending.id}]};
   localStorage.setItem(KEY,JSON.stringify(next));
- }catch(e){message.textContent='Enregistrement impossible. '+e.message;return;}
+ }catch(error){
+  message.textContent='Enregistrement impossible. '+error.message;
+  return;
+ }
  state.positions=next.positions;
  state.operations=next.operations;
  form.reset();
+ clearPortfolioTradePreview();
  updateTradeForm();
  document.getElementById('tradeDate').value=tradeEntryToday();
  render();
