@@ -1281,14 +1281,20 @@ function renderMasiComparison(rows){
  }
  const points=result.points,last=points.at(-1);
  const values=points.flatMap(point=>[point.pea,point.masi]);
- const low=Math.min(...values,99.5),high=Math.max(...values,100.5);
+ const min=Math.min(...values,99.5),max=Math.max(...values,100.5);
+ const targetStep=(max-min)/4;
+ const magnitude=10**Math.floor(Math.log10(targetStep));
+ const step=[1,2,2.5,5,10].map(n=>n*magnitude).find(n=>n>=targetStep);
+ const firstTick=Math.floor((min-100)/step),lastTick=Math.ceil((max-100)/step);
+ const scaleTicks=Array.from({length:lastTick-firstTick+1},(_,index)=>100+(firstTick+index)*step);
+ const low=scaleTicks[0],high=scaleTicks.at(-1);
  const from=Date.parse(points[0].date),to=Date.parse(last.date);
  const left=65,right=764,top=20,bottom=178;
  const x=date=>left+(right-left)*(Date.parse(date)-from)/(to-from);
  const y=value=>bottom-(bottom-top)*(value-low)/(high-low);
  const series=(key,color)=>'<polyline fill="none" stroke="'+color+'" stroke-width="3" points="'+points.map(point=>x(point.date)+','+y(point[key])).join(' ')+'"/>';
  const signed=value=>(value>0?'+':value<0?'−':'')+fmt(Math.abs(value));
- const grid=[low,100,high].map(value=>{
+ const grid=scaleTicks.map(value=>{
   const lineY=y(value);
   return '<line x1="'+left+'" x2="'+right+'" y1="'+lineY+'" y2="'+lineY+'" stroke="#8296a3" opacity=".55" stroke-dasharray="4 5"/>'+
    '<text x="51" y="'+(lineY+4)+'" text-anchor="end" fill="#b6cbd6" font-size="12">'+fmt(value)+'</text>';
