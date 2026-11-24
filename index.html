@@ -180,7 +180,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .div-calendar-chip-label{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .div-calendar-company{display:flex;align-items:center;gap:8px}
 .div-calendar-company-logo{position:relative;display:inline-grid;place-items:center;flex:none;width:16px;height:16px;overflow:hidden;border-radius:4px;background:#253f53;color:#edf5fb;font-size:8px;font-weight:700;line-height:1}
-.div-calendar-company-logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#102333}
+.div-calendar-company-logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#eef4f8}
 .div-calendar-company .div-calendar-company-logo{width:32px;height:32px;border-radius:7px;font-size:11px}
 </style></head>
 <body><div class="app">
@@ -1821,11 +1821,95 @@ function renderDividendCalendarSummary(events,month){
  ];
  host.innerHTML=cards.map(([name,value])=>'<div class="div-calendar-kpi"><span class="small">'+name+'</span><strong>'+value+'</strong></div>').join('');
 }
+const DIVIDEND_LOGO_ASSETS = {
+ "AFMA": "afm.svg",
+ "AFRIC INDUSTRIES": "afi.svg",
+ "AFRIC INDUSTRIES SA": "afi.svg",
+ "AFRIQUIA GAZ": "gaz.svg",
+ "AGMA": "agm.svg",
+ "AKDITAL": "akt.svg",
+ "ALLIANCES": "adi.svg",
+ "ALLIANCES DEVELOPPEMENT IMMOBILIER": "adi.svg",
+ "ALUMINIUM DU MAROC": "alm.svg",
+ "ARADEI CAPITAL": "ard.svg",
+ "ATLANTASANAD": "atl.svg",
+ "ATLANTASANAD ASSURANCE": "atl.svg",
+ "ATTIJARIWAFA BANK": "atw.svg",
+ "AUTO HALL": "ath.svg",
+ "AUTO NEJMA": "nej.svg",
+ "BALIMA": "bal.svg",
+ "BANK OF AFRICA": "boa.svg",
+ "BANQUE CENTRALE POPULAIRE": "bcp.svg",
+ "BCP": "bcp.svg",
+ "BMCI": "bci.svg",
+ "CASH PLUS": "https://casabourse.ma/wp-content/uploads/2026/05/cash-plus-logo-150x150.webp",
+ "CDM": "cdm.svg",
+ "CFG BANK": "cfg.svg",
+ "CIH": "cih.svg",
+ "CIH BANK": "cih.svg",
+ "CIMENTS DU MAROC": "cma.svg",
+ "CMGP GROUP": "cmg.svg",
+ "COLORADO": "col.svg",
+ "COMPAGNIE DE TRANSPORT AU MAROC": "ctm.svg",
+ "COSUMAR": "csr.svg",
+ "CTM": "ctm.svg",
+ "DARI COUSPATE": "dri.svg",
+ "DELTA HOLDING": "dho.svg",
+ "DISTY TECHNOLOGIES": "dyt.svg",
+ "DISWAY": "dwy.svg",
+ "ENNAKL": "https://casabourse.ma/wp-content/uploads/2025/12/nkl-1.svg",
+ "ENNAKL AUTOMOBILES": "https://casabourse.ma/wp-content/uploads/2025/12/nkl-1.svg",
+ "EQDOM": "eqd.svg",
+ "HIGHTECH PAYMENT SYSTEMS": "hps.svg",
+ "HOLCIM MAROC": "lhm.svg",
+ "HPS": "hps.svg",
+ "IMMORENTE": "https://boursenews.ma/uploads/actualites/6996bc57679e4_68aeb0e55812c_Immorente%20logo.jpg",
+ "IMMORENTE INVEST": "https://boursenews.ma/uploads/actualites/6996bc57679e4_68aeb0e55812c_Immorente%20logo.jpg",
+ "ITISSALAT AL MAGHRIB": "iam.svg",
+ "JET CONTRACTORS": "jet.svg",
+ "LABEL VIE": "lbv.svg",
+ "LAFARGEHOLCIM MAROC": "lhm.svg",
+ "MAGHREB OXYGENE": "mox.svg",
+ "MAGHREBAIL": "mab.svg",
+ "MANAGEM": "mng.svg",
+ "MAROC LEASING": "mle.svg",
+ "MAROC TELECOM": "iam.svg",
+ "MARSA MAROC": "msa.svg",
+ "MICRODATA": "mic.svg",
+ "MUTANDIS": "mut.svg",
+ "MUTANDIS SCA": "mut.svg",
+ "OULMES": "oul.svg",
+ "PROMOPHARM": "https://consonews.ma/wp-content/uploads/2021/11/promopharm-logo.jpg",
+ "RISMA": "ris.svg",
+ "SALAFIN": "slf.svg",
+ "SANLAM MAROC": "sah.svg",
+ "SGTM": "https://casabourse.ma/wp-content/uploads/2025/12/sgtm-150x130.jpg",
+ "SMI": "smi.svg",
+ "SOCIETE D EXPLOITATION DES PORTS MARSA MAROC": "msa.svg",
+ "SOCIETE DE PROMOTION PHARMACEUTIQUE DU MAGHREB": "https://consonews.ma/wp-content/uploads/2021/11/promopharm-logo.jpg",
+ "SOCIETE DE THERAPEUTIQUE MAROCAINE": "sot.svg",
+ "SOCIETE DES BOISSONS DU MAROC": "sbm.svg",
+ "SOCIETE GENERALE DES TRAVAUX DU MAROC": "https://casabourse.ma/wp-content/uploads/2025/12/sgtm-150x130.jpg",
+ "SOCIETE LES EAUX MINERALES D OULMES": "oul.svg",
+ "SOCIETE METALLURGIQUE D IMITER": "smi.svg",
+ "SOCIETE NATIONALE DE SIDERURGIE": "sid.svg",
+ "SONASID": "sid.svg",
+ "SOTHEMA": "sot.svg",
+ "TAQA MOROCCO": "tqm.svg",
+ "TGCC": "tgc.svg",
+ "TOTAL ENERGIES MAROC": "tma.svg",
+ "TOTALENERGIES MARKETING MAROC": "tma.svg",
+ "TOTALENERGIES MAROC": "tma.svg",
+ "TRAVAUX GENERAUX DE CONSTRUCTION DE CASABLANCA": "tgc.svg",
+ "VICENNE": "vcn.svg",
+ "WAFA ASSURANCE": "waa.svg"
+};
 function dividendCalendarCompanyLogo(company){
  const key=quoteKey(company);
- const immorente=key==='IMMORENTE INVEST'||key==='IMMORENTE';
- const initials=immorente?'IMO':key.split(' ').map(word=>word[0]).join('').slice(0,2)||'•';
- const logo=immorente?'<img src="https://boursenews.ma/uploads/actualites/6996bc57679e4_68aeb0e55812c_Immorente%20logo.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">':'';
+ const initials=key==='IMMORENTE INVEST'||key==='IMMORENTE'?'IMO':key.split(' ').map(word=>word[0]).join('').slice(0,2)||'•';
+ const asset=Object.hasOwn(DIVIDEND_LOGO_ASSETS,key)?DIVIDEND_LOGO_ASSETS[key]:'';
+ const url=asset&&!asset.startsWith('https://')?'https://casabourse.ma/wp-content/uploads/company-logos/'+asset:asset;
+ const logo=url?'<img src="'+esc(url)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">':'';
  return '<span class="div-calendar-company-logo" aria-hidden="true"><span>'+esc(initials)+'</span>'+logo+'</span>';
 }
 function renderDividendCalendarYear(events){
