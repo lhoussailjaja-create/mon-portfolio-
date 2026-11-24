@@ -8,12 +8,19 @@
       "paymentDate": "30/12/2026",
       "type": "Ordinary",
       "amount": "1,00 MAD",
-      "source": "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier",
+      "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-11/fr/Instructions_20261124.pdf",
       "sourceName": "Bourse de Casablanca",
       "url": "https://github.com/lhoussailjaja-create/mon-portfolio-/issues/1",
       "eventId": "18175191157bcc88934d7fc1fc4a79b994a561820e52b4b4bf8675d709f20d78",
       "firstSeenAt": "2026-11-16T13:29:32.295228+00:00",
-      "lastSeenAt": "2026-11-19T16:59:14.237664+00:00"
+      "lastSeenAt": "2026-11-19T16:59:14.237664+00:00",
+      "verifiedDistribution": {
+        "gross": "1,00 MAD",
+        "ordinary": "1,00 MAD",
+        "exceptional": null,
+        "notice": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-11/fr/Instructions_20261124.pdf",
+        "verifiedOn": "2026-11-24"
+      }
     }
   ],
   "history": [
@@ -122,12 +129,19 @@
       "paymentDate": "12/06/2026",
       "type": "Ordinary",
       "amount": "30,00 MAD",
-      "source": "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier",
+      "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-06/fr/Instructions_20260611.pdf",
       "sourceName": "Bourse de Casablanca",
       "url": "",
       "firstSeenAt": "2026-11-16T16:29:58.500828+00:00",
       "lastSeenAt": "2026-11-19T16:59:14.237664+00:00",
-      "notificationStatus": "historical_only"
+      "notificationStatus": "historical_only",
+      "verifiedDistribution": {
+        "gross": "30,00 MAD",
+        "ordinary": "30,00 MAD",
+        "exceptional": null,
+        "notice": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-06/fr/Instructions_20260611.pdf",
+        "verifiedOn": "2026-11-24"
+      }
     },
     {
       "eventId": "0046dfc9be47e0eaae0e6fa577ae56ff3933ef0fd5f79553b9d1f0f85086aca1",
@@ -150,12 +164,19 @@
       "paymentDate": "23/06/2026",
       "type": "Ordinary",
       "amount": "3,50 MAD",
-      "source": "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier",
+      "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-06/fr/Instructions_20260623.pdf",
       "sourceName": "Bourse de Casablanca",
       "url": "",
       "firstSeenAt": "2026-11-16T16:29:58.500828+00:00",
       "lastSeenAt": "2026-11-19T16:59:14.237664+00:00",
-      "notificationStatus": "historical_only"
+      "notificationStatus": "historical_only",
+      "verifiedDistribution": {
+        "gross": "3,50 MAD",
+        "ordinary": "3,50 MAD",
+        "exceptional": null,
+        "notice": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-06/fr/Instructions_20260623.pdf",
+        "verifiedOn": "2026-11-24"
+      }
     },
     {
       "eventId": "b73256c38a208dae3173498630e1fa184b5b3758e5b7eff2746a40dc6ac782e5",
@@ -163,13 +184,20 @@
       "exDate": "10/06/2026",
       "paymentDate": "22/06/2026",
       "type": "Exceptional",
-      "amount": "20,00 MAD",
-      "source": "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier",
+      "amount": "127,00 MAD",
+      "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-06/fr/Instructions_20260623.pdf",
       "sourceName": "Bourse de Casablanca",
       "url": "",
       "firstSeenAt": "2026-11-16T16:29:58.500828+00:00",
       "lastSeenAt": "2026-11-19T16:59:14.237664+00:00",
-      "notificationStatus": "historical_only"
+      "notificationStatus": "historical_only",
+      "verifiedDistribution": {
+        "gross": "127,00 MAD",
+        "ordinary": "107,00 MAD",
+        "exceptional": "20,00 MAD",
+        "notice": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-06/fr/Instructions_20260623.pdf",
+        "verifiedOn": "2026-11-24"
+      }
     },
     {
       "eventId": "ac193749d29c1faa952fde995cee09f9b8ae37912d54f8c8ea3cf10204e378dd",
@@ -233,13 +261,20 @@
       "exDate": "19/06/2026",
       "paymentDate": "30/06/2026",
       "type": "Exceptional",
-      "amount": "17,29 MAD",
-      "source": "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier",
+      "amount": "23,00 MAD",
+      "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-06/fr/Instructions_20260609.pdf",
       "sourceName": "Bourse de Casablanca",
       "url": "",
       "firstSeenAt": "2026-11-16T16:29:58.500828+00:00",
       "lastSeenAt": "2026-11-19T16:59:14.237664+00:00",
-      "notificationStatus": "historical_only"
+      "notificationStatus": "historical_only",
+      "verifiedDistribution": {
+        "gross": "23,00 MAD",
+        "ordinary": "5,71 MAD",
+        "exceptional": "17,29 MAD",
+        "notice": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-06/fr/Instructions_20260609.pdf",
+        "verifiedOn": "2026-11-24"
+      }
     },
     {
       "eventId": "96e360cc6b87d29878f5146ba92ad3815a40210142ff9469c3633f7b604ee3ca",
@@ -528,12 +563,19 @@
       "paymentDate": "24/07/2026",
       "type": "Ordinary",
       "amount": "55,00 MAD",
-      "source": "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier",
+      "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-07/fr/Instructions_20260706.pdf",
       "sourceName": "Bourse de Casablanca",
       "url": "",
       "firstSeenAt": "2026-11-16T16:29:58.500828+00:00",
       "lastSeenAt": "2026-11-19T16:59:14.237664+00:00",
-      "notificationStatus": "historical_only"
+      "notificationStatus": "historical_only",
+      "verifiedDistribution": {
+        "gross": "55,00 MAD",
+        "ordinary": "55,00 MAD",
+        "exceptional": null,
+        "notice": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-07/fr/Instructions_20260706.pdf",
+        "verifiedOn": "2026-11-24"
+      }
     },
     {
       "eventId": "97b8a7a67411a9923f6d856a826cb325a9051e322a9e4f0709c6b8fdf5822d19",
@@ -653,13 +695,20 @@
       "exDate": "22/07/2026",
       "paymentDate": "03/08/2026",
       "type": "Exceptional",
-      "amount": "1,00 MAD",
-      "source": "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier",
+      "amount": "10,00 MAD",
+      "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-07/fr/Instructions_20260716.pdf",
       "sourceName": "Bourse de Casablanca",
       "url": "",
       "firstSeenAt": "2026-11-16T16:29:58.500828+00:00",
       "lastSeenAt": "2026-11-19T16:59:14.237664+00:00",
-      "notificationStatus": "historical_only"
+      "notificationStatus": "historical_only",
+      "verifiedDistribution": {
+        "gross": "10,00 MAD",
+        "ordinary": "9,00 MAD",
+        "exceptional": "1,00 MAD",
+        "notice": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-07/fr/Instructions_20260716.pdf",
+        "verifiedOn": "2026-11-24"
+      }
     },
     {
       "eventId": "62e6d671c0f5f0f3de63500b29b63a9df5f6b16d2cf62b3956424cc61f7b37a2",
@@ -877,12 +926,19 @@
       "paymentDate": "30/12/2026",
       "type": "Ordinary",
       "amount": "1,00 MAD",
-      "source": "https://www.casablanca-bourse.com/en/emetteurs/calendrier-financier",
+      "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-11/fr/Instructions_20261124.pdf",
       "sourceName": "Bourse de Casablanca",
       "url": "https://github.com/lhoussailjaja-create/mon-portfolio-/issues/1",
       "eventId": "18175191157bcc88934d7fc1fc4a79b994a561820e52b4b4bf8675d709f20d78",
       "firstSeenAt": "2026-11-16T13:29:32.295228+00:00",
-      "lastSeenAt": "2026-11-19T16:59:14.237664+00:00"
+      "lastSeenAt": "2026-11-19T16:59:14.237664+00:00",
+      "verifiedDistribution": {
+        "gross": "1,00 MAD",
+        "ordinary": "1,00 MAD",
+        "exceptional": null,
+        "notice": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-11/fr/Instructions_20261124.pdf",
+        "verifiedOn": "2026-11-24"
+      }
     }
   ]
 }

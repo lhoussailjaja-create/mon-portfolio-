@@ -1893,8 +1893,9 @@ function renderDividendCalendar(){
  const selectedLabel=dayLabel.format(new Date(dividendCalendar.day+'T00:00:00Z'));
  const details=selected.map(({item,kind})=>{
   const amount=item.amount?'<br><small>Brut par action · '+esc(item.amount)+'</small>':'';
+  const breakdown=item.exceptionalAmount?'<br><small>Ordinaire · '+esc(item.ordinaryAmount)+' · Exceptionnel · '+esc(item.exceptionalAmount)+'</small>':'';
   const typeClass=kind==='Paiement'?'div-calendar-payment':'div-calendar-detachment';
-  return `<li><div class="div-calendar-company">${dividendCalendarCompanyLogo(item.company)}<strong>${esc(item.company)}</strong></div><span class="${typeClass}">${kind}</span>${amount} · <a href="${esc(safeMarketUrl(item.source||DIVIDEND_BVC_CALENDAR_URL))}" target="_blank" rel="noopener noreferrer">Source</a></li>`;
+  return `<li><div class="div-calendar-company">${dividendCalendarCompanyLogo(item.company)}<strong>${esc(item.company)}</strong></div><span class="${typeClass}">${kind}</span>${amount}${breakdown} · <a href="${esc(safeMarketUrl(item.source||DIVIDEND_BVC_CALENDAR_URL))}" target="_blank" rel="noopener noreferrer">Source</a></li>`;
  }).join('');
  document.getElementById('divCalendarEvents').innerHTML=`<h4>${esc(selectedLabel)}</h4>`+(details?'<ul class="div-calendar-events">'+details+'</ul>':'<p class="small">Aucun événement disponible pour cette date.</p>');
 }
@@ -1978,8 +1979,10 @@ async function fetchBvcDividendAnnouncements(){
   exDate:String(x.exDate||'').trim(),
   paymentDate:String(x.paymentDate||'').trim(),
   type:String(x.type||''),
-  amount:String(x.amount||''),
-  source:x.source||payload.source||DIVIDEND_BVC_CALENDAR_URL,
+  amount:String(x.verifiedDistribution?.gross||x.amount||''),
+  ordinaryAmount:String(x.verifiedDistribution?.ordinary||''),
+  exceptionalAmount:String(x.verifiedDistribution?.exceptional||''),
+  source:x.verifiedDistribution?.notice||x.source||payload.source||DIVIDEND_BVC_CALENDAR_URL,
   sourceName:'Bourse de Casablanca',
   url:x.url||''
  })).filter(x=>x.company&&(x.exDate||x.paymentDate));
