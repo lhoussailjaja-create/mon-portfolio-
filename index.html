@@ -139,6 +139,19 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 @media print {
  #accueil .portfolio-group-toggle, #portfolioActions { display: none; }
 }
+
+.div-calendar-controls{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
+.div-calendar-controls .btn[aria-pressed="true"]{border-color:var(--mint);color:var(--mint)}
+.div-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.div-calendar-weekday{text-align:center;color:var(--muted);font-size:.75rem}
+.div-calendar-day{display:grid;justify-items:center;align-content:center;gap:3px;min-height:42px;padding:3px 0;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--text);font:inherit;cursor:pointer}
+.div-calendar-day[aria-pressed="true"]{border-color:var(--mint);background:#55e0bd22}
+.div-calendar-day:focus-visible{outline:2px solid var(--mint);outline-offset:1px}
+.div-calendar-count{display:flex;justify-content:center;gap:4px;font-size:.68rem}
+.div-calendar-detachment{color:#75D9FF}
+.div-calendar-payment{color:var(--mint)}
+.div-calendar-events{display:grid;gap:8px;padding-inline-start:20px}
+.div-calendar-events li{overflow-wrap:anywhere}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -298,6 +311,20 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div class="section-title"><h3>Calendrier officiel · Toutes les sociétés cotées</h3><button class="btn primary" type="button" onclick="refreshMarketDividends()">↻ Actualiser les annonces</button></div>
   <p class="small">Surveillance générale de toutes les sociétés cotées, indépendamment des positions du PEA. Le bouton actualise les deux sources : alertes GitHub et calendrier financier officiel de la Bourse de Casablanca. Les annonces identiques sont regroupées pour éviter les doublons.</p>
   <p class="small" id="marketDividendStatus" aria-live="polite">Chargement des annonces…</p><p class="small"><a href="https://www.casablanca-bourse.com/fr/emetteurs/calendrier-financier" target="_blank" rel="noopener noreferrer">Site de la Bourse de Casablanca (lien externe) ↗</a></p>
+  <div class="div-calendar-controls">
+   <div class="actions" role="group" aria-label="Périmètre du calendrier">
+    <button class="btn" type="button" id="divCalendarPea" aria-pressed="false" onclick="setDividendCalendarScope('pea')">Mon PEA</button>
+    <button class="btn" type="button" id="divCalendarMarket" aria-pressed="true" onclick="setDividendCalendarScope('market')">Tout le marché</button>
+   </div>
+   <div class="actions" role="group" aria-label="Navigation par mois">
+    <button class="btn" type="button" aria-label="Mois précédent" onclick="shiftDividendCalendar(-1)">‹</button>
+    <strong id="divCalendarMonth" aria-live="polite"></strong>
+    <button class="btn" type="button" aria-label="Mois suivant" onclick="shiftDividendCalendar(1)">›</button>
+   </div>
+  </div>
+  <p class="small"><span class="div-calendar-detachment">D · Détachement</span> · <span class="div-calendar-payment">P · Paiement</span></p>
+  <div class="div-calendar-grid" id="divCalendarDays" role="group" aria-label="Jours du mois"></div>
+  <div id="divCalendarEvents" aria-live="polite"></div>
   <div class="tablewrap"><table><thead><tr><th>Société</th><th>Détachement</th><th>Paiement</th><th>Type</th><th>Brut / action</th><th>Source</th></tr></thead><tbody id="marketDividendRows"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody></table></div>
  </div>
   <div class="card" id="officialDividendHistoryPanel">
@@ -1392,6 +1419,7 @@ function renderPortfolioJournal(){
   '</tbody></table></div>';
 }
 function render(){
+ renderDividendCalendar();
  renderSnapshotManager();
  renderPortfolioJournal();
  populateDividendPositions();
@@ -1516,7 +1544,70 @@ function parseMarketDividendIssue(issue){
  if(!company||!exDate||!paymentDate||!amount)return null;
  return {id:issue.number,company,exDate,paymentDate,type,amount,source,url:issue.html_url,createdAt:issue.created_at};
 }
+const dividendCalendar = {scope:'market', day:new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Casablanca'}).format(new Date())};
+function setDividendCalendarScope(scope){
+ dividendCalendar.scope=scope;
+ renderDividendCalendar();
+}
+function shiftDividendCalendar(offset){
+ const [year,month]=dividendCalendar.day.split('-').map(Number);
+ dividendCalendar.day=new Date(Date.UTC(year,month-1+offset,1)).toISOString().slice(0,10);
+ renderDividendCalendar();
+}
+function selectDividendCalendarDay(day){
+ dividendCalendar.day=day;
+ renderDividendCalendar();
+ document.querySelector('#divCalendarDays [aria-pressed="true"]')?.focus();
+}
+function dividendCalendarEvents(){
+ const held=new Set(dividendEligiblePositions().map(position=>quoteKey(position.name)));
+ const announcements=new Map([...(state.officialDividendHistory||[]),...(state.marketDividends||[])]
+  .filter(item=>dividendCalendar.scope==='market'||held.has(quoteKey(item.company)))
+  .map(item=>[marketEventKey(item),item]));
+ const events=new Map();
+ for(const item of announcements.values()){
+  for(const [value,kind] of [[item.exDate,'Détachement'],[item.paymentDate,'Paiement']]){
+   const day=marketIsoDate(value);
+   const date=new Date(day+'T00:00:00Z');
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==day)continue;
+   if(!events.has(day))events.set(day,[]);
+   events.get(day).push({item,kind});
+  }
+ }
+ return events;
+}
+function renderDividendCalendar(){
+ const grid=document.getElementById('divCalendarDays');
+ if(!grid)return;
+ const [year,month]=dividendCalendar.day.split('-').map(Number);
+ const start=new Date(Date.UTC(year,month-1,1));
+ const dayLabel=new Intl.DateTimeFormat('fr-MA',{dateStyle:'full',timeZone:'UTC'});
+ const events=dividendCalendarEvents();
+ document.getElementById('divCalendarMonth').textContent=start.toLocaleDateString('fr-MA',{year:'numeric',month:'long',timeZone:'UTC'});
+ document.getElementById('divCalendarPea').setAttribute('aria-pressed',String(dividendCalendar.scope==='pea'));
+ document.getElementById('divCalendarMarket').setAttribute('aria-pressed',String(dividendCalendar.scope==='market'));
+ const weekdays=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(label=>'<span class="div-calendar-weekday" aria-hidden="true">'+label+'</span>').join('');
+ const emptyDays='<span aria-hidden="true"></span>'.repeat((start.getUTCDay()+6)%7);
+ const monthDays=Array.from({length:new Date(Date.UTC(year,month,0)).getUTCDate()},(_,index)=>{
+  const date=new Date(Date.UTC(year,month-1,index+1));
+  const day=date.toISOString().slice(0,10);
+  const entries=events.get(day)||[];
+  const detachments=entries.filter(event=>event.kind==='Détachement').length;
+  const payments=entries.length-detachments;
+  const summary=entries.length?' · '+detachments+' détachement(s), '+payments+' paiement(s)':' · Aucun événement';
+  return `<button class="div-calendar-day" type="button" aria-pressed="${day===dividendCalendar.day}" aria-label="${esc(dayLabel.format(date)+summary)}" onclick="selectDividendCalendarDay('${day}')"><span>${index+1}</span><span class="div-calendar-count" aria-hidden="true">${detachments?`<span class="div-calendar-detachment">D${detachments}</span>`:''}${payments?`<span class="div-calendar-payment">P${payments}</span>`:''}</span></button>`;
+ }).join('');
+ grid.innerHTML=weekdays+emptyDays+monthDays;
+ const selected=events.get(dividendCalendar.day)||[];
+ const selectedLabel=dayLabel.format(new Date(dividendCalendar.day+'T00:00:00Z'));
+ const details=selected.map(({item,kind})=>{
+  const amount=item.amount?'<br><small>Brut par action · '+esc(item.amount)+'</small>':'';
+  return `<li><strong>${esc(item.company)}</strong> · ${kind}${amount} · <a href="${esc(safeMarketUrl(item.source||DIVIDEND_BVC_CALENDAR_URL))}" target="_blank" rel="noopener noreferrer">Source</a></li>`;
+ }).join('');
+ document.getElementById('divCalendarEvents').innerHTML=`<h4>${esc(selectedLabel)}</h4>`+(details?'<ul class="div-calendar-events">'+details+'</ul>':'<p class="small">Aucun événement disponible pour cette date.</p>');
+}
 function renderMarketDividends(){
+ renderDividendCalendar();
  const rows=document.getElementById('marketDividendRows');if(!rows)return;
  const items=Array.isArray(state.marketDividends)?state.marketDividends:[];
  rows.innerHTML=items.length?items.map(x=>`<tr><td><b>${esc(x.company)}</b></td><td>${esc(x.exDate)}</td><td>${esc(x.paymentDate)}</td><td>${esc(x.type||'—')}</td><td><b>${esc(x.amount)}</b></td><td><a href="${esc(x.source||DIVIDEND_BVC_CALENDAR_URL)}" target="_blank" rel="noopener noreferrer">${esc(x.sourceName||'Bourse')}</a>${x.url?' · <a href="'+esc(x.url)+'" target="_blank" rel="noopener noreferrer">GitHub</a>':''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Aucune annonce récupérée pour le moment. Vérifiez séparément le statut des deux sources ci-dessus.</td></tr>';
