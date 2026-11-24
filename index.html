@@ -161,6 +161,8 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .masi-comparison summary{cursor:pointer;font-weight:700}
 .masi-comparison textarea{width:100%;min-height:90px}
 .masi-comparison .chart-area{margin-top:8px}
+.chart-curve .chart-snapshot-bar:focus-visible .chart-snapshot-hit,.chart-curve .chart-snapshot-bar[aria-pressed="true"] .chart-snapshot-hit{stroke:none}
+.chart-curve .chart-snapshot-bar:hover .chart-snapshot-point,.chart-curve .chart-snapshot-bar:focus-visible .chart-snapshot-point,.chart-curve .chart-snapshot-bar[aria-pressed="true"] .chart-snapshot-point{stroke:#b8f51b;stroke-width:3;vector-effect:non-scaling-stroke}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -221,6 +223,10 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <p class="small" id="snapshotManagerStatus" role="status"></p>
  </section>
  <div class="chart-controls"><div class="chart-modes" role="group" aria-label="Mode du graphique"><button class="chart-mode active" data-chart-mode="value" onclick="setChartMode('value')">Valeur</button><button class="chart-mode" data-chart-mode="performance" onclick="setChartMode('performance')">Sans dividendes</button><button class="chart-mode" data-chart-mode="withDividends" onclick="setChartMode('withDividends')">Avec dividendes</button></div>
+ <div class="chart-modes" role="group" aria-label="Présentation du graphique">
+  <button type="button" class="chart-mode active" data-chart-view="columns" aria-pressed="true" onclick="setChartView('columns')">Colonnes</button>
+  <button type="button" class="chart-mode" data-chart-view="curve" aria-pressed="false" onclick="setChartView('curve')">Courbe</button>
+ </div>
  <div class="periods" role="group" aria-label="Période"><button class="period" data-period="1D" onclick="setChartPeriod('1D')">1D</button><button class="period" data-period="1W" onclick="setChartPeriod('1W')">1W</button><button class="period active" data-period="1M" onclick="setChartPeriod('1M')">1M</button><button class="period" data-period="3M" onclick="setChartPeriod('3M')">3M</button><button class="period" data-period="1Y" onclick="setChartPeriod('1Y')">1Y</button><button class="period" data-period="YTD" onclick="setChartPeriod('YTD')">YTD</button><button class="period" data-period="ALL" onclick="setChartPeriod('ALL')">All</button></div></div>
  <div class="chart-summary"><div><span class="metric-label" id="chartMainLabel">Dernière valorisation</span><strong id="chartMainValue">14 146,55 DH</strong></div><div><span class="metric-label">Historique disponible</span><strong id="chartCount">0 snapshot</strong></div></div>
  <div id="portfolioChart" class="empty">Aucun historique enregistré. Le graphique apparaîtra après plusieurs snapshots.</div>
@@ -1019,7 +1025,16 @@ function chartPerformance(rows,dividends,withDividends){
  }
  return values;
 }
-let chartMode='value',chartPeriod='1M',selectedChartSnapshot='';
+let chartMode='value',chartPeriod='1M',chartView='columns',selectedChartSnapshot='';
+function setChartView(view){
+ chartView=view;
+ for(const button of document.querySelectorAll('[data-chart-view]')){
+  const active=button.dataset.chartView===view;
+  button.classList.toggle('active',active);
+  button.setAttribute('aria-pressed',String(active));
+ }
+ renderChart();
+}
 function showChartSnapshot(bar,row,previous){
  const panel=document.getElementById('chartSnapshotDetails');
  selectedChartSnapshot=row.date;
@@ -1145,7 +1160,7 @@ function renderChart(){
  renderMasiComparison(rows);
  const count=document.getElementById('chartCount');if(count)count.textContent=rows.length+' snapshot'+(rows.length>1?'s':'');
  const main=document.getElementById('chartMainValue'),label=document.getElementById('chartMainLabel'),foot=document.getElementById('chartFoot');
- const isValue=chartMode==='value';
+ const isValue=chartMode==='value',isCurve=chartView==='curve';
  const vals=rows.map(x=>Number(x.total));
  const plotted=isValue?vals:chartPerformance(rows,state.dividends,chartMode==='withDividends');
  if(label)label.textContent=isValue?(rows.length?'Dernière valorisation':'Valorisation de référence'):(chartMode==='withDividends'?'Résultat avec dividendes':'Résultat sans dividendes');
@@ -1163,7 +1178,7 @@ function renderChart(){
  const high=isValue?maximum+margin:Math.max(0,maximum);
  if(foot){
   if(isValue)foot.textContent='Valorisations enregistrées · Base de l’axe : '+fmt(low)+' DH.';
-  foot.textContent+=' Le pourcentage de chaque colonne correspond à la variation depuis la valorisation précédente.';
+  foot.textContent+=' Le pourcentage de chaque '+(isCurve?'point':'colonne')+' correspond à la variation depuis la valorisation précédente.';
  }
  const range=high-low||1;
  const y=v=>bottom-(v-low)/range*(bottom-top),baseline=y(isValue?low:0);
@@ -1175,8 +1190,10 @@ function renderChart(){
   '<text x="19" y="'+((top+bottom)/2)+'" text-anchor="middle" fill="#b6cbd6" font-size="12" transform="rotate(-90 19 '+((top+bottom)/2)+')">Valeur (DH)</text>'+
   '<text x="'+((left+w-right)/2)+'" y="'+(h-9)+'" text-anchor="middle" fill="#b6cbd6" font-size="12">Dates</text>';
  const historyIndex=new Map(history.map((row,index)=>[row.date,index]));
- const bars=plotted.map((value,index)=>{
-  const row=rows[index],x=offset+step*(index+.5),yv=y(value);
+ const pointX=index=>offset+step*(index+.5);
+ const curve=isCurve&&rows.length>1?'<polyline points="'+plotted.map((value,index)=>pointX(index)+','+y(value)).join(' ')+'" fill="none" stroke="#55e0bd" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>':'';
+ const marks=plotted.map((value,index)=>{
+  const row=rows[index],x=pointX(index),yv=y(value);
   const previous=isValue?history[historyIndex.get(row.date)-1]:rows[index-1];
   const difference=previous?value-(isValue?Number(previous.total):plotted[index-1]):0;
   const percent=previous?difference/Number(previous.total)*100:null;
@@ -1188,16 +1205,19 @@ function renderChart(){
   const amountY=percentLabel?labelY-14:labelY;
   return '<g class="chart-snapshot-bar" role="button" tabindex="0" aria-pressed="false" aria-label="'+esc(label)+'">'+
    '<rect class="chart-snapshot-hit" x="'+(x-step/2+2)+'" y="'+(top-22)+'" width="'+(step-4>0?step-4:step)+'" height="'+(bottom-top+53)+'" fill="transparent" rx="4"/>'+
-   '<rect x="'+(x-bw/2)+'" y="'+Math.min(yv,baseline)+'" width="'+bw+'" height="'+Math.max(1,Math.abs(baseline-yv))+'" rx="4" fill="'+color+'"><title>'+esc(label)+'</title></rect>'+
+   '<title>'+esc(label)+'</title>'+
+   (isCurve?'<circle class="chart-snapshot-point" cx="'+x+'" cy="'+yv+'" r="5" fill="'+color+'"/>':
+    '<rect x="'+(x-bw/2)+'" y="'+Math.min(yv,baseline)+'" width="'+bw+'" height="'+Math.max(1,Math.abs(baseline-yv))+'" rx="4" fill="'+color+'"/>')+
    '<text x="'+x+'" y="'+amountY+'" text-anchor="middle" fill="#edf6fa" font-size="12">'+fmt(value)+' DH</text>'+
    (percentLabel?'<text x="'+x+'" y="'+labelY+'" text-anchor="middle" fill="#edf6fa" font-size="12">'+percentLabel+'</text>':'')+
    '<text x="'+x+'" y="'+(bottom+22)+'" text-anchor="middle" fill="#b6cbd6" font-size="12">'+esc(row.date)+'</text></g>';
  }).join('');
  const delta=plotted.at(-1)-plotted[0],pct=delta/vals[0]*100,sign=delta>0?'+':delta<0?'−':'';
  const comparison=rows.length===1?'':'<text x="'+(w/2)+'" y="22" text-anchor="middle" fill="'+(delta<0?'#ff647c':'#55e0bd')+'" font-size="15">'+ (isValue?'Variation totale':'Écart') +' : '+sign+fmt(Math.abs(delta))+' DH'+(isValue?' ('+sign+fmt(Math.abs(pct))+' %)':'')+'</text>';
- el.className='chart-area';el.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" role="group" aria-label="Graphique interactif des valorisations">'+comparison+axes+bars+'</svg>';
+ el.className='chart-area'+(isCurve?' chart-curve':'');
+ el.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" role="group" aria-label="Graphique interactif des valorisations">'+comparison+axes+curve+marks+'</svg>';
  details.classList.remove('hidden');
- details.textContent='Sélectionnez une colonne pour voir le détail de la valorisation.';
+ details.textContent='Sélectionnez '+(isCurve?'un point':'une colonne')+' pour voir le détail de la valorisation.';
  el.querySelectorAll('.chart-snapshot-bar').forEach((bar,index)=>{
   const row=rows[index],previous=history[historyIndex.get(row.date)-1];
   const select=()=>showChartSnapshot(bar,row,previous);
