@@ -201,6 +201,8 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .masi-import-disclosure{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .masi-import-disclosure form{margin-top:10px}
 .masi-import-disclosure a{color:#83b5ff}
+.positions-total-card{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.positions-total-card strong{font-size:1.2rem;color:var(--mint)}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -352,7 +354,8 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="actions"><button class="btn" type="button" onclick="previewManualQuotes()">Prévisualiser</button><button class="btn primary" type="button" id="manualQuoteApply" onclick="commitManualQuotes()" disabled>Appliquer les cours</button></div>
  <p class="small" id="manualQuoteStatus" role="status"></p>
  <div id="manualQuotePreview" class="tablewrap"></div>
-</details></div><div class="card hidden" id="positionForm"><h3>Nouvelle position</h3><div class="formrow"><div class="field"><label>Valeur</label><input id="pName" placeholder="Nom de l'action ou OPCVM"></div><div class="field"><label>Catégorie</label><select id="pType"><option>Action</option><option>OPCVM</option><option>À classifier</option></select></div><div class="field"><label>Quantité</label><input id="pQty" type="number" min="0" step="0.001"></div><div class="field"><label>Cours / VL (DH)</label><input id="pPrice" type="number" min="0" step="0.01"></div><div class="field"><label>PRMP (DH)</label><input id="pCmp" type="number" min="0" step="0.01"></div><div class="field"><label>Frais d'achat (DH)</label><input id="pBuyFees" type="number" min="0" step="0.01" placeholder="Optionnel"></div><div class="field"><label>Date de mise à jour</label><input id="pUpdated" type="date"></div></div><button class="btn primary" onclick="addPosition()">Enregistrer la ligne</button></div><details class="card" id="positionsRegister">
+</details></div><div class="card hidden" id="positionForm"><h3>Nouvelle position</h3><div class="formrow"><div class="field"><label>Valeur</label><input id="pName" placeholder="Nom de l'action ou OPCVM"></div><div class="field"><label>Catégorie</label><select id="pType"><option>Action</option><option>OPCVM</option><option>À classifier</option></select></div><div class="field"><label>Quantité</label><input id="pQty" type="number" min="0" step="0.001"></div><div class="field"><label>Cours / VL (DH)</label><input id="pPrice" type="number" min="0" step="0.01"></div><div class="field"><label>PRMP (DH)</label><input id="pCmp" type="number" min="0" step="0.01"></div><div class="field"><label>Frais d'achat (DH)</label><input id="pBuyFees" type="number" min="0" step="0.01" placeholder="Optionnel"></div><div class="field"><label>Date de mise à jour</label><input id="pUpdated" type="date"></div></div><button class="btn primary" onclick="addPosition()">Enregistrer la ligne</button></div><div class="card positions-total-card"><span>Total des titres</span><strong id="positionsTotalValue">—</strong></div>
+<details class="card" id="positionsRegister">
  <summary class="btn"><span class="positions-show">Afficher les positions</span><span class="positions-hide">Masquer les positions</span></summary>
  <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>Catégorie</th><th>Quantité</th><th>Cours / VL</th><th>Valorisation</th><th>PRMP</th><th>Performance</th><th>+/- latent</th><th>Frais achat</th><th>Poids</th><th>Action</th></tr></thead><tbody id="positionRows"><tr><td colspan="11" class="empty">Les positions détaillées seront chargées depuis le relevé Titres après validation de l’importateur.</td></tr></tbody></table></div><p class="small">Les données absentes restent vides. Les OPCVM sont identifiés séparément des actions. Les lignes synchronisées conservent la valorisation et le +/- latent du relevé source.</p>
 </details></section>
@@ -942,7 +945,7 @@ function previewPdfPositions(){
  const msg=document.getElementById('pdfImportMsg'),card=document.getElementById('pdfPreviewCard');
  if(!pendingPdfPositions.length&&!pendingPdfOperations.length){card.classList.add('hidden');msg.textContent='Aucune position ni opération reconnue. Vérifiez le texte copié.';return}
  renderPdfPreview(pendingPdfPositions);
- document.getElementById('pdfPreviewSummary').textContent=`${pendingPdfPositions.length} position(s) · ${pendingPdfOperations.length} opération(s) détectée(s). ${historyOnly?'Relevé historique : aucune position ne sera ajoutée. ':''}Les doublons seront ignorés.`;
+ document.getElementById('pdfPreviewSummary').textContent=`${pendingPdfPositions.length} position(s) · ${pendingPdfOperations.length} opération(s) détectée(s). ${historyOnly?'Relevé historique : aucune position ne sera ajoutée. ':''}${pendingPdfPositions.length?'Total des titres détectés : '+fmt(pendingPdfPositions.reduce((sum,row)=>sum+portfolioPositionValue(row),0))+' DH. ':''}Les doublons seront ignorés.`;
  msg.textContent='Analyse terminée. Aucune donnée modifiée avant validation.';
 }
 
@@ -952,10 +955,12 @@ function commitPdfPositions(){
  if(!confirm(`Importer ${pos.length} position(s) et ${ops.length} opération(s) dans le PEA ? Les anciennes données seront conservées et les doublons ignorés.`))return;
  localStorage.setItem(KEY+'_beforePdfImport_'+Date.now(),JSON.stringify(state));
  let posAdded=0,posUpdated=0,opsAdded=0,opsSkipped=0;
+ const retained=[];
  const incoming=new Map(pos.map(p=>[String(p.name||'').trim().toLowerCase(),p]));
  const merged=state.positions.map(old=>{
   const k=String(old.name||'').trim().toLowerCase();
   if(incoming.has(k)){const fresh=incoming.get(k);incoming.delete(k);Object.assign(old,Object.fromEntries(Object.entries(fresh).filter(([k,v])=>v!==null&&v!=='')));if(fresh.source==='Wafa Bourse PDF Report'){delete old.marketQuoteDate;delete old.marketQuoteSource;delete old.marketUpdatedAt;}posUpdated++}
+  else if(pos.length)retained.push(old.name);
   return old;
  });
  for(const p of incoming.values()){merged.push(p);posAdded++}
@@ -965,7 +970,9 @@ function commitPdfPositions(){
  opsAdded=journal.added;
  opsSkipped=journal.skipped;
  save();
- const summary=`PDF importé : ${posAdded} position(s) ajoutée(s), ${posUpdated} mise(s) à jour, ${opsAdded} opération(s) ajoutée(s), ${journal.reconciled} rapprochée(s), ${opsSkipped} doublon(s) ignoré(s). Historique conservé.`;
+ const titlesSummary=pos.length?' Total des titres : '+fmt(merged.reduce((sum,row)=>sum+portfolioPositionValue(row),0))+' DH.':'';
+ const retainedSummary=retained.length?' Positions absentes du PDF et conservées : '+retained.join(', ')+'.':'';
+ const summary=`PDF importé : ${posAdded} position(s) ajoutée(s), ${posUpdated} mise(s) à jour, ${opsAdded} opération(s) ajoutée(s), ${journal.reconciled} rapprochée(s), ${opsSkipped} doublon(s) ignoré(s). Historique conservé.`+titlesSummary+retainedSummary;
  document.getElementById('pdfImportMsg').textContent=summary;
  document.getElementById('pdfPreviewCard').classList.add('hidden');
  pendingPdfPositions=[];pendingPdfOperations=[];
@@ -1977,7 +1984,8 @@ function render(){
  const tbody=document.getElementById('positionRows');
  const syncNotice=document.getElementById('wafaSyncStatus');
  if(syncNotice&&state.importIssues&&state.importIssues.length){const n=state.importIssues.length;syncNotice.innerHTML='<p class="small">Correction automatique : '+n+' ancienne(s) ligne(s) numérique(s) sans nom de valeur ont été retirées de la liste active et archivées dans les données locales. Aucune opération, dividende ou position valide n’a été supprimé.</p>';}
- const totalPositions=state.positions.reduce((s,p)=>s+(p.importedValue!==null&&p.importedValue!==undefined&&Number.isFinite(Number(p.importedValue))?Number(p.importedValue):(Number(p.qty)||0)*(Number(p.price)||0)),0);
+ const totalPositions=state.positions.reduce((sum,position)=>sum+portfolioPositionValue(position),0);
+ document.getElementById('positionsTotalValue').textContent=state.positions.length?fmt(totalPositions)+' DH':'—';
  if(!state.positions.length){tbody.innerHTML='<tr><td colspan="11" class="empty">Aucune position détaillée enregistrée dans cette nouvelle base.</td></tr>'}else{tbody.innerHTML=state.positions.map(p=>{const val=p.importedValue!==null&&p.importedValue!==undefined&&Number.isFinite(Number(p.importedValue))?Number(p.importedValue):(p.price===null||p.price===undefined?'':p.qty*p.price),pl=p.sourcePl!==null&&p.sourcePl!==undefined&&Number.isFinite(Number(p.sourcePl))?Number(p.sourcePl):(p.cmp===null||p.cmp===undefined||p.price===null?'':(p.price-p.cmp)*p.qty-(Number(p.buyFees)||0)),weight=val===''||totalPositions===0?'':(val/totalPositions*100);return `<tr><td><b>${esc(p.name)}</b></td><td><span class="tag">${esc(p.type)}</span></td><td>${fmt(p.qty,3)}</td><td>${p.price===null||p.price===undefined?'—':fmt(p.price)}</td><td>${val===''?'—':fmt(val)+' DH'}</td><td>${p.cmp===null||p.cmp===undefined?'—':fmt(p.cmp)}</td><td class="${p.sourcePerf===null||p.sourcePerf===undefined?'':Number(p.sourcePerf)>=0?'positive':'negative'}">${p.sourcePerf===null||p.sourcePerf===undefined?'—':fmt(p.sourcePerf)+'%'}</td><td class="${pl===''?'':pl>=0?'positive':'negative'}">${pl===''?'—':fmt(pl)+' DH'}</td><td>${p.buyFees===null||p.buyFees===undefined?'—':fmt(p.buyFees)+' DH'}</td><td>${p.sourceWeight!==null&&p.sourceWeight!==undefined?fmt(p.sourceWeight)+'%':weight===''?'—':fmt(weight)+'%'}</td><td><button class="btn danger" onclick="deletePosition('${p.id}')">Supprimer</button></td></tr>`}).join('')}
  const confirmedDividends=state.dividends.filter(dividendIsConfirmed);const received=confirmedDividends.filter(d=>d.status==='Perçu').reduce((s,d)=>s+(Number(d.amount)||0),0),forecast=confirmedDividends.filter(d=>d.status==='Prévisionnel').reduce((s,d)=>s+(Number(d.amount)||0),0);
  renderDashboardMetrics(received);
