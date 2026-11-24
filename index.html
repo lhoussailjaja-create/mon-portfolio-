@@ -176,6 +176,12 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .masi-comparison .chart-area{margin-top:8px}
 .chart-curve .chart-snapshot-bar:focus-visible .chart-snapshot-hit,.chart-curve .chart-snapshot-bar[aria-pressed="true"] .chart-snapshot-hit{stroke:none}
 .chart-curve .chart-snapshot-bar:hover .chart-snapshot-point,.chart-curve .chart-snapshot-bar:focus-visible .chart-snapshot-point,.chart-curve .chart-snapshot-bar[aria-pressed="true"] .chart-snapshot-point{stroke:#b8f51b;stroke-width:3;vector-effect:non-scaling-stroke}
+.div-calendar-chip{display:flex;align-items:center;gap:4px}
+.div-calendar-chip-label{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.div-calendar-company{display:flex;align-items:center;gap:8px}
+.div-calendar-company-logo{position:relative;display:inline-grid;place-items:center;flex:none;width:16px;height:16px;overflow:hidden;border-radius:4px;background:#253f53;color:#edf5fb;font-size:8px;font-weight:700;line-height:1}
+.div-calendar-company-logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#102333}
+.div-calendar-company .div-calendar-company-logo{width:32px;height:32px;border-radius:7px;font-size:11px}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -1806,6 +1812,13 @@ function renderDividendCalendarSummary(events,month){
  ];
  host.innerHTML=cards.map(([name,value])=>'<div class="div-calendar-kpi"><span class="small">'+name+'</span><strong>'+value+'</strong></div>').join('');
 }
+function dividendCalendarCompanyLogo(company){
+ const key=quoteKey(company);
+ const immorente=key==='IMMORENTE INVEST'||key==='IMMORENTE';
+ const initials=immorente?'IMO':key.split(' ').map(word=>word[0]).join('').slice(0,2)||'•';
+ const logo=immorente?'<img src="https://boursenews.ma/uploads/actualites/6996bc57679e4_68aeb0e55812c_Immorente%20logo.jpg" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">':'';
+ return '<span class="div-calendar-company-logo" aria-hidden="true"><span>'+esc(initials)+'</span>'+logo+'</span>';
+}
 function renderDividendCalendar(){
  const grid=document.getElementById('divCalendarDays');
  if(!grid)return;
@@ -1830,7 +1843,7 @@ function renderDividendCalendar(){
   const chips=entries.slice(0,2).map(({item,kind})=>{
    const payment=kind==='Paiement';
    const label=(payment?'P · ':'D · ')+item.company;
-   return `<span class="div-calendar-chip ${payment?'div-calendar-payment':'div-calendar-detachment'}" title="${esc(label)}">${esc(label)}</span>`;
+   return `<span class="div-calendar-chip ${payment?'div-calendar-payment':'div-calendar-detachment'}" title="${esc(label)}">${dividendCalendarCompanyLogo(item.company)}<span class="div-calendar-chip-label">${esc(label)}</span></span>`;
   }).join('');
   const more=entries.length>2?`<small class="div-calendar-more">+${entries.length-2}</small>`:'';
   const current=day===today?' aria-current="date"':'';
@@ -1842,7 +1855,7 @@ function renderDividendCalendar(){
  const details=selected.map(({item,kind})=>{
   const amount=item.amount?'<br><small>Brut par action · '+esc(item.amount)+'</small>':'';
   const typeClass=kind==='Paiement'?'div-calendar-payment':'div-calendar-detachment';
-  return `<li><strong>${esc(item.company)}</strong><span class="${typeClass}">${kind}</span>${amount} · <a href="${esc(safeMarketUrl(item.source||DIVIDEND_BVC_CALENDAR_URL))}" target="_blank" rel="noopener noreferrer">Source</a></li>`;
+  return `<li><div class="div-calendar-company">${dividendCalendarCompanyLogo(item.company)}<strong>${esc(item.company)}</strong></div><span class="${typeClass}">${kind}</span>${amount} · <a href="${esc(safeMarketUrl(item.source||DIVIDEND_BVC_CALENDAR_URL))}" target="_blank" rel="noopener noreferrer">Source</a></li>`;
  }).join('');
  document.getElementById('divCalendarEvents').innerHTML=`<h4>${esc(selectedLabel)}</h4>`+(details?'<ul class="div-calendar-events">'+details+'</ul>':'<p class="small">Aucun événement disponible pour cette date.</p>');
 }
