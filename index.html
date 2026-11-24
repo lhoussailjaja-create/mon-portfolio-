@@ -187,6 +187,13 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 #portfolioMasiPanel a{color:#83b5ff}
 #portfolioMasiPanel .card-title-row{flex-wrap:wrap}
 #portfolioMasiPanel .actions{align-items:center}
+.masi-date-select{max-width:100%;margin-inline-start:6px;padding:6px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--text)}
+.masi-time-svg{width:100%;max-height:320px}
+.masi-pea{color:#55e0bd}.masi-index{color:#83b5ff}
+.masi-point-button{cursor:pointer}
+.masi-point-button:hover .masi-point-target,.masi-point-button:focus-visible .masi-point-target,.masi-point-button[aria-pressed="true"] .masi-point-target{stroke:#b8f51b;stroke-width:1;stroke-dasharray:4 3}
+.masi-selection{margin:8px 0 0}
+.masi-selection a{color:#83b5ff}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -1151,6 +1158,14 @@ function masiSessionDate(value){
  if(day===0||day===6)date.setUTCDate(date.getUTCDate()-(day===0?2:1));
  return date.toISOString().slice(0,10);
 }
+const PORTFOLIO_MASI_VERIFIED_CLOSES = {
+ '2026-11-13':{value:17348.47,source:'https://medias24.com/2026/11/13/bourse-de-casablanca-le-masi-termine-la-semaine-en-baisse-de-046-a-17-34847-points-1791036'},
+ '2026-11-17':{value:17234.80,source:'https://www.casablanca-bourse.com/sites/default/files/editionstatistique/2026-11/fr/resume_seance_20261117.pdf'},
+ '2026-11-20':{value:16974.44,source:'https://mail.boursenews.ma/article/marches/bourse-de-casablanca-cloture-du-20-novembre-2026'},
+ '2026-11-23':{value:16882.60,source:'https://www.casablanca-bourse.com/sites/default/files/editionstatistique/2026-11/en/resume_seance_20261123.pdf'},
+ '2026-11-24':{value:16764.82,source:'https://medias24.com/2026/11/24/bourse-de-casablanca-le-masi-recule-de-07-ce-24-novembre-1794658/'}
+};
+let selectedMasiComparisonDate='';
 function portfolioMasiSeries(rows,dividends,closes){
  const adjusted=chartPerformance(rows,dividends,false);
  const sessions=rows.map(row=>masiSessionDate(row.date));
@@ -1163,7 +1178,8 @@ function portfolioMasiSeries(rows,dividends,closes){
    const gain=adjusted[index]-adjusted[index-1];
    pea*=1+gain/Number(rows[index-1].total);
   }
-  return {date:row.date,pea,masi:100*closes[sessions[index]]/base};
+  const session=sessions[index],close=closes[session];
+  return {date:row.date,pea,masi:100*close/base,session,close};
  });
  return {points,missing,needsFlows:false};
 }
@@ -1174,7 +1190,8 @@ function renderMasiComparison(rows){
   host.textContent='Deux valorisations datées sont nécessaires sur la période choisie.';
   return;
  }
- const result=portfolioMasiSeries(rows,state.dividends,state.masiCloses||{});
+ const verified=Object.fromEntries(Object.entries(PORTFOLIO_MASI_VERIFIED_CLOSES).map(([date,row])=>[date,row.value]));
+ const result=portfolioMasiSeries(rows,state.dividends,{...verified,...state.masiCloses});
  const formatDate=date=>date.split('-').reverse().join('/');
  if(!result.points){
   const messages=[];
@@ -1187,18 +1204,59 @@ function renderMasiComparison(rows){
  const values=points.flatMap(point=>[point.pea,point.masi]);
  const low=Math.min(...values,99.5),high=Math.max(...values,100.5);
  const from=Date.parse(points[0].date),to=Date.parse(last.date);
- const x=date=>65+700*(Date.parse(date)-from)/(to-from);
- const y=value=>163-140*(value-low)/(high-low);
+ const left=65,right=764,top=20,bottom=178;
+ const x=date=>left+(right-left)*(Date.parse(date)-from)/(to-from);
+ const y=value=>bottom-(bottom-top)*(value-low)/(high-low);
  const series=(key,color)=>'<polyline fill="none" stroke="'+color+'" stroke-width="3" points="'+points.map(point=>x(point.date)+','+y(point[key])).join(' ')+'"/>';
  const signed=value=>(value>0?'+':value<0?'−':'')+fmt(Math.abs(value));
- host.innerHTML='<p><strong style="color:#55e0bd">PEA '+signed(last.pea-100)+' %</strong> · <strong style="color:#83b5ff">MASI '+signed(last.masi-100)+' %</strong> · Écart '+signed(last.pea-last.masi)+' points de pourcentage</p>'+
-  '<div class="chart-area"><svg viewBox="0 0 800 200" role="img" aria-label="PEA et MASI en base 100">'+
-  '<line x1="65" x2="765" y1="'+y(100)+'" y2="'+y(100)+'" stroke="#8296a3" stroke-dasharray="4 5"/>'+
-  '<text x="51" y="'+(y(100)+4)+'" text-anchor="end" fill="#b6cbd6" font-size="13">100</text>'+
-  series('pea','#55e0bd')+series('masi','#83b5ff')+
-  '<text x="65" y="188" fill="#b6cbd6" font-size="13">'+formatDate(points[0].date)+'</text>'+
-  '<text x="765" y="188" text-anchor="end" fill="#b6cbd6" font-size="13">'+formatDate(last.date)+'</text></svg></div>'+
-  '<p class="small">Clôture du vendredi pour un snapshot de week-end.</p>';
+ const grid=[low,100,high].map(value=>{
+  const lineY=y(value);
+  return '<line x1="'+left+'" x2="'+right+'" y1="'+lineY+'" y2="'+lineY+'" stroke="#8296a3" opacity=".55" stroke-dasharray="4 5"/>'+
+   '<text x="51" y="'+(lineY+4)+'" text-anchor="end" fill="#b6cbd6" font-size="12">'+fmt(value)+'</text>';
+ }).join('');
+ const ticks=points.filter((point,index)=>index===0||index===points.length-1||
+  (index%Math.ceil(points.length/5)===0&&x(point.date)-left>65&&right-x(point.date)>65))
+  .reduce((shown,point)=>{
+   if(!shown.length||point===last||x(point.date)-x(shown.at(-1).date)>80)shown.push(point);
+   return shown;
+  },[]);
+ const dateAxis=ticks.map(point=>'<text x="'+x(point.date)+'" y="202" text-anchor="middle" fill="#b6cbd6" font-size="12">'+formatDate(point.date)+'</text>').join('');
+ const marks=points.map((point,index)=>{
+  const cx=x(point.date),peaY=y(point.pea),masiY=y(point.masi);
+  const leftEdge=index?(cx+x(points[index-1].date))/2:cx-14;
+  const rightEdge=index<points.length-1?(cx+x(points[index+1].date))/2:cx+14;
+  const label=formatDate(point.date)+' · PEA '+signed(point.pea-100)+' % · MASI '+signed(point.masi-100)+' %';
+  return '<g class="masi-point-button" data-masi-point="'+index+'" role="button" tabindex="0" aria-pressed="false" aria-label="'+esc(label)+'">'+
+   '<title>'+esc(label)+'</title><rect class="masi-point-target" x="'+leftEdge+'" y="8" width="'+(rightEdge-leftEdge)+'" height="177" fill="transparent" rx="3"/>'+
+   '<circle cx="'+cx+'" cy="'+peaY+'" r="4" fill="#55e0bd"/><circle cx="'+cx+'" cy="'+masiY+'" r="4" fill="#83b5ff"/>'+
+   '</g>';
+ }).join('');
+ host.innerHTML='<p><strong class="masi-pea">PEA '+signed(last.pea-100)+' %</strong> · <strong class="masi-index">MASI '+signed(last.masi-100)+' %</strong> · Écart '+signed(last.pea-last.masi)+' points de pourcentage</p>'+
+  '<div class="chart-area"><svg class="masi-time-svg" viewBox="0 0 800 220" role="group" aria-label="Évolution du PEA et du MASI par date, base 100">'+
+   grid+series('pea','#55e0bd')+series('masi','#83b5ff')+dateAxis+marks+'</svg></div>'+
+  '<label for="masiComparisonDate">Date du détail</label><select id="masiComparisonDate" class="masi-date-select">'+
+   points.map((point,index)=>'<option value="'+index+'">'+formatDate(point.date)+'</option>').join('')+'</select>'+
+  '<p class="small masi-selection" id="masiComparisonSelection" role="status"></p>';
+ const picker=host.querySelector('#masiComparisonDate'),detail=host.querySelector('#masiComparisonSelection');
+ const buttons=[...host.querySelectorAll('[data-masi-point]')];
+ const select=index=>{
+  const point=points[index];
+  selectedMasiComparisonDate=point.date;
+  picker.value=String(index);
+  buttons.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===index)));
+  const source=PORTFOLIO_MASI_VERIFIED_CLOSES[point.session];
+  const provenance=source?.value===point.close?' · <a href="'+esc(source.source)+'" target="_blank" rel="noopener noreferrer">Source de la clôture</a>':'';
+  detail.innerHTML='<strong>'+formatDate(point.date)+'</strong> · PEA '+signed(point.pea-100)+' % · MASI '+signed(point.masi-100)+' % · Clôture MASI du '+formatDate(point.session)+' : '+fmt(point.close)+' points'+provenance;
+ };
+ picker.addEventListener('change',()=>select(Number(picker.value)));
+ buttons.forEach((button,index)=>{
+  button.addEventListener('click',()=>select(index));
+  button.addEventListener('keydown',event=>{
+   if(event.key==='Enter'||event.key===' '){event.preventDefault();select(index);}
+  });
+ });
+ const selected=points.findIndex(point=>point.date===selectedMasiComparisonDate);
+ select(selected>=0?selected:points.length-1);
 }
 function renderChart(){
  const el=document.getElementById('portfolioChart');if(!el)return;
