@@ -705,6 +705,18 @@ function pdfTextItemsToLines(items){
  }).filter(Boolean).join('\n');
 }
 
+function parseWafaCompactHistoryRow(text,continuation){
+ // In this clipboard layout the quantity follows the six monetary columns.
+ const money='(-?\\d+(?:[ \\u00a0\\u202f]\\d{3})*[.,]\\d{2})';
+ const quantity='(\\d+(?:[.,]\\d+)?)';
+ const pattern=new RegExp('^(.+?)\\s+'+money+'(?:\\s+|(?=-))'+Array(5).fill(money).join('\\s+')+'\\s+'+quantity+'$');
+ const direct=text.match(pattern);
+ const wrapped=!direct&&continuation&&text&&!/\d[.,]\d/.test(text)?(text+' '+continuation).match(pattern):null;
+ const row=direct||wrapped;
+ if(!row)return null;
+ const [price,net,commCourt,commRL,commBVC,tva,qty]=row.slice(2).map(pdfNum);
+ return {name:direct?row[1]:text,nums:[qty,price,net,commCourt,commRL,commBVC,tva]};
+}
 function parseWafaHistoryText(raw,fileName){
  const lines=String(raw||'').replace(/\r/g,'').split('\n').map(x=>x.trim()).filter(Boolean);
  const dateRe=/^(\d{2}\/\d{2}\/\d{4})\s+(ACHAT OPCVM|Achat OPCVM|ACHAT|VENTE|Credit|Debit)\b/i;
@@ -716,17 +728,21 @@ function parseWafaHistoryText(raw,fileName){
   const date=m[1].split('/').reverse().join('-'),op=m[2],rest=lines[i].slice(m[0].length).trim();
   const cells=rest.split(/\s{2,}/).map(x=>x.trim()).filter(Boolean);
   const firstNumeric=cells.findIndex(x=>/^-?[\d\s\u00a0]+(?:[.,]\d+)?$/.test(x)&&pdfNum(x)!==null);
-  if(firstNumeric<0||cells.length<firstNumeric+3)continue;
-  const qty=pdfNum(cells[firstNumeric]),price=pdfNum(cells[firstNumeric+1]),net=pdfNum(cells[firstNumeric+2]);
+  const structured=firstNumeric>=0?cells.slice(firstNumeric).map(pdfNum):[];
+  const following=lines[i+1];
+  const compact=structured.length>=3&&structured.slice(0,3).every(value=>value!==null)
+   ?null
+   :parseWafaCompactHistoryRow(rest,following&&!dateRe.test(following)?following:'');
+  const nums=compact?compact.nums:structured;
+  if(nums.length<3)continue;
+  const [qty,price,net]=nums;
   if(qty===null||price===null||net===null)continue;
-  const inlineName=cells.slice(0,firstNumeric).join(' ').trim();
+  const inlineName=compact?compact.name:cells.slice(0,firstNumeric).join(' ').trim();
   let prior='';
   if(!inlineName&&i>0&&!dateRe.test(lines[i-1])&&!/^(date|op.ration|valeur|historique|lieu|client|compte|d.positaire|avertissement)/i.test(lines[i-1])){
    prior=lines[i-1].replace(/\s{2,}/g,' ').trim();
   }
-  let name=[prior,inlineName].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
-  if(!name)name=op;
-  const nums=cells.slice(firstNumeric).map(pdfNum);
+  const name=[prior,inlineName].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()||op;
   const commCourt=nums[3]??0,commRL=nums[4]??0,commBVC=nums[5]??0,tva=nums[6]??0;
   const gross=Math.round(Math.abs(qty*price)*100)/100;
   const fee=/vente/i.test(op)?Math.max(0,gross-net):(net<0?Math.max(0,Math.abs(net)-gross):0);
