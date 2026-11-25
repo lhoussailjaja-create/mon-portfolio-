@@ -582,7 +582,7 @@ function parseWafaReportItems(items){
   const raw=cells[4].join(''),name=known.find(n=>key(n)===key(raw))||raw.trim();
   const nums=cells.slice(5,12).map(c=>{const t=c.join('').replace(/\s/g,'').replace(',','.');return /^-?\d+(?:\.\d+)?$/.test(t)?Number(t):NaN;});
   const [qty,price,value,cmp,perf,pl,weight]=nums;
-  if(!name||!/[a-z]/i.test(name)||nums.some(n=>!Number.isFinite(n))||qty<=0||price<=0||value<=0||cmp<0||Math.abs(qty*price-value)>Math.max(.05,value*.0001)||weight<0||weight>100)throw Error('Ligne du rapport Wafa invalide : '+name+'. Aucune importation effectuée.');
+  if(!name||!/[a-z]/i.test(name)||nums.some(n=>!Number.isFinite(n))||qty<=0||price<0||value<0||cmp<0||Math.abs(qty*price-value)>Math.max(.05,value*.0001)||weight<0||weight>100)throw Error('Ligne du rapport Wafa invalide : '+name+'. Aucune importation effectuée.');
   rows.push({id:'wafa_report_'+key(name),name,type:inferPdfType(name),qty,price,importedValue:value,cmp,sourcePerf:perf,sourcePl:pl,sourceWeight:weight,buyFees:null,source:'Wafa Bourse PDF Report',sourceDate:null,marketQuoteDate:null,marketQuoteSource:null,marketUpdatedAt:null});
  };
  for(const item of items.slice(start)){
@@ -817,17 +817,28 @@ function pdfNum(v){if(v===null||v===undefined)return null;let x=String(v).trim()
 function inferPdfType(name){
  const label=quoteKey(name||'');
  if(/OPCVM|FUND|MOUCHARAKA|ATTIJARI ACTIONS|LOW VOLATILITY FACTOR/.test(label))return 'OPCVM';
- if(label==='BCP'||label==='BANQUE CENTRALE POPULAIRE')return 'Action';
+ if(label==='BCP'||label==='BANQUE CENTRALE POPULAIRE'||/^LAPROPHAN(?: S A| SA)?$/.test(label))return 'Action';
  if(/AKDITAL|ITISSALAT|IAM|MARSA MAROC|TOTALENERGIES|SODEP|CIH|S2M/.test(label))return 'Action';
  return 'À classifier';
 }
-function parsePdfPositionLine(line){let cells=[];if(line.includes('\t'))cells=line.split(/\t+/).map(x=>x.trim()).filter(Boolean);if(cells.length<8){const num='(-?\\d+(?:[ \\u00a0]\\d{3})*(?:[.,]\\d+)?%?)';const re=new RegExp('^(.+?)\s+'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s{2,}'+num+'\\s*$');const m=line.trim().match(re);if(m)cells=[m[1],...m.slice(2)];}
+function parsePdfPositionLine(line){
+ let cells=line.includes('\t')?line.split(/\t+/).map(x=>x.trim()).filter(Boolean):[];
+ if(cells.length<8){
+  const number='(-?\\d+(?:[ \\u00a0]\\d{3})*(?:[.,]\\d+)?%?)';
+  const decimal='(-?\\d+(?:[ \\u00a0]\\d{3})*[.,]\\d+)';
+  const quantity='(\\d+(?:[.,]\\d+)?)';
+  const percentage='(-?\\d+(?:[.,]\\d+)?%?)';
+  const separated=new RegExp('^(.+?)\\s{2,}'+Array(7).fill(number).join('\\s{2,}')+'$');
+  const compact=new RegExp('^(.+?)\\s+'+[quantity,decimal,decimal,decimal,percentage,decimal,percentage].join('\\s+')+'$');
+  const match=line.trim().match(separated)||line.trim().match(compact);
+  if(match)cells=match.slice(1);
+ }
  if(cells.length<8)return null;
  // The source PDF column order is: Valeur, Quantité, Cours/VL, Montant, PRMP, Perf., +/- Values latentes, Poids.
  const name=String(cells[0]).trim();if(!name||/^(valeur|totaux?|total)$/i.test(name))return null;
  const nums=cells.slice(1,8);if(nums.length!==7)return null;
  const qty=pdfNum(nums[0]),price=pdfNum(nums[1]),value=pdfNum(nums[2]),cmp=pdfNum(nums[3]),perf=pdfNum(nums[4]),pl=pdfNum(nums[5]),weight=pdfNum(nums[6]);
- if(qty===null||qty<=0||price===null||value===null||value<=0)return null;
+ if(qty===null||qty<=0||price===null||price<0||value===null||value<0)return null;
  return {id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp,sourcePl:pl,sourcePerf:perf,sourceWeight:weight,buyFees:null,source:'Wafa Bourse PDF - Portefeuille titres',sourceDate:(document.getElementById('pdfPaste').value.match(/(?:Casablanca,?\s+le\s+)?(\d{1,2}\s+[a-zéû]+\.?\s+\d{4})/i)||[])[1]||null};
 }
 function parsePdfCopiedText(raw){
@@ -850,7 +861,7 @@ function parsePdfCopiedText(raw){
  const makeMapped=(cells,map)=>{
   const name=String(cells[map.name]||'').trim();if(!name||/^(valeur|totaux?|total)$/i.test(name))return null;
   const qty=get(cells,map,'qty'),price=get(cells,map,'price'),value=get(cells,map,'value');
-  if(qty===null||qty<=0||price===null||value===null||value<=0)return null;
+  if(qty===null||qty<=0||price===null||price<0||value===null||value<0)return null;
   return {id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp:get(cells,map,'cmp'),sourcePl:get(cells,map,'pl'),sourcePerf:get(cells,map,'perf'),sourceWeight:get(cells,map,'weight'),buyFees:null,source:'Wafa Bourse PDF copier-coller',sourceDate:(raw.match(/(?:Casablanca,?\s+le\s+)?(\d{1,2}\s+[a-zéû]+\.?\s+\d{4})/i)||[])[1]||null};
  };
  // 1) Structured tabular copy: derive field positions from the column headings.
@@ -870,7 +881,7 @@ function parsePdfCopiedText(raw){
  if(headerAt>0){
   const names=lines.slice(0,headerAt).filter(line=>/[A-Za-zÀ-ÿ]/.test(line)&&!/^totaux?$/i.test(line));
   const dataLines=lines.slice(headerAt+1);
-  const decimalRE=/-?\d+(?:[ \u00a0]\d{3})*[.,]\d+%?/g;
+  const decimalRE=/-?\d+(?:[ \u00a0]\d{3})*(?:[.,]\d+%?|%)/g;
   const numericTokens=line=>{
    const text=String(line||'').trim();
    if(!text)return null;
@@ -906,7 +917,7 @@ function parsePdfCopiedText(raw){
   for(let i=0;i<count;i++){
    const n=numericRows[i],a=n.values;
    const qty=pdfNum(a[0]),price=pdfNum(a[1]),value=pdfNum(a[2]),cmp=pdfNum(a[3]),perf=pdfNum(a[4]),pl=pdfNum(a[5]),weight=pdfNum(n.weight);
-   if(qty===null||qty<=0||price===null||value===null||value<=0)continue;
+   if(qty===null||qty<=0||price===null||price<0||value===null||value<0)continue;
    const name=names[i];
    out.push({id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp,sourcePl:pl,sourcePerf:perf,sourceWeight:weight,buyFees:null,source:'Wafa Bourse PDF copier-coller',sourceDate:(raw.match(/(?:Casablanca,?\s+le\s+)?(\d{1,2}\s+[a-zéû]+\.?\s+\d{4})/i)||[])[1]||null});
   }
@@ -921,7 +932,7 @@ function parsePdfCopiedText(raw){
  const numericTokens=line=>{const found=[...line.matchAll(tokenRE)];const residue=line.replace(tokenRE,'').replace(/[\s|;:·]/g,'');return residue===''?found.map(m=>m[0].trim()):null};
  const meta=s=>/^(valeur|quantit[eé]|cours|cours\/vl|montant|prmp|perf\.?|poids|totaux?|total|portefeuille titres|lieu,?\s*date|client|compte titres|compte esp[eè]ces|d[eé]positaire)$/i.test(s)||/values?\s+latentes|latentes\s+poids|quantit[eé].*cours|cours.*montant/i.test(s);
  let pendingName=null, nums=[];
- const flush=()=>{if(pendingName&&nums.length>=7){const [q,price,value,cmp,perf,pl,weight]=nums;const qty=pdfNum(q),px=pdfNum(price),v=pdfNum(value);if(qty>0&&px!==null&&v>0)out.push({id:'pdf_'+pendingName.toLowerCase().replace(/[^a-z0-9]+/g,'_'),name:pendingName,type:inferPdfType(pendingName),qty,price:px,importedValue:v,cmp:pdfNum(cmp),sourcePerf:pdfNum(perf),sourcePl:pdfNum(pl),sourceWeight:pdfNum(weight),buyFees:null,source:'Wafa Bourse PDF copier-coller'});}pendingName=null;nums=[]};
+ const flush=()=>{if(pendingName&&nums.length>=7){const [q,price,value,cmp,perf,pl,weight]=nums;const qty=pdfNum(q),px=pdfNum(price),v=pdfNum(value);if(qty>0&&px!==null&&px>=0&&v!==null&&v>=0)out.push({id:'pdf_'+pendingName.toLowerCase().replace(/[^a-z0-9]+/g,'_'),name:pendingName,type:inferPdfType(pendingName),qty,price:px,importedValue:v,cmp:pdfNum(cmp),sourcePerf:pdfNum(perf),sourcePl:pdfNum(pl),sourceWeight:pdfNum(weight),buyFees:null,source:'Wafa Bourse PDF copier-coller'});}pendingName=null;nums=[]};
  for(const line of lines){if(meta(line))continue;const t=numericTokens(line);if(t){if(pendingName){nums.push(...t);if(nums.length>=7)flush()}continue}if(/[A-Za-zÀ-ÿ]/.test(line)){flush();pendingName=line}}
  flush();return dedupePdfRows(out);
 }
