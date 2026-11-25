@@ -357,7 +357,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 </details></div><div class="card hidden" id="positionForm"><h3>Nouvelle position</h3><div class="formrow"><div class="field"><label>Valeur</label><input id="pName" placeholder="Nom de l'action ou OPCVM"></div><div class="field"><label>Catégorie</label><select id="pType"><option>Action</option><option>OPCVM</option><option>À classifier</option></select></div><div class="field"><label>Quantité</label><input id="pQty" type="number" min="0" step="0.001"></div><div class="field"><label>Cours / VL (DH)</label><input id="pPrice" type="number" min="0" step="0.01"></div><div class="field"><label>PRMP (DH)</label><input id="pCmp" type="number" min="0" step="0.01"></div><div class="field"><label>Frais d'achat (DH)</label><input id="pBuyFees" type="number" min="0" step="0.01" placeholder="Optionnel"></div><div class="field"><label>Date de mise à jour</label><input id="pUpdated" type="date"></div></div><button class="btn primary" onclick="addPosition()">Enregistrer la ligne</button></div><div class="card positions-total-card"><span>Total des titres</span><strong id="positionsTotalValue">—</strong></div>
 <details class="card" id="positionsRegister">
  <summary class="btn"><span class="positions-show">Afficher les positions</span><span class="positions-hide">Masquer les positions</span></summary>
- <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>Catégorie</th><th>Quantité</th><th>Cours / VL</th><th>Valorisation</th><th>PRMP</th><th>Performance</th><th>+/- latent</th><th>Frais achat</th><th>Poids</th><th>Action</th></tr></thead><tbody id="positionRows"><tr><td colspan="11" class="empty">Les positions détaillées seront chargées depuis le relevé Titres après validation de l’importateur.</td></tr></tbody></table></div><p class="small">Les données absentes restent vides. Les OPCVM sont identifiés séparément des actions. Les lignes synchronisées conservent la valorisation et le +/- latent du relevé source.</p>
+ <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>Catégorie</th><th>Quantité</th><th>Cours / VL</th><th>Date de mise à jour</th><th>Valorisation</th><th>PRMP</th><th>Performance</th><th>+/- latent</th><th>Frais achat</th><th>Poids</th><th>Action</th></tr></thead><tbody id="positionRows"><tr><td colspan="12" class="empty">Les positions détaillées seront chargées depuis le relevé Titres après validation de l’importateur.</td></tr></tbody></table></div><p class="small">Les données absentes restent vides. Les OPCVM sont identifiés séparément des actions. Les lignes synchronisées conservent la valorisation et le +/- latent du relevé source.</p>
 </details></section>
 <section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" oninput="clearPortfolioTradePreview()" onsubmit="previewPortfolioTrade(event)">
  <h3>Enregistrer un achat / une vente</h3>
@@ -668,7 +668,7 @@ async function handleWafaCsvFile(file){
  }catch(e){status.textContent='Erreur de lecture : '+(e&&e.message?e.message:'fichier non reconnu');document.getElementById('wafaCsvPreviewCard').classList.add('hidden');}
 }
 function cancelWafaCsvSync(){pendingWafaCsvPositions=[];document.getElementById('wafaCsvPreviewCard').classList.add('hidden');document.getElementById('wafaCsvFile').value='';document.getElementById('wafaSyncStatus').textContent='Synchronisation annulée. Aucune donnée modifiée.'}
-function commitWafaCsvSync(){if(!pendingWafaCsvPositions.length){alert('Aucun relevé à synchroniser.');return}if(!confirm(`Mettre à jour ${pendingWafaCsvPositions.length} position(s) depuis le relevé Wafa Bourse ? Les lignes manuelles et les positions absentes du fichier seront conservées.`))return;const incoming=new Map(pendingWafaCsvPositions.map(p=>[p.name.trim().toLowerCase(),p]));const merged=state.positions.map(old=>{const k=String(old.name||'').trim().toLowerCase();if(String(old.source||'').startsWith('Wafa Bourse')&&incoming.has(k)){const fresh=incoming.get(k);incoming.delete(k);return {...old,...fresh,id:old.id}}return old});let conflicts=0;for(const p of incoming.values()){const manual=merged.some(x=>String(x.name||'').trim().toLowerCase()===p.name.toLowerCase());if(manual){conflicts++;continue}merged.push(p)}localStorage.setItem(KEY+'_beforeWafaSync_'+Date.now(),JSON.stringify(state));state.positions=merged;save();const count=pendingWafaCsvPositions.length-conflicts;document.getElementById('wafaSyncStatus').textContent=`Synchronisation terminée : ${count} ligne(s) ajoutée(s) ou mise(s) à jour. ${conflicts} conflit(s) manuel(s) ignoré(s).`;pendingWafaCsvPositions=[];document.getElementById('wafaCsvPreviewCard').classList.add('hidden');document.getElementById('wafaCsvFile').value='';alert('Synchronisation Wafa Bourse terminée. Vérifiez Positions et le Dashboard.')}
+function commitWafaCsvSync(){if(!pendingWafaCsvPositions.length){alert('Aucun relevé à synchroniser.');return}if(!confirm(`Mettre à jour ${pendingWafaCsvPositions.length} position(s) depuis le relevé Wafa Bourse ? Les lignes manuelles et les positions absentes du fichier seront conservées.`))return;const importedOn=tradeEntryToday();const incoming=new Map(pendingWafaCsvPositions.map(p=>[p.name.trim().toLowerCase(),{...p,updatedAt:null,positionImportedOn:importedOn,marketQuoteDate:null,marketQuoteSource:null,marketUpdatedAt:null}]));const merged=state.positions.map(old=>{const k=String(old.name||'').trim().toLowerCase();if(String(old.source||'').startsWith('Wafa Bourse')&&incoming.has(k)){const fresh=incoming.get(k);incoming.delete(k);return {...old,...fresh,id:old.id}}return old});let conflicts=0;for(const p of incoming.values()){const manual=merged.some(x=>String(x.name||'').trim().toLowerCase()===p.name.toLowerCase());if(manual){conflicts++;continue}merged.push(p)}localStorage.setItem(KEY+'_beforeWafaSync_'+Date.now(),JSON.stringify(state));state.positions=merged;save();const count=pendingWafaCsvPositions.length-conflicts;document.getElementById('wafaSyncStatus').textContent=`Synchronisation terminée : ${count} ligne(s) ajoutée(s) ou mise(s) à jour. ${conflicts} conflit(s) manuel(s) ignoré(s).`;pendingWafaCsvPositions=[];document.getElementById('wafaCsvPreviewCard').classList.add('hidden');document.getElementById('wafaCsvFile').value='';alert('Synchronisation Wafa Bourse terminée. Vérifiez Positions et le Dashboard.')}
 
 
 let pdfJsLoadPromise=null;
@@ -874,16 +874,21 @@ function parsePdfPositionLine(line){
  const nums=cells.slice(1,8);if(nums.length!==7)return null;
  const qty=pdfNum(nums[0]),price=pdfNum(nums[1]),value=pdfNum(nums[2]),cmp=pdfNum(nums[3]),perf=pdfNum(nums[4]),pl=pdfNum(nums[5]),weight=pdfNum(nums[6]);
  if(qty===null||qty<=0||price===null||price<0||value===null||value<0)return null;
- return {id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp,sourcePl:pl,sourcePerf:perf,sourceWeight:weight,buyFees:null,source:'Wafa Bourse PDF - Portefeuille titres',sourceDate:(document.getElementById('pdfPaste').value.match(/(?:Casablanca,?\s+le\s+)?(\d{1,2}\s+[a-zéû]+\.?\s+\d{4})/i)||[])[1]||null};
+ return {id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp,sourcePl:pl,sourcePerf:perf,sourceWeight:weight,buyFees:null,source:'Wafa Bourse PDF - Portefeuille titres'};
 }
 function parsePdfCopiedText(raw){
+ const text=String(raw||'');
+ const datedHeader=text.match(/Casablanca,?\s+le\s+(\d{2}[\/.-]\d{2}[\/.-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-zà-ÿ]+\.?\s+\d{4})/i);
+ const writtenDate=text.match(/\b(\d{1,2}\s+[a-zà-ÿ]+\.?\s+\d{4})\b/i);
+ const sourceDate=positionDateIso(datedHeader?.[1]||writtenDate?.[1])||null;
+ const withStatementDate=rows=>dedupePdfRows(rows).map(row=>({...row,sourceDate}));
  const lines=String(raw||'').replace(/\r/g,'').split('\n').map(s=>s.replace(/[\u00a0\u202f]/g,' ').trim()).filter(Boolean);
  const out=[];
  // Wafa "Portefeuille titres" PDFs place all eight columns on each holding row.
  // Parse each complete row first; never pair unrelated metadata labels with numeric rows.
  const directRows=[];
  for(const line of lines){const row=parsePdfPositionLine(line);if(row)directRows.push(row);}
- if(directRows.length)return dedupePdfRows(directRows);
+ if(directRows.length)return withStatementDate(directRows);
  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[+]/g,' plus ').replace(/[^a-z0-9]+/g,' ').trim();
  const headerMapFrom=cells=>{
   const h=cells.map(norm), joined=h.map((v,i)=>v+' '+(h[i+1]||''));
@@ -897,7 +902,7 @@ function parsePdfCopiedText(raw){
   const name=String(cells[map.name]||'').trim();if(!name||/^(valeur|totaux?|total)$/i.test(name))return null;
   const qty=get(cells,map,'qty'),price=get(cells,map,'price'),value=get(cells,map,'value');
   if(qty===null||qty<=0||price===null||price<0||value===null||value<0)return null;
-  return {id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp:get(cells,map,'cmp'),sourcePl:get(cells,map,'pl'),sourcePerf:get(cells,map,'perf'),sourceWeight:get(cells,map,'weight'),buyFees:null,source:'Wafa Bourse PDF copier-coller',sourceDate:(raw.match(/(?:Casablanca,?\s+le\s+)?(\d{1,2}\s+[a-zéû]+\.?\s+\d{4})/i)||[])[1]||null};
+  return {id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp:get(cells,map,'cmp'),sourcePl:get(cells,map,'pl'),sourcePerf:get(cells,map,'perf'),sourceWeight:get(cells,map,'weight'),buyFees:null,source:'Wafa Bourse PDF copier-coller'};
  };
  // 1) Structured tabular copy: derive field positions from the column headings.
  let activeMap=null, structured=[];
@@ -908,7 +913,7 @@ function parsePdfCopiedText(raw){
    const row=makeMapped(cells,activeMap);if(row)structured.push(row);
   }
  }
- if(structured.length)return dedupePdfRows(structured);
+ if(structured.length)return withStatementDate(structured);
 
  // 2) Wafa PDF text layout: names are copied as a block, followed by headings,
  // then numeric rows. Pair rows and names in their original order; never guess a missing row.
@@ -954,9 +959,9 @@ function parsePdfCopiedText(raw){
    const qty=pdfNum(a[0]),price=pdfNum(a[1]),value=pdfNum(a[2]),cmp=pdfNum(a[3]),perf=pdfNum(a[4]),pl=pdfNum(a[5]),weight=pdfNum(n.weight);
    if(qty===null||qty<=0||price===null||price<0||value===null||value<0)continue;
    const name=names[i];
-   out.push({id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp,sourcePl:pl,sourcePerf:perf,sourceWeight:weight,buyFees:null,source:'Wafa Bourse PDF copier-coller',sourceDate:(raw.match(/(?:Casablanca,?\s+le\s+)?(\d{1,2}\s+[a-zéû]+\.?\s+\d{4})/i)||[])[1]||null});
+   out.push({id:'pdf_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_'),name,type:inferPdfType(name),qty,price,importedValue:value,cmp,sourcePl:pl,sourcePerf:perf,sourceWeight:weight,buyFees:null,source:'Wafa Bourse PDF copier-coller'});
   }
-  if(out.length)return dedupePdfRows(out);
+  if(out.length)return withStatementDate(out);
  }
 
  // 3) Conservative legacy fallback for copies with one title followed by its numeric values.
@@ -969,7 +974,7 @@ function parsePdfCopiedText(raw){
  let pendingName=null, nums=[];
  const flush=()=>{if(pendingName&&nums.length>=7){const [q,price,value,cmp,perf,pl,weight]=nums;const qty=pdfNum(q),px=pdfNum(price),v=pdfNum(value);if(qty>0&&px!==null&&px>=0&&v!==null&&v>=0)out.push({id:'pdf_'+pendingName.toLowerCase().replace(/[^a-z0-9]+/g,'_'),name:pendingName,type:inferPdfType(pendingName),qty,price:px,importedValue:v,cmp:pdfNum(cmp),sourcePerf:pdfNum(perf),sourcePl:pdfNum(pl),sourceWeight:pdfNum(weight),buyFees:null,source:'Wafa Bourse PDF copier-coller'});}pendingName=null;nums=[]};
  for(const line of lines){if(meta(line))continue;const t=numericTokens(line);if(t){if(pendingName){nums.push(...t);if(nums.length>=7)flush()}continue}if(/[A-Za-zÀ-ÿ]/.test(line)){flush();pendingName=line}}
- flush();return dedupePdfRows(out);
+ flush();return withStatementDate(out);
 }
 function dedupePdfRows(rows){
  const m=new Map();
@@ -1002,10 +1007,14 @@ function commitPdfPositions(){
  localStorage.setItem(KEY+'_beforePdfImport_'+Date.now(),JSON.stringify(state));
  let posAdded=0,posUpdated=0,opsAdded=0,opsSkipped=0;
  const retained=[];
- const incoming=new Map(pos.map(p=>[String(p.name||'').trim().toLowerCase(),p]));
+ const importedOn=tradeEntryToday();
+ const incoming=new Map(pos.map(p=>[String(p.name||'').trim().toLowerCase(),{
+  ...p,sourceDate:p.sourceDate||null,updatedAt:null,positionImportedOn:importedOn,
+  marketQuoteDate:null,marketQuoteSource:null,marketUpdatedAt:null
+ }]));
  const merged=state.positions.map(old=>{
   const k=String(old.name||'').trim().toLowerCase();
-  if(incoming.has(k)){const fresh=incoming.get(k);incoming.delete(k);Object.assign(old,Object.fromEntries(Object.entries(fresh).filter(([k,v])=>v!==null&&v!=='')));if(fresh.source==='Wafa Bourse PDF Report'){delete old.marketQuoteDate;delete old.marketQuoteSource;delete old.marketUpdatedAt;}posUpdated++}
+  if(incoming.has(k)){const fresh=incoming.get(k);incoming.delete(k);Object.assign(old,Object.fromEntries(Object.entries(fresh).filter(([k,v])=>v!==null&&v!=='')));Object.assign(old,{sourceDate:fresh.sourceDate,updatedAt:null,marketQuoteDate:null,marketQuoteSource:null,marketUpdatedAt:null});posUpdated++}
   else if(pos.length)retained.push(old.name);
   return old;
  });
@@ -1039,7 +1048,7 @@ function addPosition(){
  const qtyRaw=document.getElementById('pQty').value,priceRaw=document.getElementById('pPrice').value,cmpRaw=document.getElementById('pCmp').value,feesRaw=document.getElementById('pBuyFees').value;
  const qty=qtyRaw===''?null:Number(qtyRaw),price=priceRaw===''?null:Number(priceRaw),cmp=cmpRaw===''?null:Number(cmpRaw),buyFees=feesRaw===''?null:Number(feesRaw);
  if(!name||qty===null||!Number.isFinite(qty)||qty<=0||(price!==null&&(!Number.isFinite(price)||price<0))||(cmp!==null&&(!Number.isFinite(cmp)||cmp<0))||(buyFees!==null&&(!Number.isFinite(buyFees)||buyFees<0))){alert('Vérifiez le nom, la quantité et les valeurs numériques. Les champs facultatifs peuvent rester vides.');return}
- state.positions.push({id:String(Date.now())+'_'+Math.random().toString(16).slice(2),name,type,qty,price,cmp,buyFees,updatedAt:document.getElementById('pUpdated').value||null,source:'Saisie manuelle'});save();togglePositionForm(false);['pName','pQty','pPrice','pCmp','pBuyFees','pUpdated'].forEach(id=>document.getElementById(id).value='')
+ state.positions.push({id:String(Date.now())+'_'+Math.random().toString(16).slice(2),name,type,qty,price,cmp,buyFees,updatedAt:document.getElementById('pUpdated').value||tradeEntryToday(),source:'Saisie manuelle'});save();togglePositionForm(false);['pName','pQty','pPrice','pCmp','pBuyFees','pUpdated'].forEach(id=>document.getElementById(id).value='')
 }
 function deletePosition(id){if(!confirm('Supprimer cette ligne de la base V2 ?'))return;state.positions=state.positions.filter(p=>p.id!==id);save()}
 function dividendIsConfirmed(d){return !!(d&&['Perçu','Prévisionnel'].includes(String(d.status||''))&&String(d.confirmationSource||'').trim()&&/^\d{4}-\d{2}-\d{2}$/.test(String(d.date||''))&&Number.isFinite(Number(d.amount))&&Number(d.amount)>0);}
@@ -1866,7 +1875,7 @@ function applyPortfolioSale(trade,positions,statementDate){
  return positions.flatMap(row=>{
   if(row!==position)return [{...row,sourceWeight:null}];
   if(!remaining)return [];
-  return [{...row,qty:remaining,buyFees:row.buyFees==null?null:Math.round((buyFees-allocatedFees)*100)/100,
+  return [{...row,qty:remaining,updatedAt:trade.date,buyFees:row.buyFees==null?null:Math.round((buyFees-allocatedFees)*100)/100,
    importedValue:null,sourcePl:null,sourcePerf:row.price==null?null:(Number(row.price)/cost-1)*100,sourceWeight:null}];
  });
 }
@@ -1897,7 +1906,7 @@ function applyPortfolioPurchase(trade,positions,statementDate,category,id){
  trade.name=position?.name||trade.name;
  trade.category=position?.type||category;
  const price=position?.price??trade.price;
- const updated={...position,id:position?.id||id,name:trade.name,type:trade.category,qty,cmp,buyFees,price,
+ const updated={...position,id:position?.id||id,name:trade.name,type:trade.category,qty,cmp,buyFees,price,updatedAt:trade.date,
   importedValue:null,sourcePl:null,sourcePerf:(price/cmp-1)*100,sourceWeight:null};
  if(!position){
   updated.source='Saisie manuelle · cours initial au prix d’exécution';
@@ -2059,6 +2068,30 @@ function renderPortfolioJournal(){
   }).join('')+
   '</tbody></table></div>';
 }
+function positionDateIso(value){
+ const text=String(value||'').trim();
+ const french=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().match(/^(\d{1,2})\s+([a-z]+)\.?\s+(\d{4})$/);
+ const months={jan:1,fev:2,mar:3,avr:4,mai:5,juin:6,juil:7,aou:8,sep:9,oct:10,nov:11,dec:12};
+ let date=marketIsoDate(text);
+ if(french){
+  const prefix=french[2].startsWith('jui')?french[2].slice(0,4):french[2].slice(0,3);
+  const month=months[prefix];
+  if(!month)return '';
+  date=french[3]+'-'+String(month).padStart(2,'0')+'-'+french[1].padStart(2,'0');
+ }
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return '';
+ const time=Date.parse(date+'T00:00:00Z');
+ return Number.isFinite(time)&&new Date(time).toISOString().slice(0,10)===date?date:'';
+}
+function positionUpdateDateCell(position){
+ const dates=[
+  [position.sourceDate,'Date du relevé'],
+  [position.marketQuoteDate,'Date du cours'],
+  [position.updatedAt,'Date de mise à jour de la position']
+ ].map(([value,label])=>[positionDateIso(value),label]).sort((a,b)=>b[0].localeCompare(a[0]));
+ const [date,label]=dates[0][0]?dates[0]:[positionDateIso(position.positionImportedOn),'Date d’importation'];
+ return date?'<time datetime="'+date+'" title="'+label+'">'+date.slice(8,10)+'/'+date.slice(5,7)+'/'+date.slice(0,4)+'</time>':'—';
+}
 function render(){
  renderDividendCalendar();
  renderSnapshotManager();
@@ -2069,7 +2102,7 @@ function render(){
  if(syncNotice&&state.importIssues&&state.importIssues.length){const n=state.importIssues.length;syncNotice.innerHTML='<p class="small">Correction automatique : '+n+' ancienne(s) ligne(s) numérique(s) sans nom de valeur ont été retirées de la liste active et archivées dans les données locales. Aucune opération, dividende ou position valide n’a été supprimé.</p>';}
  const totalPositions=state.positions.reduce((sum,position)=>sum+portfolioPositionValue(position),0);
  document.getElementById('positionsTotalValue').textContent=state.positions.length?fmt(totalPositions)+' DH':'—';
- if(!state.positions.length){tbody.innerHTML='<tr><td colspan="11" class="empty">Aucune position détaillée enregistrée dans cette nouvelle base.</td></tr>'}else{tbody.innerHTML=state.positions.map(p=>{const val=p.importedValue!==null&&p.importedValue!==undefined&&Number.isFinite(Number(p.importedValue))?Number(p.importedValue):(p.price===null||p.price===undefined?'':p.qty*p.price),pl=p.sourcePl!==null&&p.sourcePl!==undefined&&Number.isFinite(Number(p.sourcePl))?Number(p.sourcePl):(p.cmp===null||p.cmp===undefined||p.price===null?'':(p.price-p.cmp)*p.qty-(Number(p.buyFees)||0)),weight=val===''||totalPositions===0?'':(val/totalPositions*100);return `<tr><td><b>${esc(p.name)}</b></td><td><span class="tag">${esc(p.type)}</span></td><td>${fmt(p.qty,3)}</td><td>${p.price===null||p.price===undefined?'—':fmt(p.price)}</td><td>${val===''?'—':fmt(val)+' DH'}</td><td>${p.cmp===null||p.cmp===undefined?'—':fmt(p.cmp)}</td><td class="${p.sourcePerf===null||p.sourcePerf===undefined?'':Number(p.sourcePerf)>=0?'positive':'negative'}">${p.sourcePerf===null||p.sourcePerf===undefined?'—':fmt(p.sourcePerf)+'%'}</td><td class="${pl===''?'':pl>=0?'positive':'negative'}">${pl===''?'—':fmt(pl)+' DH'}</td><td>${p.buyFees===null||p.buyFees===undefined?'—':fmt(p.buyFees)+' DH'}</td><td>${p.sourceWeight!==null&&p.sourceWeight!==undefined?fmt(p.sourceWeight)+'%':weight===''?'—':fmt(weight)+'%'}</td><td><button class="btn danger" onclick="deletePosition('${p.id}')">Supprimer</button></td></tr>`}).join('')}
+ if(!state.positions.length){tbody.innerHTML='<tr><td colspan="12" class="empty">Aucune position détaillée enregistrée dans cette nouvelle base.</td></tr>'}else{tbody.innerHTML=state.positions.map(p=>{const val=p.importedValue!==null&&p.importedValue!==undefined&&Number.isFinite(Number(p.importedValue))?Number(p.importedValue):(p.price===null||p.price===undefined?'':p.qty*p.price),pl=p.sourcePl!==null&&p.sourcePl!==undefined&&Number.isFinite(Number(p.sourcePl))?Number(p.sourcePl):(p.cmp===null||p.cmp===undefined||p.price===null?'':(p.price-p.cmp)*p.qty-(Number(p.buyFees)||0)),weight=val===''||totalPositions===0?'':(val/totalPositions*100);return `<tr><td><b>${esc(p.name)}</b></td><td><span class="tag">${esc(p.type)}</span></td><td>${fmt(p.qty,3)}</td><td>${p.price===null||p.price===undefined?'—':fmt(p.price)}</td><td>${positionUpdateDateCell(p)}</td><td>${val===''?'—':fmt(val)+' DH'}</td><td>${p.cmp===null||p.cmp===undefined?'—':fmt(p.cmp)}</td><td class="${p.sourcePerf===null||p.sourcePerf===undefined?'':Number(p.sourcePerf)>=0?'positive':'negative'}">${p.sourcePerf===null||p.sourcePerf===undefined?'—':fmt(p.sourcePerf)+'%'}</td><td class="${pl===''?'':pl>=0?'positive':'negative'}">${pl===''?'—':fmt(pl)+' DH'}</td><td>${p.buyFees===null||p.buyFees===undefined?'—':fmt(p.buyFees)+' DH'}</td><td>${p.sourceWeight!==null&&p.sourceWeight!==undefined?fmt(p.sourceWeight)+'%':weight===''?'—':fmt(weight)+'%'}</td><td><button class="btn danger" onclick="deletePosition('${p.id}')">Supprimer</button></td></tr>`}).join('')}
  const confirmedDividends=state.dividends.filter(dividendIsConfirmed);const received=confirmedDividends.filter(d=>d.status==='Perçu').reduce((s,d)=>s+(Number(d.amount)||0),0),forecast=confirmedDividends.filter(d=>d.status==='Prévisionnel').reduce((s,d)=>s+(Number(d.amount)||0),0);
  renderDashboardMetrics(received);
  document.getElementById('dReceived').textContent=fmt(received)+' DH';document.getElementById('dForecast').textContent=fmt(forecast)+' DH';document.getElementById('dCount').textContent=confirmedDividends.length;
@@ -2829,7 +2862,7 @@ function commitWafaBridge(){
   const positions=d.positions.map(p=>{
    const old=state.positions.find(x=>key(x.name)===key(p.name));
    return {...old,...p,id:old?.id||'wafa_bridge_'+key(p.name),source:'Wafa Bourse · liaison navigateur',
-    sourceDate:d.sourceDate,marketQuoteDate:null,marketQuoteSource:null,marketUpdatedAt:null};
+    sourceDate:d.sourceDate,updatedAt:null,marketQuoteDate:null,marketQuoteSource:null,marketUpdatedAt:null};
   });
   const historyEntry={capturedAt:d.capturedAt,date:d.sourceDate,total:d.summary.total,positions:positions.length};
   const wafaAccountSummary={...d.summary,account:d.account,cash,sourceDate:d.sourceDate,capturedAt:d.capturedAt};
