@@ -1692,6 +1692,8 @@ function tradeExecutionKey(operation){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!label||!Number.isFinite(qty)||qty<=0||!Number.isFinite(price)||price<=0)return '';
  const aliases={
   'BANQUE CENTRALE POPULAIRE':'BCP',
+  'PRIVATILSAB BANQUE CENTRALE':'BCP',
+  'PRIVATISAB BANQUE CENTRALE':'BCP',
   'SODEP MARSA':'MARSA MAROC',
   'SOCIETE D EXPLOITATION DES PORTS MARSA MAROC':'MARSA MAROC',
   'ITTISSALAT AL MAGH':'ITISSALAT AL MAGHRIB',
