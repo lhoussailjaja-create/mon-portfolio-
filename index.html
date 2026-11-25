@@ -723,17 +723,28 @@ function parseWafaCompactHistoryRow(text,continuation){
 }
 function parseWafaHistoryText(raw,fileName){
  const lines=String(raw||'').replace(/\r/g,'').split('\n').map(x=>x.trim()).filter(Boolean);
- const dateRe=/^(\d{2}\/\d{2}\/\d{4})\s+(ACHAT OPCVM|Achat OPCVM|ACHAT|VENTE|Credit|Debit)\b/i;
+ const dateRe=/^(\d{2}\/\d{2}\/\d{4})\s+(ACHAT OPCVM|Achat OPCVM|ACHAT|VENTE|SOUSCRIPTI(?:ON)?(?:\s+AUX)?|Credit|Debit)\b/i;
  const out=[],occ=new Map();
  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
- const typeCat=t=>/opcvm/i.test(t)?'OPCVM':/achat|vente/i.test(t)?'Action':/credit/i.test(t)?'Cash':'Frais';
+ const typeCat=t=>/opcvm/i.test(t)?'OPCVM':/achat|vente|souscription/i.test(t)?'Action':/credit/i.test(t)?'Cash':'Frais';
  for(let i=0;i<lines.length;i++){
   const m=lines[i].match(dateRe);if(!m)continue;
-  const date=m[1].split('/').reverse().join('-'),op=m[2],rest=lines[i].slice(m[0].length).trim();
+  const date=m[1].split('/').reverse().join('-');
+  const subscription=/^souscripti/i.test(m[2]),op=subscription?'SOUSCRIPTION':m[2];
+  let rest=lines[i].slice(m[0].length).trim(),following=lines[i+1]||'';
+  if(subscription){
+   // The operation column can wrap as "SOUSCRIPTI" followed by "ON AUX".
+   const continuation=/^ON(?:\s+AUX)?(?:\s+|$)/i;
+   rest=rest.replace(continuation,'');
+   if(continuation.test(following)){
+    const remainder=following.replace(continuation,'');
+    if(rest)following=remainder;
+    else{rest=remainder;following='';}
+   }
+  }
   const cells=rest.split(/\s{2,}/).map(x=>x.trim()).filter(Boolean);
   const firstNumeric=cells.findIndex(x=>/^-?[\d\s\u00a0]+(?:[.,]\d+)?$/.test(x)&&pdfNum(x)!==null);
   const structured=firstNumeric>=0?cells.slice(firstNumeric).map(pdfNum):[];
-  const following=lines[i+1];
   const compact=structured.length>=3&&structured.slice(0,3).every(value=>value!==null)
    ?null
    :parseWafaCompactHistoryRow(rest,following&&!dateRe.test(following)?following:'');
@@ -746,6 +757,7 @@ function parseWafaHistoryText(raw,fileName){
   if(!inlineName&&i>0&&!dateRe.test(lines[i-1])&&!/^(date|op.ration|valeur|historique|lieu|client|compte|d.positaire|avertissement)/i.test(lines[i-1])){
    prior=lines[i-1].replace(/\s{2,}/g,' ').trim();
   }
+  if(subscription&&(!(inlineName||prior)||qty<=0||price<=0||net>=0))continue;
   const name=[prior,inlineName].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()||op;
   const commCourt=nums[3]??0,commRL=nums[4]??0,commBVC=nums[5]??0,tva=nums[6]??0;
   const gross=Math.round(Math.abs(qty*price)*100)/100;
