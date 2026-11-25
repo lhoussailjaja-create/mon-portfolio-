@@ -386,7 +386,11 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div class="actions"><button class="btn primary" id="portfolioTradeConfirm" type="button" onclick="confirmPortfolioTrade(this.form)">Confirmer l’enregistrement</button><button class="btn" type="button" onclick="clearPortfolioTradePreview();document.getElementById('tradeType').focus()">Modifier</button></div>
  </section>
  <p class="small" id="portfolioTradeMessage" role="status"></p>
-</form><div class="card"><div id="portfolioJournalRecords"></div></div></section>
+</form><div class="card">
+ <div class="actions hidden" id="journalBcpRepairAction"><button type="button" class="btn" onclick="repairBcpJournalDuplicate()">Retirer le doublon BCP</button></div>
+ <p class="small" id="journalBcpRepairStatus" role="status"></p>
+ <div id="portfolioJournalRecords"></div>
+</div></section>
 <section class="page" id="analyse"><div class="pagehead"><div><h2>Analyse du portefeuille</h2><p>Concentration, allocation, performance et historique.</p></div></div><div class="sectiongrid"><div class="card"><h3>Indicateurs à calculer</h3><div class="allocrow"><span>Concentration par ligne</span><span class="tag">À connecter</span></div><div class="allocrow"><span>Performance par position</span><span class="tag">À connecter</span></div><div class="allocrow"><span>Drawdown historique</span><span class="tag">Historique requis</span></div><div class="allocrow"><span>Évolution du portefeuille</span><span class="tag">Snapshots requis</span></div></div><div class="card"><h3>Règles de calcul</h3><p class="small">Les performances seront calculées à partir des PRMP, cours/VL, frais et opérations réellement importés. Aucun rendement historique ne sera extrapolé en l’absence de snapshots.</p></div></div></section>
 <section class="page" id="dividendes">
  <div class="pagehead"><div><h2>Dividendes</h2><p>Revenus perçus, prévisionnels, calendrier et analyse des revenus.</p></div><div class="actions"><button class="btn primary" onclick="document.getElementById('divForm').classList.toggle('hidden')">＋ Ajouter un dividende</button></div></div>
@@ -1981,7 +1985,45 @@ function confirmPortfolioTrade(form){
    (trade.type==='Vente'?' Gain / perte réalisé : '+fmt(trade.realized)+' DH.':''):
   'Opération enregistrée dans le journal.';
 }
+function findBcpJournalDuplicate(operations){
+ const matches=[];
+ for(const row of operations){
+  const broker=row?.brokerRecord;
+  if(!broker||!isManualJournalTrade(row)||!isBcpName(row.name)||!isBcpName(broker.name)||String(row.type).toLowerCase()!=='achat')continue;
+  const brokerKey=String(journalSourceKey(broker));
+  if(!brokerKey.startsWith('wafa-pdf-')||broker.fees==null)continue;
+  const fingerprint=operationFingerprint(broker);
+  const peers=operations.filter(operation=>operation&&operation!==row&&operationFingerprint(operation.brokerRecord||operation)===fingerprint);
+  if(peers.length!==1)continue;
+  const duplicate=peers[0],duplicateKey=String(journalSourceKey(duplicate));
+  if(duplicate.brokerRecord||isManualJournalTrade(duplicate)||!duplicateKey.startsWith('wafa-pdf-')||
+   !isBcpName(duplicate.name)||
+   (quoteKey(duplicate.name)===quoteKey(broker.name)&&duplicateKey.toLowerCase()!==brokerKey.toLowerCase())||
+   duplicateKey.slice(duplicateKey.lastIndexOf('|'))!==brokerKey.slice(brokerKey.lastIndexOf('|'))||
+   duplicate.fees==null||Number(duplicate.fees)!==Number(broker.fees))continue;
+  matches.push(duplicate);
+ }
+ return matches.length===1?matches[0]:null;
+}
+function repairBcpJournalDuplicate(){
+ const duplicate=findBcpJournalDuplicate(state.operations);
+ if(!duplicate)return;
+ const status=document.getElementById('journalBcpRepairStatus');
+ if(!confirm(`Retirer la ligne en double « ${duplicate.name} » du ${duplicate.date} (${fmt(duplicate.qty,3)} titres à ${fmt(duplicate.price)} DH, net ${fmt(duplicate.net)} DH) ? La ligne BCP rapprochée sera conservée. Une sauvegarde JSON sera téléchargée.`))return;
+ try{
+  backup();
+  const operations=state.operations.filter(row=>row!==duplicate);
+  localStorage.setItem(KEY,JSON.stringify({...state,operations}));
+  state.operations=operations;
+ }catch(e){
+  status.textContent='La correction n’a pas pu être enregistrée. Le journal est inchangé.';
+  return;
+ }
+ render();
+ status.textContent='Doublon retiré. La ligne BCP rapprochée est conservée.';
+}
 function renderPortfolioJournal(){
+ document.getElementById('journalBcpRepairAction').classList.toggle('hidden',!findBcpJournalDuplicate(state.operations));
  const host=document.getElementById('portfolioJournalRecords');
  const operations=(state.operations||[]).filter(Boolean).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
  if(!operations.length){
