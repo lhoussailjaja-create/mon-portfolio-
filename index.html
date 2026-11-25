@@ -210,7 +210,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 <div class="layout"><aside class="sidebar"><button class="nav active" data-page="accueil"><span class="ico">▥</span>Portfolio</button><button class="nav" data-page="positions"><span class="ico">▣</span>Positions</button><button class="nav" data-page="dividendes"><span class="ico">◉</span>Dividendes</button><button class="nav" data-page="notifications"><span class="ico">♧</span>Notifications</button></aside>
 <main class="content">
 <section class="page active" id="accueil">
-<div class="pagehead"><div><h2>Portfolio</h2><p>Tableau de bord principal · Vue globale du compte PEA</p></div><div class="actions"><button class="btn" onclick="window.print()">Imprimer</button><button class="btn primary" onclick="go('importation')">Importer un relevé</button></div></div>
+<div class="pagehead"><div><h2>Portfolio</h2><p>Tableau de bord principal · Vue globale du compte PEA</p></div><div class="actions"><button class="btn" onclick="window.print()">Imprimer</button><button class="btn primary" onclick="go('importation')">Importer un relevé</button><button class="btn" onclick="go('parametres')">Sauvegarder / transférer</button></div></div>
 <div class="portfolio-group">
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioKpis" aria-expanded="false" onclick="togglePortfolioGroup(this)">Situation du portefeuille</button>
  <div class="dash-kpis portfolio-group-content" id="portfolioKpis">
@@ -510,7 +510,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <summary class="btn"><span class="positions-show">Afficher les annonces</span><span class="positions-hide">Masquer les annonces</span></summary>
  <div id="marketNotificationRows"><div class="empty">Chargement…</div></div>
 </details></div><div class="card"><p class="small">Une annonce générale ne signifie pas que le PEA détient cette action. Les revenus personnels restent enregistrés séparément dans Dividendes.</p></div></section>
-<section class="page" id="parametres"><div class="pagehead"><div><h2>Paramètres</h2><p>Sauvegarde et gestion des données locales.</p></div></div><div class="sectiongrid"><div class="card"><h3>Sauvegarde</h3><p class="small">Exporter les données locales V2 dans un fichier JSON.</p><button class="btn primary" onclick="backup()">Télécharger la sauvegarde</button><div class="field"><label>Restaurer une sauvegarde JSON</label><input type="file" id="restoreFile" accept="application/json"></div><button class="btn" onclick="restoreBackup()">Restaurer</button><p id="backupMsg" class="small"></p></div><div class="card"><h3>Configuration</h3><div class="allocrow"><span>Compte</span><b class="positive">PEA</b></div><div class="allocrow"><span>Architecture</span><b>V2 indépendante</b></div><div class="allocrow"><span>Stockage</span><b>Local au navigateur</b></div><div class="notice">Conserver une sauvegarde avant toute réinitialisation du navigateur.</div></div></div></section>
+<section class="page" id="parametres"><div class="pagehead"><div><h2>Paramètres</h2><p>Sauvegarde et gestion des données locales.</p></div></div><div class="sectiongrid"><div class="card"><h3>Sauvegarde</h3><p class="small">Sur l’appareil source, téléchargez la sauvegarde. Sur l’autre appareil, ouvrez le même site et restaurez ce fichier JSON.</p><button class="btn primary" onclick="backup()">Télécharger la sauvegarde</button><div class="field"><label>Restaurer une sauvegarde JSON</label><input type="file" id="restoreFile" accept="application/json"></div><button class="btn" onclick="restoreBackup()">Restaurer</button><p id="backupMsg" class="small"></p></div><div class="card"><h3>Configuration</h3><div class="allocrow"><span>Compte</span><b class="positive">PEA</b></div><div class="allocrow"><span>Architecture</span><b>V2 indépendante</b></div><div class="allocrow"><span>Stockage</span><b>Local au navigateur</b></div><div class="notice">Conserver une sauvegarde avant toute réinitialisation du navigateur.</div></div></div></section>
 </main></div><div class="footer">Mon portefeuille 2J · PEA · Mise à jour technique · 16/11/2026 · Données source : 15/11/2026</div></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -2182,7 +2182,39 @@ function render(){
 }
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function backup(){const blob=new Blob([JSON.stringify({app:'Mon Portfolio V2',account:'PEA',exportedAt:new Date().toISOString(),data:state},null,2)],{type:'application/json'});downloadBlob(blob,'Mon_Portfolio_V2_PEA_backup.json')}
-function restoreBackup(){const f=document.getElementById('restoreFile').files[0];if(!f){alert('Choisissez un fichier JSON.');return}const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result),d=j.data||j;if(!Array.isArray(d.positions)||!Array.isArray(d.dividends))throw Error('Format incompatible');state.positions=d.positions;state.dividends=d.dividends;state.operations=Array.isArray(d.operations)?d.operations:[];state.snapshots=Array.isArray(d.snapshots)?d.snapshots:[];state.masiCloses=validateMasiCloses(d.masiCloses);state.wafaAccountSummary=d.wafaAccountSummary||null;save();document.getElementById('backupMsg').textContent='Sauvegarde restaurée.'}catch(e){alert('Fichier invalide ou format non reconnu.')}};r.readAsText(f)}
+async function restoreBackup(){
+ const file=document.getElementById('restoreFile').files[0];
+ const status=document.getElementById('backupMsg');
+ if(!file){status.textContent='Choisissez un fichier JSON.';return}
+ let data;
+ try{
+  const backup=JSON.parse(await file.text());
+  data=backup.data||backup;
+  if((backup.account&&backup.account!=='PEA')||!Array.isArray(data.positions)||!Array.isArray(data.dividends)){
+   throw new Error('Format incompatible');
+  }
+  for(const key of ['operations','snapshots','marketDividends','marketNotifications','officialDividendHistory','marketInitializedSources','importIssues']){
+   if(data[key]!=null&&!Array.isArray(data[key]))throw new Error('Format incompatible');
+  }
+ }catch(error){
+  status.textContent='Fichier de sauvegarde PEA invalide.';
+  return;
+ }
+ if(!window.confirm('Remplacer les données PEA de ce navigateur par cette sauvegarde ?'))return;
+ try{
+  localStorage.setItem(KEY+'_backup_before_restore',JSON.stringify(state));
+  localStorage.setItem(KEY,JSON.stringify(data));
+ }catch(error){
+  status.textContent='Restauration impossible. Les données actuelles sont conservées.';
+  return;
+ }
+ Object.assign(state,loadState());
+ render();
+ renderMarketDividends();
+ renderMarketNotifications();
+ renderOfficialDividendHistory();
+ status.textContent='Sauvegarde restaurée. Retrouvez vos données dans Portfolio.';
+}
 
 let pendingExcelSync=null;
 function excelNorm(v){return String(v??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
