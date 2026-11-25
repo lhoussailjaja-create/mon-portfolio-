@@ -804,7 +804,7 @@ function renderPdfPreview(parsed){
  document.getElementById('pdfPreviewPositionsTable').classList.toggle('hidden',!parsed.length);
  document.getElementById('pdfPreviewOperationsTable').classList.toggle('hidden',!pendingPdfOperations.length);
  document.getElementById('pdfPreviewOperationsRows').innerHTML=pendingPdfOperations.map(o=>
-  '<tr><td>'+esc(o.date)+'</td><td>'+esc(o.type)+'</td><td>'+esc(o.name)+'</td><td>'+fmt(o.qty,3)+'</td><td>'+fmt(o.price)+'</td><td>'+fmt(o.net)+'</td></tr>'
+  '<tr><td>'+esc(o.date)+'</td><td>'+esc(o.type)+'</td><td>'+esc(isBcpName(o.name)?'BCP':o.name)+'</td><td>'+fmt(o.qty,3)+'</td><td>'+fmt(o.price)+'</td><td>'+fmt(o.net)+'</td></tr>'
  ).join('');
  document.getElementById('pdfPreviewSummary').textContent=`${parsed.length} ligne(s) détectée(s). ${parsed.filter(p=>p.type==='Action').length} action(s), ${parsed.filter(p=>p.type==='OPCVM').length} OPCVM, ${parsed.filter(p=>p.type==='À classifier').length} à classifier. Vérifiez les montants et les noms avant validation.`;
  card.classList.remove('hidden');
@@ -814,10 +814,13 @@ let pendingPdfPositions=[];
 let pendingPdfOperations=[];
 function clearPdfPaste(){document.getElementById('pdfPaste').value='';const pf=document.getElementById('pdfFile');if(pf)pf.value='';document.getElementById('pdfPreviewCard').classList.add('hidden');document.getElementById('pdfImportMsg').textContent='Zone de texte effacée.';pendingPdfPositions=[];pendingPdfOperations=[]}
 function pdfNum(v){if(v===null||v===undefined)return null;let x=String(v).trim().replace(/[\u00a0\u202f]/g,' ').replace(/\s/g,'').replace(/%|DH|MAD/gi,'');if(!x)return null;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'')}else if(x.includes(','))x=x.replace(',','.');const n=Number(x);return Number.isFinite(n)?n:null}
+function isBcpName(name){
+ return ['BCP','BANQUE CENTRALE POPULAIRE','PRIVATILSAB BANQUE CENTRALE','PRIVATISAB BANQUE CENTRALE'].includes(quoteKey(name||''));
+}
 function inferPdfType(name){
  const label=quoteKey(name||'');
  if(/OPCVM|FUND|MOUCHARAKA|ATTIJARI ACTIONS|LOW VOLATILITY FACTOR/.test(label))return 'OPCVM';
- if(label==='BCP'||label==='BANQUE CENTRALE POPULAIRE'||/^LAPROPHAN(?: S A| SA)?$/.test(label))return 'Action';
+ if(isBcpName(label)||/^LAPROPHAN(?: S A| SA)?$/.test(label))return 'Action';
  if(/AKDITAL|ITISSALAT|IAM|MARSA MAROC|TOTALENERGIES|SODEP|CIH|S2M/.test(label))return 'Action';
  return 'À classifier';
 }
@@ -1691,16 +1694,13 @@ function tradeExecutionKey(operation){
  const label=quoteKey(operation.name||'');
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!label||!Number.isFinite(qty)||qty<=0||!Number.isFinite(price)||price<=0)return '';
  const aliases={
-  'BANQUE CENTRALE POPULAIRE':'BCP',
-  'PRIVATILSAB BANQUE CENTRALE':'BCP',
-  'PRIVATISAB BANQUE CENTRALE':'BCP',
   'SODEP MARSA':'MARSA MAROC',
   'SOCIETE D EXPLOITATION DES PORTS MARSA MAROC':'MARSA MAROC',
   'ITTISSALAT AL MAGH':'ITISSALAT AL MAGHRIB',
   'TOTALENERGIES MARKETING MAROC':'TOTALENERGIES MAROC',
   'AKT':'AKDITAL'
  };
- return [date,side,aliases[label]||label,qty,price].join('|');
+ return [date,side,isBcpName(label)?'BCP':aliases[label]||label,qty,price].join('|');
 }
 function journalSourceKey(operation){
  return operation.dedupeKey||operation.key||'';
