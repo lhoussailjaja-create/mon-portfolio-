@@ -214,7 +214,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 <div class="portfolio-group">
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioKpis" aria-expanded="false" onclick="togglePortfolioGroup(this)">Situation du portefeuille</button>
  <div class="dash-kpis portfolio-group-content" id="portfolioKpis">
- <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Total des avoirs</span><span class="kpi-icon">◈</span></div><div class="metric-value" id="dashHoldings">14 146,55 DH</div><div class="metric-sub" id="dashHoldingsTitles">Valeur des titres : 13 012,13 DH</div><div class="metric-sub" id="dashHoldingsInvested">Montant investi : —</div><div class="metric-sub" id="dashHoldingsMeta">Espèces : 1 134,42 DH · Source : 15/11/2026</div></div>
+ <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Total des avoirs</span><span class="kpi-icon">◈</span></div><div class="metric-value" id="dashHoldings">14 146,55 DH</div><div class="metric-sub" id="dashHoldingsTitles">Valeur des titres : 13 012,13 DH</div><div class="metric-sub" id="dashTitlesSource"></div><div class="metric-sub" id="dashHoldingsInvested">Montant investi : —</div><div class="metric-sub" id="dashHoldingsMeta">Espèces : 1 134,42 DH · Source : 15/11/2026</div></div>
  <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Profit / Loss latent</span><span class="kpi-icon">↘</span></div><div class="metric-value negative" id="dashProfit">−408,84 DH</div><div class="metric-sub" id="dashProfitMeta">Relevé Titres · Source : 15/11/2026</div></div>
  <div class="card dash-kpi">
   <div class="metric-label">Résultat total indicatif</div>
@@ -1610,10 +1610,8 @@ function portfolioMetrics(){
    pl=(Number(p.price)-Number(p.cmp))*Number(p.qty)-(Number(p.buyFees)||0);
   return sum+(pl===null?0:pl);
  },0);
- const dates=rows.map(p=>String(p.sourceDate||'').trim()).filter(Boolean).sort();
- const rawDate=dates.length?dates[dates.length-1]:PEA_CASH_REFERENCE_DATE;
  const formatDate=date=>/^\d{4}-\d{2}-\d{2}$/.test(date)?date.slice(8,10)+'/'+date.slice(5,7)+'/'+date.slice(0,4):date;
- const sourceDate=formatDate(rawDate);
+ const titlesSource=positionTotalSourceDate(rows);
  const summary=state.wafaAccountSummary;
  const hasBrokerCash=Number.isFinite(summary?.cash);
  const cashDate=hasBrokerCash?summary.sourceDate:PEA_BASELINE_DATE;
@@ -1624,7 +1622,7 @@ function portfolioMetrics(){
   return sum+(trade.type==='Achat'?-trade.net:trade.net);
  },0);
  const cash=Math.round(((hasBrokerCash?summary.cash:PEA_CASH_REFERENCE)+pendingCash)*100)/100;
- return {titles,cash,total:titles+cash,latent,sourceDate,cashSourceDate:formatDate(cashDate),allocation,invested:portfolioInvestedAmount(rows)};
+ return {titles,cash,total:titles+cash,latent,titlesSource,cashSourceDate:formatDate(cashDate),allocation,invested:portfolioInvestedAmount(rows)};
 }
 function snapshotVariation(snapshots){
  const byDate=new Map();
@@ -1692,13 +1690,15 @@ function renderDashboardMetrics(received){
  const holdingsMeta=document.getElementById('dashHoldingsMeta');
  const holdingsTitles=document.getElementById('dashHoldingsTitles');
  if(holdingsTitles)holdingsTitles.textContent='Valeur des titres : '+fmt(m.titles)+' DH';
+ const titlesSource=document.getElementById('dashTitlesSource');
+ if(titlesSource)titlesSource.textContent=m.titlesSource;
  const invested=document.getElementById('dashHoldingsInvested');
  if(invested)invested.textContent='Montant investi : '+(m.invested===null?'— (quantité ou PRMP manquant) ':fmt(m.invested)+' DH');
  if(holdingsMeta)holdingsMeta.textContent=`Espèces : ${fmt(m.cash)} DH · Source : ${m.cashSourceDate}`;
  const profit=document.getElementById('dashProfit');
  if(profit){profit.textContent=(m.latent<0?'−':m.latent>0?'+':'')+fmt(Math.abs(m.latent))+' DH';profit.classList.toggle('negative',m.latent<0);profit.classList.toggle('positive',m.latent>0);}
  const profitMeta=document.getElementById('dashProfitMeta');
- if(profitMeta)profitMeta.textContent='Relevé Titres · Source : '+m.sourceDate;
+ if(profitMeta)profitMeta.textContent=m.titlesSource;
  const realized=PEA_FISCAL_REALIZED_REFERENCE;
  const sales=recordedPortfolioSales();
  const salesResult=sales.reduce((sum,sale)=>sum+sale.realized,0);
