@@ -853,7 +853,7 @@ function isBcpName(name){
 function inferPdfType(name){
  const label=quoteKey(name||'');
  if(/OPCVM|FUND|MOUCHARAKA|ATTIJARI ACTIONS|LOW VOLATILITY FACTOR/.test(label))return 'OPCVM';
- if(isBcpName(label)||/^LAPROPHAN(?: S A| SA)?$/.test(label))return 'Action';
+ if(isBcpName(label)||/^(?:LAPROPHAN|VICENNE)(?: S A| SA)?$/.test(label))return 'Action';
  if(/AKDITAL|ITISSALAT|IAM|MARSA MAROC|TOTALENERGIES|SODEP|CIH|S2M/.test(label))return 'Action';
  return 'À classifier';
 }
