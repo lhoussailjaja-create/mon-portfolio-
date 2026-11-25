@@ -220,7 +220,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div class="metric-label">Résultat total indicatif</div>
   <div class="metric-value neutral" id="dashTotalProfit">—</div>
   <div class="metric-sub">Gain / perte latent <strong id="dashTotalProfitLatent">—</strong></div>
-  <div class="metric-sub">Résultat réalisé fiscal <strong id="dashTotalProfitRealized">—</strong><br>Relevé du 01/01 au 15/11/2026</div>
+  <div class="metric-sub">Résultat réalisé fiscal <strong id="dashTotalProfitRealized">—</strong><br><span id="dashRealizedSource">Relevé du 01/01 au 15/11/2026</span></div>
   <div class="metric-sub hidden" id="dashManualSales">Gains / pertes sur ventes enregistrées <strong id="dashManualSalesResult"></strong></div>
   <div class="metric-sub">Dividendes nets perçus <strong id="dashTotalProfitReceived">—</strong><br>Tous les paiements enregistrés</div>
  </div>
@@ -497,7 +497,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 </section>
 <section class="page" id="fiscalite"><div class="pagehead"><div><h2>Fiscalité</h2><p>Suivi distinct des plus/moins-values fiscales et des prélèvements.</p></div></div><div class="grid"><div class="card"><div class="metric-label">Résultat actions</div><div class="metric-value negative">−33,25 DH</div></div><div class="card"><div class="metric-label">TPCVM</div><div class="metric-value">0,00 DH</div></div><div class="card"><div class="metric-label">Restitution</div><div class="metric-value">0,00 DH</div></div><div class="card"><div class="metric-label">Période</div><div class="metric-value" style="font-size:17px">01/01–15/11/2026</div></div></div><div class="card"><h3>Détail du relevé fiscal</h3><div class="tablewrap"><table><thead><tr><th>Valeur</th><th>+/- Value</th><th>TPCVM</th></tr></thead><tbody><tr><td>AKDITAL</td><td class="negative">−30,67 DH</td><td>0,00 DH</td></tr><tr><td>CIH</td><td class="negative">−2,58 DH</td><td>0,00 DH</td></tr></tbody></table></div><p class="small">Le résultat fiscal est conservé séparément des frais de courtage et des pertes latentes.</p></div></section>
 <section class="page" id="importation"><div class="pagehead"><div><h2>Importer un relevé PDF</h2><p>Le PDF Wafa Bourse est la source d’entrée. L’application met à jour le Portfolio, le Journal et le classeur Excel automatiquement.</p></div></div>
-<div class="card"><h3>1. Importer le relevé PDF — étape principale</h3><p class="small">Choisissez le relevé Wafa Bourse depuis Fichiers sur iPhone, iPad ou ordinateur. Le relevé Historique du compte alimente le Journal uniquement. Le relevé Titres / Positions alimente les positions. Excel est actualisé après validation.</p><div class="field"><label for="pdfFile">Fichier PDF Wafa Bourse</label><input id="pdfFile" type="file" accept="application/pdf,.pdf" onchange="importWafaPdfFile(this.files&&this.files[0])"></div><div class="info">Choisissez le bon type de relevé : Historique du compte pour le Journal ; Relevé Titres / Positions pour les quantités, cours, PRMP et valorisations. Un historique seul ne contient pas les données nécessaires aux Positions. Les doublons sont ignorés et Excel est actualisé après validation.</div><h3 style="margin-top:20px">Ou utiliser le Copier-Coller</h3><div class="field"><label for="pdfPaste">Texte copié depuis le PDF Wafa Bourse</label><textarea id="pdfPaste" rows="7" placeholder="Collez ici le tableau du relevé PDF : Valeur, Quantité, Cours/VL, Montant, PRMP, Perf., +/- Values latentes, Poids…"></textarea></div><div class="actions"><button class="btn" onclick="clearPdfPaste()">Effacer</button><button class="btn primary" onclick="previewPdfPositions()">Analyser et prévisualiser</button></div><p id="pdfImportMsg" class="small" aria-live="polite">Aucun fichier ni texte analysé.</p></div>
+<div class="card"><h3>1. Importer le relevé PDF — étape principale</h3><p class="small">Choisissez le relevé Wafa Bourse depuis Fichiers sur iPhone, iPad ou ordinateur. Le relevé Historique du compte alimente le Journal uniquement. Le relevé Titres / Positions alimente les positions. La Synthèse du portefeuille actualise le total comptable, les espèces et la valorisation datée. Excel est actualisé après validation.</p><div class="field"><label for="pdfFile">Fichier PDF Wafa Bourse</label><input id="pdfFile" type="file" accept="application/pdf,.pdf" onchange="importWafaPdfFile(this.files&&this.files[0])"></div><div class="info">Choisissez le bon type de relevé : Historique du compte pour le Journal ; Relevé Titres / Positions pour les quantités, cours, PRMP et valorisations. Un historique seul ne contient pas les données nécessaires aux Positions. Les doublons sont ignorés et Excel est actualisé après validation.</div><h3 style="margin-top:20px">Ou utiliser le Copier-Coller</h3><div class="field"><label for="pdfPaste">Texte copié depuis le PDF Wafa Bourse</label><textarea id="pdfPaste" oninput="invalidateWafaPdfPreview()" rows="7" placeholder="Collez ici le tableau du relevé PDF : Valeur, Quantité, Cours/VL, Montant, PRMP, Perf., +/- Values latentes, Poids…"></textarea></div><div class="actions"><button class="btn" onclick="clearPdfPaste()">Effacer</button><button class="btn primary" onclick="previewPdfPositions()">Analyser et prévisualiser</button></div><p id="pdfImportMsg" class="small" aria-live="polite">Aucun fichier ni texte analysé.</p></div>
 <div class="card hidden" id="pdfPreviewCard"><h3>2. Vérifier les lignes détectées</h3><div class="tablewrap" id="pdfPreviewPositionsTable"><table><thead><tr><th>Valeur</th><th>Catégorie</th><th>Quantité</th><th>Cours / VL</th><th>Montant</th><th>PRMP</th><th>+/- latent</th><th>Perf.</th><th>Poids</th></tr></thead><tbody id="pdfPreviewRows"></tbody></table></div><div class="tablewrap hidden" id="pdfPreviewOperationsTable"><table>
  <thead><tr><th>Date</th><th>Opération</th><th>Valeur</th><th>Quantité</th><th>Prix unitaire (DH)</th><th>Montant net (DH)</th></tr></thead>
  <tbody id="pdfPreviewOperationsRows"></tbody>
@@ -517,7 +517,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 'use strict';
 const KEY='monPortfolioV2PEA';
 const state=loadState();
-function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY))||{};const all=Array.isArray(x.positions)?x.positions:[];const archived=Array.isArray(x.importIssues)?x.importIssues:[];const bad=all.filter(p=>/^\d+(?:[.,]\d+)?$/.test(String(p.name||'').trim()));const good=all.filter(p=>!bad.includes(p));const issues=[...archived,...bad.map(p=>({...p,issue:'Ligne numérique sans nom de valeur, issue d’un ancien import PDF incorrect; archivée sans suppression.'}))];const result={positions:good,dividends:Array.isArray(x.dividends)?x.dividends:[],operations:Array.isArray(x.operations)?x.operations:[],snapshots:Array.isArray(x.snapshots)?x.snapshots:[],masiCloses:validateMasiCloses(x.masiCloses),marketDividends:Array.isArray(x.marketDividends)?x.marketDividends:[],marketNotifications:Array.isArray(x.marketNotifications)?x.marketNotifications:[],officialDividendHistory:Array.isArray(x.officialDividendHistory)?x.officialDividendHistory:[],marketSeenKeys:Array.isArray(x.marketSeenKeys)?x.marketSeenKeys:null,marketInitializedSources:Array.isArray(x.marketInitializedSources)?x.marketInitializedSources:[],importIssues:issues,wafaAccountSummary:x.wafaAccountSummary||null,wafaSyncHistory:Array.isArray(x.wafaSyncHistory)?x.wafaSyncHistory:null};if(bad.length){try{localStorage.setItem(KEY,JSON.stringify(result));}catch(e){}}return result}catch(e){return{positions:[],dividends:[],operations:[],snapshots:[],marketDividends:[],marketNotifications:[],officialDividendHistory:[],marketSeenKeys:null,importIssues:[]}}}
+function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY))||{};const all=Array.isArray(x.positions)?x.positions:[];const archived=Array.isArray(x.importIssues)?x.importIssues:[];const bad=all.filter(p=>/^\d+(?:[.,]\d+)?$/.test(String(p.name||'').trim()));const good=all.filter(p=>!bad.includes(p));const issues=[...archived,...bad.map(p=>({...p,issue:'Ligne numérique sans nom de valeur, issue d’un ancien import PDF incorrect; archivée sans suppression.'}))];const result={positions:good,dividends:Array.isArray(x.dividends)?x.dividends:[],operations:Array.isArray(x.operations)?x.operations:[],snapshots:Array.isArray(x.snapshots)?x.snapshots:[],masiCloses:validateMasiCloses(x.masiCloses),marketDividends:Array.isArray(x.marketDividends)?x.marketDividends:[],marketNotifications:Array.isArray(x.marketNotifications)?x.marketNotifications:[],officialDividendHistory:Array.isArray(x.officialDividendHistory)?x.officialDividendHistory:[],marketSeenKeys:Array.isArray(x.marketSeenKeys)?x.marketSeenKeys:null,marketInitializedSources:Array.isArray(x.marketInitializedSources)?x.marketInitializedSources:[],importIssues:issues,wafaAccountSummary:x.wafaAccountSummary||null,wafaAccountingSummary:x.wafaAccountingSummary||null,wafaSyncHistory:Array.isArray(x.wafaSyncHistory)?x.wafaSyncHistory:null};if(bad.length){try{localStorage.setItem(KEY,JSON.stringify(result));}catch(e){}}return result}catch(e){return{positions:[],dividends:[],operations:[],snapshots:[],marketDividends:[],marketNotifications:[],officialDividendHistory:[],marketSeenKeys:null,importIssues:[]}}}
 const PEA_BASELINE_DATE='2026-11-15';
 const PEA_BASELINE=[
  {id:'pea_20261115_attijari_al_moucharaka',name:'ATTIJARI AL MOUCHARAKA',type:'OPCVM',qty:0.565,price:1291.84,importedValue:729.89,cmp:1415.73,sourcePerf:-8.75,sourcePl:-70.00,sourceWeight:5.61,buyFees:null,source:'Wafa Bourse PDF',sourceDate:PEA_BASELINE_DATE},
@@ -787,6 +787,7 @@ async function importWafaPdfFile(file){
  if(!file)return;
  pendingPdfPositions=[];
  pendingPdfOperations=[];
+ pendingWafaAccountingSummary=null;
  document.getElementById('pdfPreviewCard').classList.add('hidden');
  const picker=document.getElementById('pdfFile');
  picker.disabled=true;
@@ -806,27 +807,7 @@ async function importWafaPdfFile(file){
   const extracted=pages.join('\n');
   if(!extracted.trim())throw new Error('Aucun texte détecté. Le PDF semble être un scan ou une image.');
   document.getElementById('pdfPaste').value=extracted;
-  if(isWafaCtoStatement(extracted,file.name))throw Error('Ce relevé concerne un CTO. Sélectionnez un relevé PEA.');
-  const historyOnly=isWafaHistoryStatement(extracted);
-  const titleOnly=/portefeuille titres/i.test(extracted)&&/quantit[eé]/i.test(extracted)&&/prmp/i.test(extracted);
-  const parsed=historyOnly?[]:(reportRows.length?dedupePdfRows(reportRows):parsePdfCopiedText(extracted));
-  const history=(!historyOnly&&(titleOnly||reportRows.length))?[]:parseWafaHistoryText(extracted,file.name);
-  pendingPdfPositions=parsed;
-  pendingPdfOperations=history;
-  if(!parsed.length&&!history.length){
-   document.getElementById('pdfPreviewCard').classList.add('hidden');
-   msg.textContent='Le PDF a été lu, mais aucune position ni opération reconnue. Vérifiez le texte extrait avant toute importation.';
-   return;
-  }
-  renderPdfPreview(parsed);
-  document.getElementById('pdfPreviewSummary').textContent=
-   `${parsed.length} position(s) détectée(s) · ${history.length} opération(s) détectée(s). `+
-   (historyOnly?'Document identifié : Historique du compte. Aucune position ne sera ajoutée depuis ce PDF. ':'')+
-   `${history.filter(x=>x.category==='Action').length} opérations sur actions, `+
-   `${history.filter(x=>x.category==='OPCVM').length} OPCVM, `+
-   `${history.filter(x=>x.category==='Cash').length} mouvements espèces, `+
-   `${history.filter(x=>x.category==='Frais').length} frais. Vérifiez avant validation.`;
-  msg.textContent=`PDF lu : ${pdf.numPages} page(s), ${parsed.length} position(s), ${history.length} opération(s). Aperçu prêt.`;
+  stageWafaPdfImport(extracted,file.name,reportRows);
  }catch(e){
   msg.textContent='Erreur de lecture PDF : '+(e&&e.message?e.message:'erreur inconnue');
  }finally{picker.disabled=false;picker.value='';}
@@ -844,8 +825,9 @@ function renderPdfPreview(parsed){
 }
 
 let pendingPdfPositions=[];
+let pendingWafaAccountingSummary=null;
 let pendingPdfOperations=[];
-function clearPdfPaste(){document.getElementById('pdfPaste').value='';const pf=document.getElementById('pdfFile');if(pf)pf.value='';document.getElementById('pdfPreviewCard').classList.add('hidden');document.getElementById('pdfImportMsg').textContent='Zone de texte effacée.';pendingPdfPositions=[];pendingPdfOperations=[]}
+function clearPdfPaste(){pendingWafaAccountingSummary=null;document.getElementById('pdfPaste').value='';const pf=document.getElementById('pdfFile');if(pf)pf.value='';document.getElementById('pdfPreviewCard').classList.add('hidden');document.getElementById('pdfImportMsg').textContent='Zone de texte effacée.';pendingPdfPositions=[];pendingPdfOperations=[]}
 function pdfNum(v){if(v===null||v===undefined)return null;let x=String(v).trim().replace(/[\u00a0\u202f]/g,' ').replace(/\s/g,'').replace(/%|DH|MAD/gi,'');if(!x)return null;if(x.includes(',')&&x.includes('.')){if(x.lastIndexOf(',')>x.lastIndexOf('.'))x=x.replace(/\./g,'').replace(',','.');else x=x.replace(/,/g,'')}else if(x.includes(','))x=x.replace(',','.');const n=Number(x);return Number.isFinite(n)?n:null}
 function isBcpName(name){
  return ['BCP','BANQUE CENTRALE','BANQUE CENTRALE POPULAIRE','PRIVATILSAB BANQUE CENTRALE','PRIVATISAB BANQUE CENTRALE'].includes(quoteKey(name||''));
@@ -889,7 +871,16 @@ function parsePdfCopiedText(raw){
  // Parse each complete row first; never pair unrelated metadata labels with numeric rows.
  const directRows=[];
  for(const line of lines){const row=parsePdfPositionLine(line);if(row)directRows.push(row);}
- if(directRows.length)return withStatementDate(directRows);
+ // Certains PDF iOS placent le poids à côté de la quantité avant de copier le reste de la ligne.
+ const wrappedRows=[];
+ for(let i=0;i+2<lines.length;i++){
+  if(!/^[A-ZÀ-Ÿ][A-ZÀ-Ÿ0-9 .&'’()-]+$/.test(lines[i]))continue;
+  const head=lines[i+1].match(/^(\d+(?:[.,]\d+)?)\s+(\d+[.,]\d{2})$/);
+  if(!head||!/%/.test(lines[i+2]))continue;
+  const row=parsePdfPositionLine([lines[i],head[1],lines[i+2],head[2]].join(' '));
+  if(row&&Math.abs(row.qty*row.price-row.importedValue)<Math.max(0.02,row.qty*0.0051))wrappedRows.push(row);
+ }
+ if(directRows.length||wrappedRows.length)return withStatementDate([...directRows,...wrappedRows]);
  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[+]/g,' plus ').replace(/[^a-z0-9]+/g,' ').trim();
  const headerMapFrom=cells=>{
   const h=cells.map(norm), joined=h.map((v,i)=>v+' '+(h[i+1]||''));
@@ -982,26 +973,84 @@ function dedupePdfRows(rows){
  for(const p of rows)m.set(p.name.trim().toLowerCase(),p);
  return [...m.values()];
 }
+function wafaPdfDate(text){
+ const header=text.match(/Casablanca,?\s+le\s+(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-zà-ÿ]+\.?\s+\d{4})/i);
+ return positionDateIso(header?.[1])||null;
+}
+function parseWafaAccountingSummary(text){
+ const amount=label=>pdfNum(text.match(new RegExp(label+'\\s*:?\\s*([-−]?\\s*\\d+(?:[ \\u00a0\\u202f]\\d{3})*[.,]\\d{2})(?!\\d)','i'))?.[1]?.replace('−','-'));
+ const sourceDate=wafaPdfDate(text);
+ const cash=amount('Solde comptable');
+ const equities=amount('Valorisation actions');
+ const funds=amount('Valorisation OPCVM');
+ const total=amount('Total des avoirs');
+ const latent=amount('\\+\\s*\\/\\s*-\\s*latentes');
+ const realized=amount('\\+\\s*\\/\\s*-\\s*r[ée]alis[ée]es');
+ if(!sourceDate||[cash,equities,funds,total,latent,realized].some(value=>!Number.isFinite(value)))
+  throw Error('Synthèse comptable incomplète : vérifiez la date, le solde et les montants du relevé.');
+ const titles=Math.round((equities+funds)*100)/100;
+ if(equities<0||funds<0||Math.abs(titles+cash-total)>0.011)
+  throw Error('Le total de la synthèse ne correspond pas aux titres et au solde comptable.');
+ return {sourceDate,cash,titles,total,latent,realized};
+}
+function stageWafaPdfImport(raw,fileName,reportRows=[]){
+ const msg=document.getElementById('pdfImportMsg'),card=document.getElementById('pdfPreviewCard');
+ pendingPdfPositions=[];pendingPdfOperations=[];pendingWafaAccountingSummary=null;
+ card.classList.add('hidden');
+ try{
+  if(isWafaCtoStatement(raw,fileName))throw Error('Ce relevé concerne un CTO. Utilisez un relevé PEA.');
+  if(/synth[eè]se\s+(?:du portefeuille|compte)/i.test(raw)&&/valorisation\s+OPCVM/i.test(raw)){
+   const summary=parseWafaAccountingSummary(raw);
+   if(state.wafaAccountingSummary?.sourceDate>summary.sourceDate)throw Error('Une synthèse comptable plus récente est déjà enregistrée.');
+   pendingWafaAccountingSummary=summary;
+   renderPdfPreview([]);
+   document.getElementById('pdfPreviewSummary').textContent='Synthèse comptable du '+summary.sourceDate+' · Titres : '+fmt(summary.titles)+' DH · Espèces : '+fmt(summary.cash)+' DH · Total des avoirs : '+fmt(summary.total)+' DH. La validation enregistre aussi la valorisation à cette date.';
+  }else{
+   const historyOnly=isWafaHistoryStatement(raw);
+   const titleOnly=/portefeuille titres/i.test(raw)&&/quantit[eé]/i.test(raw)&&/prmp/i.test(raw);
+   const copied=historyOnly?[]:parsePdfCopiedText(raw);
+   const positioned=historyOnly?[]:dedupePdfRows(reportRows).map(row=>({...row,sourceDate:row.sourceDate||wafaPdfDate(raw)}));
+   const positions=copied.length>positioned.length?copied:positioned;
+   const operations=historyOnly||(!titleOnly&&!reportRows.length)?parseWafaHistoryText(raw,fileName):[];
+   if(!positions.length&&!operations.length)throw Error('Aucune position ni opération reconnue. Vérifiez le texte extrait.');
+   pendingPdfPositions=positions;
+   pendingPdfOperations=operations;
+   renderPdfPreview(positions);
+   document.getElementById('pdfPreviewSummary').textContent=positions.length+' position(s) · '+operations.length+' opération(s) détectée(s). '+(positions.length?'Total des titres détectés : '+fmt(positions.reduce((sum,row)=>sum+portfolioPositionValue(row),0))+' DH. ':'')+'Les doublons seront ignorés.';
+  }
+  msg.textContent='Analyse terminée. Vérifiez les données avant validation.';
+ }catch(e){msg.textContent=e.message;}
+}
+function invalidateWafaPdfPreview(){
+ pendingPdfPositions=[];pendingPdfOperations=[];pendingWafaAccountingSummary=null;
+ document.getElementById('pdfPreviewCard').classList.add('hidden');
+ document.getElementById('pdfImportMsg').textContent='Texte modifié. Relancez l’analyse pour vérifier les données.';
+}
 function previewPdfPositions(){
  if(document.getElementById('pdfFile').disabled)return;
- const raw=document.getElementById('pdfPaste').value||'';
- if(isWafaCtoStatement(raw)){
-  pendingPdfPositions=[];pendingPdfOperations=[];
-  document.getElementById('pdfPreviewCard').classList.add('hidden');
-  document.getElementById('pdfImportMsg').textContent='Ce relevé concerne un CTO. Utilisez un relevé PEA.';
-  return;
- }
- const historyOnly=isWafaHistoryStatement(raw);
- pendingPdfPositions=historyOnly?[]:parsePdfCopiedText(raw);
- pendingPdfOperations=parseWafaHistoryText(raw,'Wafa Bourse PDF');
- const msg=document.getElementById('pdfImportMsg'),card=document.getElementById('pdfPreviewCard');
- if(!pendingPdfPositions.length&&!pendingPdfOperations.length){card.classList.add('hidden');msg.textContent='Aucune position ni opération reconnue. Vérifiez le texte copié.';return}
- renderPdfPreview(pendingPdfPositions);
- document.getElementById('pdfPreviewSummary').textContent=`${pendingPdfPositions.length} position(s) · ${pendingPdfOperations.length} opération(s) détectée(s). ${historyOnly?'Relevé historique : aucune position ne sera ajoutée. ':''}${pendingPdfPositions.length?'Total des titres détectés : '+fmt(pendingPdfPositions.reduce((sum,row)=>sum+portfolioPositionValue(row),0))+' DH. ':''}Les doublons seront ignorés.`;
- msg.textContent='Analyse terminée. Aucune donnée modifiée avant validation.';
+ stageWafaPdfImport(document.getElementById('pdfPaste').value||'','Wafa Bourse PDF');
 }
 
 function commitPdfPositions(){
+ const accounting=pendingWafaAccountingSummary;
+ if(accounting){
+  if(!confirm('Enregistrer la synthèse comptable du '+accounting.sourceDate+' et sa valorisation dans l’historique ?'))return;
+  const snapshots=(state.snapshots||[]).filter(row=>row.date!==accounting.sourceDate);
+  snapshots.push({date:accounting.sourceDate,total:accounting.total});
+  const next={...state,wafaAccountingSummary:accounting,snapshots};
+  try{
+   localStorage.setItem(KEY+'_beforePdfImport_'+Date.now(),JSON.stringify(state));
+   localStorage.setItem(KEY,JSON.stringify(next));
+  }catch(e){alert('Enregistrement impossible : '+e.message);return;}
+  Object.assign(state,next);
+  pendingWafaAccountingSummary=null;
+  document.getElementById('pdfPreviewCard').classList.add('hidden');
+  document.getElementById('pdfImportMsg').textContent='Synthèse comptable et valorisation enregistrées.';
+  render();
+  go('accueil');
+  try{exportExcelAutomation()}catch(e){alert('Synthèse enregistrée. Le téléchargement Excel automatique a échoué.');}
+  return;
+ }
  const pos=pendingPdfPositions||[],ops=pendingPdfOperations||[];
  if(!pos.length&&!ops.length){alert('Aucune donnée PDF validée. Analysez d’abord le relevé.');return}
  if(!confirm(`Importer ${pos.length} position(s) et ${ops.length} opération(s) dans le PEA ? Les anciennes données seront conservées et les doublons ignorés.`))return;
@@ -1685,37 +1734,43 @@ function renderDashboardMetrics(received){
  renderSnapshotVariation();
  const m=portfolioMetrics();
  renderPortfolioAllocation(m);
+ const accounting=state.wafaAccountingSummary;
+ const newerSource=positionDateIso(m.titlesSource.match(/\d{2}\/\d{2}\/\d{4}/g)?.at(-1));
+ const useAccounting=accounting&&(!newerSource||accounting.sourceDate>=newerSource);
+ const display=useAccounting?accounting:m;
+ const displayDate=useAccounting?'Synthèse comptable Wafa Bourse · '+formatPositionDate(accounting.sourceDate):m.titlesSource;
  const holdings=document.getElementById('dashHoldings');
- if(holdings)holdings.textContent=fmt(m.total)+' DH';
+ if(holdings)holdings.textContent=fmt(display.total)+' DH';
  const holdingsMeta=document.getElementById('dashHoldingsMeta');
  const holdingsTitles=document.getElementById('dashHoldingsTitles');
- if(holdingsTitles)holdingsTitles.textContent='Valeur des titres : '+fmt(m.titles)+' DH';
+ if(holdingsTitles)holdingsTitles.textContent='Valeur des titres : '+fmt(display.titles)+' DH';
  const titlesSource=document.getElementById('dashTitlesSource');
- if(titlesSource)titlesSource.textContent=m.titlesSource;
+ if(titlesSource)titlesSource.textContent=displayDate;
  const invested=document.getElementById('dashHoldingsInvested');
- if(invested)invested.textContent='Montant investi : '+(m.invested===null?'— (quantité ou PRMP manquant) ':fmt(m.invested)+' DH');
- if(holdingsMeta)holdingsMeta.textContent=`Espèces : ${fmt(m.cash)} DH · Source : ${m.cashSourceDate}`;
+ if(invested)invested.textContent='Montant investi : '+(useAccounting?'—':m.invested===null?'— (quantité ou PRMP manquant) ':fmt(m.invested)+' DH');
+ if(holdingsMeta)holdingsMeta.textContent=`Espèces : ${fmt(display.cash)} DH · Source : ${useAccounting?formatPositionDate(accounting.sourceDate):m.cashSourceDate}`;
  const profit=document.getElementById('dashProfit');
- if(profit){profit.textContent=(m.latent<0?'−':m.latent>0?'+':'')+fmt(Math.abs(m.latent))+' DH';profit.classList.toggle('negative',m.latent<0);profit.classList.toggle('positive',m.latent>0);}
+ if(profit){profit.textContent=(display.latent<0?'−':display.latent>0?'+':'')+fmt(Math.abs(display.latent))+' DH';profit.classList.toggle('negative',display.latent<0);profit.classList.toggle('positive',display.latent>0);}
  const profitMeta=document.getElementById('dashProfitMeta');
  if(profitMeta)profitMeta.textContent=m.titlesSource;
- const realized=PEA_FISCAL_REALIZED_REFERENCE;
- const sales=recordedPortfolioSales();
+ const realized=useAccounting?accounting.realized:PEA_FISCAL_REALIZED_REFERENCE;
+ const sales=recordedPortfolioSales().filter(sale=>!useAccounting||sale.date>accounting.sourceDate);
  const salesResult=sales.reduce((sum,sale)=>sum+sale.realized,0);
- const total=Math.round((m.latent+realized+salesResult+received)*100)/100;
+ const total=Math.round((display.latent+realized+salesResult+received)*100)/100;
  const signedAmount=value=>(value<0?'−':value>0?'+':'')+fmt(Math.abs(value))+' DH';
  const totalProfit=document.getElementById('dashTotalProfit');
  totalProfit.textContent=signedAmount(total);
  totalProfit.classList.toggle('negative',total<0);
  totalProfit.classList.toggle('positive',total>0);
  totalProfit.classList.toggle('neutral',total===0);
- document.getElementById('dashTotalProfitLatent').textContent=signedAmount(m.latent);
+ document.getElementById('dashTotalProfitLatent').textContent=signedAmount(display.latent);
  document.getElementById('dashTotalProfitRealized').textContent=signedAmount(realized);
+ document.getElementById('dashRealizedSource').textContent=useAccounting?displayDate:'Relevé du 01/01 au 15/11/2026';
  document.getElementById('dashManualSales').classList.toggle('hidden',!sales.length);
  document.getElementById('dashManualSalesResult').textContent=signedAmount(salesResult);
  document.getElementById('dashTotalProfitReceived').textContent=fmt(received)+' DH';
  const chartMain=document.getElementById('chartMainValue');
- if(chartMain&&!state.snapshots.length&&chartMode==='value')chartMain.textContent=fmt(m.total)+' DH';
+ if(chartMain&&!state.snapshots.length&&chartMode==='value')chartMain.textContent=fmt(display.total)+' DH';
 }
 
 function openPortfolioQuotes(){
