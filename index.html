@@ -510,7 +510,15 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <summary class="btn"><span class="positions-show">Afficher les annonces</span><span class="positions-hide">Masquer les annonces</span></summary>
  <div id="marketNotificationRows"><div class="empty">Chargement…</div></div>
 </details></div><div class="card"><p class="small">Une annonce générale ne signifie pas que le PEA détient cette action. Les revenus personnels restent enregistrés séparément dans Dividendes.</p></div></section>
-<section class="page" id="parametres"><div class="pagehead"><div><h2>Paramètres</h2><p>Sauvegarde et gestion des données locales.</p></div></div><div class="sectiongrid"><div class="card"><h3>Sauvegarde</h3><p class="small">Sur l’appareil source, téléchargez la sauvegarde. Sur l’autre appareil, ouvrez le même site et restaurez ce fichier JSON.</p><button class="btn primary" onclick="backup()">Télécharger la sauvegarde</button><div class="field"><label>Restaurer une sauvegarde JSON</label><input type="file" id="restoreFile" accept="application/json"></div><button class="btn" onclick="restoreBackup()">Restaurer</button><p id="backupMsg" class="small"></p></div><div class="card"><h3>Configuration</h3><div class="allocrow"><span>Compte</span><b class="positive">PEA</b></div><div class="allocrow"><span>Architecture</span><b>V2 indépendante</b></div><div class="allocrow"><span>Stockage</span><b>Local au navigateur</b></div><div class="notice">Conserver une sauvegarde avant toute réinitialisation du navigateur.</div></div></div></section>
+<section class="page" id="parametres"><div class="pagehead"><div><h2>Paramètres</h2><p>Sauvegarde et gestion des données locales.</p></div></div><div class="sectiongrid"><div class="card"><h3>Sauvegarde</h3><p class="small">Sur l’appareil source, téléchargez la sauvegarde. Sur l’autre appareil, ouvrez le même site et restaurez ce fichier JSON.</p><button class="btn primary" onclick="backup()">Télécharger la sauvegarde</button><div class="field"><label>Restaurer une sauvegarde JSON</label><input type="file" id="restoreFile" accept="application/json"></div><button class="btn" onclick="restoreBackup()">Restaurer</button><p id="backupMsg" class="small"></p></div><div class="card" id="portfolioSync"><h3>Synchronisation laptop et iPhone</h3>
+<form><div class="field"><label for="portfolioSyncEmail">E-mail</label>
+<input type="email" id="portfolioSyncEmail" name="email" autocomplete="username" required></div>
+<div class="field"><label for="portfolioSyncPassword">Mot de passe</label>
+<input type="password" id="portfolioSyncPassword" name="password" autocomplete="current-password" required></div>
+<button type="submit" class="btn primary">Se connecter</button></form>
+<div class="actions"><button type="button" class="btn primary" data-sync-action hidden>Synchroniser</button>
+<button type="button" class="btn" data-sync-logout hidden>Se déconnecter</button></div>
+<p class="small" role="status">Chargement de la synchronisation…</p></div><div class="card"><h3>Configuration</h3><div class="allocrow"><span>Compte</span><b class="positive">PEA</b></div><div class="allocrow"><span>Architecture</span><b>V2 indépendante</b></div><div class="allocrow"><span>Stockage</span><b>Local + synchronisation facultative</b></div><div class="notice">Conserver une sauvegarde avant toute réinitialisation du navigateur.</div></div></div></section>
 </main></div><div class="footer">Mon portefeuille 2J · PEA · Mise à jour technique · 16/11/2026 · Données source : 15/11/2026</div></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -2992,4 +3000,218 @@ function commitWafaBridge(){
 }
 
 
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+(() => {
+  const panel = document.getElementById('portfolioSync');
+  const form = panel.querySelector('form');
+  const status = panel.querySelector('[role=status]');
+  const action = panel.querySelector('[data-sync-action]');
+  const logout = panel.querySelector('[data-sync-logout]');
+  const fields = ['positions', 'operations', 'dividends', 'snapshots',
+    'masiCloses', 'importIssues', 'wafaAccountSummary', 'wafaAccountingSummary', 'wafaSyncHistory'];
+  const historyKeys = {
+    snapshots: row => row.date,
+    dividends: row => row.dedupeKey || row.id,
+    operations: row => row.dedupeKey || row.key || row.id,
+    importIssues: row => canonical(row)
+  };
+  const labels = {
+    positions: 'Positions', operations: 'Opérations', dividends: 'Dividendes',
+    snapshots: 'Snapshots', masiCloses: 'MASI', importIssues: 'Imports à vérifier',
+    wafaAccountSummary: 'Situation Wafa Bourse', wafaAccountingSummary: 'Solde comptable',
+    wafaSyncHistory: 'Historique Wafa Bourse'
+  };
+
+  function canonical(value) {
+    if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
+    if (value && typeof value === 'object') {
+      return '{' + Object.keys(value).sort().map(key =>
+        JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+  }
+
+  const equal = (a, b) => canonical(a) === canonical(b);
+  const localData = () => JSON.parse(JSON.stringify(Object.fromEntries(
+    fields.map(key => [key, state[key] ?? null])
+  )));
+
+  function merge(base, local, remote, initial) {
+    const conflicts = new Set();
+    function choose(key, before, here, there) {
+      if (equal(here, there) || equal(here, before)) return there;
+      if (equal(there, before)) return here;
+      conflicts.add(labels[key]);
+      return there;
+    }
+    const data = {};
+    for (const key of fields) {
+      const before = base?.[key];
+      const here = local[key];
+      const there = remote[key];
+      const identify = historyKeys[key];
+      if (identify && Array.isArray(here) && Array.isArray(there)) {
+        const maps = [before || [], here, there].map(rows => {
+          const map = new Map();
+          for (const row of rows) {
+            const id = String(identify(row) || canonical(row));
+            if (map.has(id)) return null;
+            map.set(id, row);
+          }
+          return map;
+        });
+        if (maps.every(Boolean)) {
+          const [oldRows, localRows, remoteRows] = maps;
+          const ids = new Set([...remoteRows.keys(), ...localRows.keys()]);
+          data[key] = [...ids].map(id => choose(key, oldRows.get(id),
+            localRows.get(id), remoteRows.get(id))).filter(row => row !== undefined);
+          if (key === 'snapshots') data[key].sort((a, b) => a.date.localeCompare(b.date));
+          continue;
+        }
+      }
+      if (initial) {
+        data[key] = there;
+        if (!equal(here, there)) conflicts.add(labels[key]);
+      } else {
+        data[key] = choose(key, before, here, there);
+      }
+    }
+    return { data, conflicts: [...conflicts] };
+  }
+
+  if (!window.supabase || !window.crypto?.randomUUID) {
+    form.hidden = true;
+    status.textContent = 'Synchronisation indisponible dans ce navigateur.';
+    return;
+  }
+  const client = window.supabase.createClient(
+    'https://hjjigjujfaqjhqwmiqxl.supabase.co',
+    'sb_publishable_78s5mXp3xmC5HhIWVC2KzQ_K9EfZg4z',
+    { auth: { detectSessionInUrl: false, storageKey: KEY + '_sync_auth' } }
+  );
+  let user = null;
+  let busy = false;
+
+  function setUser(session) {
+    user = session?.user || null;
+    form.hidden = Boolean(user);
+    logout.hidden = !user;
+    action.hidden = !user;
+    status.textContent = user ? 'Connexion établie. Vérification…' : 'Connectez le même compte sur vos deux appareils.';
+  }
+
+  async function sync(interactive = false) {
+    if (!user || busy) return;
+    busy = true;
+    action.disabled = logout.disabled = true;
+    const userId = user.id;
+    const baseKey = KEY + '_sync_base_' + userId;
+    try {
+      const before = JSON.parse(localStorage.getItem(baseKey) || 'null');
+      const table = () => client.from('portfolio_sync');
+      const { data: remote, error } = await table().select('revision,data').eq('user_id', userId).maybeSingle();
+      if (error) throw error;
+      if (user?.id !== userId) return;
+      const local = localData();
+
+      if (!remote && (before || !interactive)) {
+        status.textContent = before
+          ? 'Copie en ligne introuvable. Les données locales sont conservées.'
+          : 'Sur le laptop, cliquez sur Synchroniser pour créer la première copie.';
+        return;
+      }
+      if (remote && fields.some(key => !Object.hasOwn(remote.data, key))) {
+        throw new Error('Format de la sauvegarde en ligne incompatible.');
+      }
+      const result = remote ? merge(before, local, remote.data, !before) : { data: local, conflicts: [] };
+      if (!before || result.conflicts.length) {
+        const sections = result.conflicts.join(', ');
+        const message = !remote
+          ? 'Publier les données de cet appareil comme première copie en ligne ?'
+          : (sections ? 'Différences dans ' + sections + '. Les données en ligne seront conservées pour ces différences. ' : '')
+            + 'Les autres modifications compatibles seront fusionnées. Une copie locale sera conservée. Continuer ?';
+        if (!interactive || !window.confirm(message)) {
+          status.textContent = !before ? 'Première synchronisation à confirmer.'
+            : 'Différences à vérifier (' + sections + '). Cliquez sur Synchroniser.';
+          return;
+        }
+        localStorage.setItem(KEY + '_backup_before_sync_' + Date.now(), JSON.stringify(state));
+      }
+
+      if (remote && !equal(local, result.data) && before && !result.conflicts.length) {
+        localStorage.setItem(KEY + '_backup_before_sync_update', JSON.stringify(state));
+      }
+      if (!remote || !equal(remote.data, result.data)) {
+        const payload = { revision: crypto.randomUUID(), data: result.data };
+        const write = remote
+          ? table().update(payload).eq('user_id', userId).eq('revision', remote.revision)
+          : table().insert({ ...payload, user_id: userId });
+        const response = await write.select('revision').maybeSingle();
+        if (response.error) throw response.error;
+        if (!response.data) {
+          status.textContent = 'Une autre mise à jour a été enregistrée. Nouvel essai automatique.';
+          return;
+        }
+      }
+      if (user?.id !== userId) return;
+      if (!equal(local, localData())) {
+        status.textContent = 'Modification locale détectée. Nouvel essai automatique.';
+        return;
+      }
+      if (!equal(local, result.data)) {
+        localStorage.setItem(KEY, JSON.stringify({ ...state, ...result.data }));
+        Object.assign(state, result.data);
+      }
+      if (!equal(before, result.data)) localStorage.setItem(baseKey, JSON.stringify(result.data));
+      if (!equal(local, result.data)) render();
+      status.textContent = 'Synchronisé entre vos appareils.';
+    } catch (error) {
+      status.textContent = 'Synchronisation interrompue. ' + (error.message || 'Réessayez.');
+    } finally {
+      busy = false;
+      action.disabled = logout.disabled = false;
+    }
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const email = form.elements.email.value.trim();
+    const password = form.elements.password.value;
+    const submit = form.querySelector('button');
+    submit.disabled = true;
+    try {
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      form.reset();
+      setUser(data.session);
+      await sync();
+    } catch (error) {
+      status.textContent = 'Connexion impossible. ' + error.message;
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  logout.addEventListener('click', async () => {
+    try {
+      const { error } = await client.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+      setUser(null);
+    } catch (error) {
+      status.textContent = 'Déconnexion impossible. ' + error.message;
+    }
+  });
+  action.addEventListener('click', () => sync(true));
+  client.auth.getSession().then(({ data, error }) => {
+    if (error) status.textContent = error.message;
+    else { setUser(data.session); sync(); }
+  }).catch(error => { status.textContent = error.message; });
+  setInterval(() => { if (!document.hidden) sync(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });
+  window.addEventListener('online', () => sync());
+})();
+
+});
 </script></body></html>
