@@ -1788,6 +1788,10 @@ function openPortfolioQuotes(){
  panel.scrollIntoView({block:'start'});
 }
 function operationFingerprint(o){
+ const name=String(o.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+ const type=String(o.type||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ if(type==='credit'&&/^vir web recu de(?: jaja)?$/.test(name))
+  return [String(o.date||'').slice(0,10),type,'vir web recu de',o.qty??'',o.price??'',o.net??''].join('|');
  return [String(o.date||'').slice(0,10),String(o.type||'').toLowerCase(),isBcpName(o.name)?'bcp':String(o.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(),o.qty??'',o.price??'',o.net??''].join('|');
 }
 function tradeExecutionKey(operation){
@@ -2927,6 +2931,15 @@ async function refreshPeaQuotes(file){
 }
 
 let pendingWafaBridge=null;
+function wafaBridgeOperations(data){
+ if(data.history===undefined)return [];
+ if(typeof data.history!=='string'||!data.history||data.history.length>220000)
+  throw Error('Historique Wafa invalide.');
+ const rows=parseWafaHistoryText(data.history,'Wafa Bourse · Historique en ligne');
+ if(rows.length!==data.history.split('\n').length)
+  throw Error('Certaines lignes de l’historique ne sont pas reconnues. Aucune donnée modifiée.');
+ return rows;
+}
 function validateWafaBridge(data){
  const num=v=>typeof v==='number'&&Number.isFinite(v),key=n=>String(n).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
  if(!data||data.schema!=='wafa-pea-dom-v1'||!/^Portefeuille\(PEA\)\d+$/.test(data.account)||!/^\d{4}-\d{2}-\d{2}$/.test(data.sourceDate)||!Number.isFinite(Date.parse(data.capturedAt))||Math.abs(Date.now()-Date.parse(data.capturedAt))>30*60*1000||!Array.isArray(data.positions)||!data.positions.length||data.positions.length>500)throw Error('Lecture Wafa invalide ou trop ancienne.');
@@ -2942,9 +2955,12 @@ function validateWafaBridge(data){
  return {key,cash:Math.round((s.total-s.actions-s.opcvm)*100)/100};
 }
 function showWafaBridge(data){
- validateWafaBridge(data);pendingWafaBridge=data;
+ validateWafaBridge(data);
+ const incoming=wafaBridgeOperations(data);
+ const journal=mergeJournalOperations(state.operations,incoming);
+ pendingWafaBridge=data;
  const box=document.getElementById('wafaBridgeCard');box.classList.remove('hidden');
- document.getElementById('wafaBridgeSummary').textContent=`Lecture du ${data.sourceDate} · ${data.positions.length} positions · Total officiel : ${fmt(data.summary.total)} DH · +/- latent : ${fmt(data.summary.latent)} DH. Aucun changement avant validation.`;
+ document.getElementById('wafaBridgeSummary').textContent=`Lecture du ${data.sourceDate} · ${data.positions.length} positions · Total officiel : ${fmt(data.summary.total)} DH · +/- latent : ${fmt(data.summary.latent)} DH.${incoming.length?' Journal : '+incoming.length+' lues, '+journal.added+' nouvelles, '+journal.reconciled+' rapprochées, '+journal.skipped+' déjà connues.':''} Aucun changement avant validation.`;
  document.getElementById('wafaBridgeRows').innerHTML=data.positions.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.type)}</td><td>${fmt(p.qty,3)}</td><td>${fmt(p.price)}</td><td>${fmt(p.importedValue)}</td><td>${fmt(p.sourcePl)}</td></tr>`).join('');
  go('positions');
 }
@@ -2954,6 +2970,7 @@ window.addEventListener('monportfolio-wafa-preview',event=>{
 function cancelWafaBridge(){pendingWafaBridge=null;document.getElementById('wafaBridgeCard').classList.add('hidden');}
 function commitWafaBridge(){
  let persisted;
+ let journal;
  try{
   if(!pendingWafaBridge)throw Error('Aucune lecture prête.');
   const d=pendingWafaBridge;
@@ -2977,7 +2994,8 @@ function commitWafaBridge(){
   });
   const historyEntry={capturedAt:d.capturedAt,date:d.sourceDate,total:d.summary.total,positions:positions.length};
   const wafaAccountSummary={...d.summary,account:d.account,cash,sourceDate:d.sourceDate,capturedAt:d.capturedAt};
-  persisted={...state,positions,wafaAccountSummary,
+  journal=mergeJournalOperations(state.operations,wafaBridgeOperations(d));
+  persisted={...state,positions,wafaAccountSummary,operations:journal.operations,
    wafaSyncHistory:history.some(entry=>entry.capturedAt===d.capturedAt)?history:[...history,historyEntry]};
   localStorage.setItem(KEY+'_beforeLatestWafaBridge',JSON.stringify(state));
   localStorage.setItem(KEY,JSON.stringify(persisted));
@@ -2996,7 +3014,7 @@ function commitWafaBridge(){
  }
  try{exportExcelAutomation();}
  catch(e){alert('Portfolio et Positions synchronisés. Relancez l’export Excel depuis Importer un relevé.');return;}
- alert('Portfolio et Positions synchronisés · Relevé Wafa du '+persisted.wafaAccountSummary.sourceDate+'.');
+ alert('Import Wafa du '+persisted.wafaAccountSummary.sourceDate+' enregistré. Journal : '+journal.added+' ajoutée(s), '+journal.reconciled+' rapprochée(s), '+journal.skipped+' déjà connue(s).');
 }
 
 
