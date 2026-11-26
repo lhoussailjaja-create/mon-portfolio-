@@ -1,0 +1,71 @@
+name: Actualiser les clôtures MASI
+on:
+  schedule:
+    - cron: '15 18 * * 1-5'
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/clotures-masi.yml'
+permissions:
+  contents: write
+concurrency: clotures-masi
+jobs:
+  clotures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lire les bulletins officiels
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils
+          python3 - <<'PY'
+          import json
+          import re
+          import subprocess
+          from datetime import datetime, timedelta
+          from pathlib import Path
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+          from zoneinfo import ZoneInfo
+
+          path = Path('clotures-masi.json')
+          closes = json.loads(path.read_text()) if path.exists() else {}
+          today = datetime.now(ZoneInfo('Africa/Casablanca')).date()
+          for offset in reversed(range(10)):
+              day = today - timedelta(days=offset)
+              key = day.isoformat()
+              if day.weekday() >= 5 or key in closes:
+                  continue
+              url = f'https://www.casablanca-bourse.com/sites/default/files/bulletins/{day:%Y-%m}/fr/BCFR_{day:%Y%m%d}.pdf'
+              try:
+                  with urlopen(Request(url, headers={'User-Agent': 'Mon-Portfolio-MASI/1.0'}), timeout=20) as reply:
+                      pdf = reply.read(12000000)
+              except HTTPError as error:
+                  if error.code == 404:
+                      print(f'{key}: bulletin absent')
+                      continue
+                  raise
+              if not pdf.startswith(b'%PDF-'):
+                  raise ValueError(f'{key}: le bulletin obtenu ne contient pas de PDF')
+              page = subprocess.run(['pdftotext', '-layout', '-', '-'], input=pdf,
+                                    stdout=subprocess.PIPE, check=True).stdout.decode()
+              if not re.search(r'Séance\s+du\s+' + re.escape(day.strftime('%d/%m/%Y')), page, re.I):
+                  raise ValueError(f'{key}: date de séance introuvable')
+              values = set(re.findall(r'^\s*MASI[ \t]+([\d \u00a0\u202f]+,\d{2})[ \t]+[+−-]?\d', page, re.M))
+              if len(values) != 1:
+                  raise ValueError(f'{key}: clôture MASI introuvable ou ambiguë')
+              value = float(''.join(values.pop().split()).replace(',', '.'))
+              if value <= 0:
+                  raise ValueError(f'{key}: clôture MASI invalide')
+              closes[key] = value
+          path.write_text(json.dumps(closes, sort_keys=True, indent=2) + '\n')
+          PY
+      - name: Publier les nouvelles clôtures
+        run: |
+          git add clotures-masi.json
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Actualiser les clôtures officielles du MASI'
+          git pull --rebase
+          git push
