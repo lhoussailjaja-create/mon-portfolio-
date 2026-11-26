@@ -1382,6 +1382,24 @@ function portfolioMasiSeries(rows,dividends,closes){
  });
  return {points,missing,needsFlows:false};
 }
+let officialMasiCloses={};
+let masiRefreshPending=false;
+async function refreshOfficialMasiCloses(){
+ if(masiRefreshPending)return;
+ masiRefreshPending=true;
+ try{
+  const response=await fetch('https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/clotures-masi.json',{cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  officialMasiCloses={...officialMasiCloses,...validateMasiCloses(await response.json())};
+  renderChart();
+ }catch(error){
+  console.warn('Clôtures MASI automatiques indisponibles',error);
+ }finally{masiRefreshPending=false}
+}
+window.addEventListener('DOMContentLoaded',refreshOfficialMasiCloses);
+document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden)refreshOfficialMasiCloses();
+});
 function renderMasiComparison(rows){
  const host=document.getElementById('masiComparisonResult');
  if(!host)return;
@@ -1390,7 +1408,7 @@ function renderMasiComparison(rows){
   return;
  }
  const verified=Object.fromEntries(Object.entries(PORTFOLIO_MASI_VERIFIED_CLOSES).map(([date,row])=>[date,row.value]));
- const result=portfolioMasiSeries(rows,state.dividends,{...verified,...state.masiCloses});
+ const result=portfolioMasiSeries(rows,state.dividends,{...verified,...officialMasiCloses,...state.masiCloses});
  const formatDate=date=>date.split('-').reverse().join('/');
  if(!result.points){
   const messages=[];
