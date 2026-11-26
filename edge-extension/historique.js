@@ -1,7 +1,7 @@
 async function captureWafaHistory(tabId, expectedAccount) {
  const viewUrl=WAFA+'/portefeuille/historique';
  await chrome.tabs.update(tabId,{url:viewUrl});
- async function read(action, previous) {
+ async function read(action = null, previous = null) {
   const result=await chrome.scripting.executeScript({target:{tabId},args:[action,previous],func:(action,previous)=>{
    if(location.origin!=='https://clients.wafabourse.com'||location.pathname!=='/portefeuille/historique')return null;
    const clean=value=>String(value||'').replace(/\s+/g,' ').trim();
