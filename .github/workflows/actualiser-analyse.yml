@@ -160,7 +160,7 @@ jobs:
           debts = previous.get("net_debt", {})
           issuers = {"marsa maroc": "MARSA MAROC", "akdital": "AKDITAL", "sgtm": "SGTM"}
           seen = set()
-          for article in reversed(list(articles.values())):
+          for article in sorted(articles.values(), key=lambda item: item.get("first_seen", ""), reverse=True):
               title = normalized(article["title"])
               issuer = next((key for name, key in issuers.items() if re.search(r"\b" + name + r"\b", title)), None)
               if not issuer or article["source"] != "AMMC" or issuer in seen:
