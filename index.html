@@ -401,7 +401,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="card">
   <h3>Opportunités du marché</h3>
   <p class="small">Sélection documentée au 27/11/2026. Le PER utilise le bénéfice par action de l’exercice 2025. La liquidité indique les montants échangés sur le marché central, à la date du bulletin.</p>
-  <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Date</th><th>Var. 1M</th><th>Publication / PER</th><th>Liquidité</th><th>Dette nette</th><th>Poids après +1</th><th>Avis</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Date</th><th>Var. 1M</th><th>Publication / PER</th><th>Liquidité</th><th>Dette nette</th><th>Var. dette nette</th><th>Poids après +1</th><th>Avis</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
   <p class="small">ÉTU = étudier l’achat · Liq. = liquidité. <a href="https://www.casablanca-bourse.com/" target="_blank" rel="noopener noreferrer" class="analysis-bvc-link">Bourse de Casablanca ↗</a></p>
  </div>
  <div class="card">
@@ -2252,8 +2252,8 @@ function positionUpdateDateCell(position){
 }
 let analysisMarketBulletin=null;
 const analysisNetDebt={
- 'MARSA MAROC':{label:'316 M DH',date:'30/09/2026',url:'https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf'},
- 'AKDITAL':{label:'4,96 Md DH',date:'30/09/2026',url:'https://lematin.ma/economie/akdital-chiffre-daffaires-en-croissance-de-28-a-fin-septembre-2026/377899'},
+ 'MARSA MAROC':{label:'316 M DH',date:'30/09/2026',variation:'+786 M DH',comparison:'vs 30/09/2025',url:'https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf'},
+ 'AKDITAL':{label:'4,96 Md DH',date:'30/09/2026',variation:'+700 M DH (+16 %)',comparison:'vs 31/12/2025',url:'https://lematin.ma/economie/akdital-chiffre-daffaires-en-croissance-de-28-a-fin-septembre-2026/377899'},
  'SGTM':{label:'2,4 Md DH',date:'30/06/2026',url:'https://www.ammc.ma/sites/default/files/CP_SGTM_T2_26.pdf'}
 };
 const analysisEarnings2025={
@@ -2351,7 +2351,7 @@ function renderAnalysis(){
   <td>${row.price>0?fmt(row.price)+' DH<br><span class="small">'+esc(row.date)+'</span>':'—'}</td>
   <td>—</td><td>${row.publication}<br>${row.per===null?'PER : —':'<a class="analysis-bvc-link" href="'+row.earnings.url+'" target="_blank" rel="noopener noreferrer">PER 2025 : '+fmt(row.per,1)+'×</a>'}</td>
   <td>${row.volume===null?'—':fmt(row.volume,0)+' DH<br><a class="analysis-bvc-link small" href="'+esc(analysisMarketBulletin.source)+'" target="_blank" rel="noopener noreferrer">'+formatPositionDate(analysisMarketBulletin.date)+'</a>'}</td>
-  <td>${row.debt?row.debt.label+'<br><a class="analysis-bvc-link small" href="'+esc(row.debt.url)+'" target="_blank" rel="noopener noreferrer">'+row.debt.date+'</a>':'—'}</td><td>${pct(row.weight)}</td>
+  <td>${row.debt?row.debt.label+'<br><a class="analysis-bvc-link small" href="'+esc(row.debt.url)+'" target="_blank" rel="noopener noreferrer">'+row.debt.date+'</a>':'—'}</td><td>${row.debt?.variation?esc(row.debt.variation)+'<br><small>'+esc(row.debt.comparison)+'</small>':'—'}</td><td>${pct(row.weight)}</td>
   <td>${row.status}</td><td>${row.reason} <a href="${row.url}" target="_blank" rel="noopener noreferrer">${row.source} ↗</a></td>
  </tr>`).join('');
  const decisions=losses.map(({position})=>{
