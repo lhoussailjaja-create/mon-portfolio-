@@ -16,7 +16,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .app{max-width:1540px;padding:18px 18px 42px}
 .top{margin-bottom:15px}.brand .logo{background:linear-gradient(145deg,#b8f51b,#5da900);color:#102000;border-radius:13px}.brand h1{font-size:22px}.brand p{font-size:12px}
 .layout{display:block}.sidebar{position:static;display:flex;align-items:center;gap:7px;padding:7px 9px;margin-bottom:15px;background:#0d131b;border-color:#303a43;overflow-x:auto;white-space:nowrap}.sidebar .navlabel,.sidebar .sidefoot{display:none}.nav{width:auto;flex:0 0 auto;margin:0;padding:10px 17px;border-radius:11px;color:#d2dbe2}.nav.active{background:linear-gradient(110deg,#b8f51b,#70c900);color:#101900;box-shadow:0 0 20px #9ce91435}.ico{display:inline-block}.content{min-width:0}.pagehead{align-items:center}.pagehead h2{font-size:26px}
-#accueil .pagehead h2{font-size:23px}.pagehead p{color:#a5b1bb}
+.dashboard-title{font-size:23px;letter-spacing:-.5px;margin:0 0 10px}.pagehead p{color:#a5b1bb}
 .card{background:linear-gradient(145deg,#151e27,#0d141c);border-color:#39434d;box-shadow:0 10px 28px #0005}.dash-kpis{gap:12px}.dash-kpi{min-height:126px;padding:17px}.kpi-icon{background:#26391a;color:var(--mint);border-radius:50%;width:37px;height:37px}.dash-kpi:nth-child(2) .kpi-icon{background:#3a2026;color:var(--red)}.dash-kpi:nth-child(3) .kpi-icon{background:#26391a;color:var(--mint)}.dash-kpi:nth-child(4) .kpi-icon{background:#3d3516;color:var(--gold)}.dash-kpi .metric-value{font-size:clamp(20px,2vw,29px)}
 .chart-card{padding:19px 20px}.chart-mode.active,.period.active{background:#b8f51b;color:#172000;border-color:#b8f51b;box-shadow:0 0 14px #b8f51b45}.chart-mode,.period{background:#111a23;border-color:#39444e;color:#d5dce2}.chart-area svg{max-height:270px}.chart-summary strong{font-size:20px}.chart-foot{color:#93a2ad}
 .dash-bottom{grid-template-columns:1.2fr .8fr}.heatmap{--heat-unit:104px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,132px),1fr));gap:14px}.heat-tile{display:grid;grid-template-rows:var(--heat-unit) auto;justify-items:center;align-items:start;gap:8px;min-width:0;text-align:center}.heat-square{align-self:end;aspect-ratio:1;background:#eb2d3c;border-radius:4px}.heat-square.positive{background:#4dbe00}.heat-tile-label{display:grid;gap:3px;font-size:12px;overflow-wrap:anywhere}.heat-tile-label strong{white-space:nowrap}.heat-empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed #45515c;border-radius:12px;grid-column:1/-1}
@@ -209,14 +209,20 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .positions-total-card small{flex-basis:100%}
 .portfolio-commands > summary { display: list-item; width: fit-content; }
 .portfolio-commands[open] > .actions { margin-top: .5rem; }
+@media (max-width:560px) {
+  .sidebar { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:6px; }
+  .sidebar .nav { width:100%;padding:9px 2px;text-align:center; }
+  .sidebar .nav .ico { display:none; }
+}
 @media print { .portfolio-commands { display: none; } }
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
+<h2 class="dashboard-title">TABLEAU DE BORD</h2>
 <div class="layout"><aside class="sidebar"><button class="nav active" data-page="accueil"><span class="ico">▥</span>Portfolio</button><button class="nav" data-page="positions"><span class="ico">▣</span>Positions</button><button class="nav" data-page="dividendes"><span class="ico">◉</span>Dividendes</button><button class="nav" data-page="notifications"><span class="ico">♧</span>Notifications</button></aside>
 <main class="content">
 <section class="page active" id="accueil">
-<div class="pagehead"><div><h2>TABLEAU DE BORD</h2></div><details class="portfolio-commands">
+<div class="pagehead"><details class="portfolio-commands">
   <summary class="btn">Commandes</summary>
   <div class="actions">
     <button class="btn" onclick="window.print()">Imprimer</button>
