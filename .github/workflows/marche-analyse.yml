@@ -1,0 +1,74 @@
+name: Actualiser le PER et la liquidité
+on:
+  schedule:
+    - cron: '15 18 * * 1-5'
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/marche-analyse.yml
+permissions:
+  contents: write
+concurrency: marche-analyse
+jobs:
+  bulletin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lire le bulletin officiel
+        run: |
+          python3 - <<'PY'
+          from datetime import datetime
+          from decimal import Decimal
+          import json
+          from pathlib import Path
+          import re
+          import subprocess
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+          from zoneinfo import ZoneInfo
+
+          session = datetime.now(ZoneInfo("Africa/Casablanca")).date()
+          source = f"https://www.casablanca-bourse.com/sites/default/files/bulletins/{session:%Y-%m}/fr/BCFR_{session:%Y%m%d}.pdf"
+          try:
+              with urlopen(Request(source, headers={"User-Agent": "MonPortfolio/1.0"}), timeout=45) as response:
+                  pdf = response.read()
+          except HTTPError as error:
+              if error.code in (404, 410):
+                  print("Pas de bulletin pour cette date. Le dernier bulletin est conservé.")
+                  raise SystemExit(0)
+              raise
+          if not pdf.startswith(b"%PDF"):
+              raise SystemExit("Le bulletin n'est pas un PDF.")
+          document = subprocess.run(["pdftotext", "-layout", "-", "-"], input=pdf, capture_output=True, check=True).stdout.decode()
+          document = document.replace("\xa0", " ").replace("\u202f", " ")
+          codes = {"MARSA MAROC": ("MA0000012312", "SODEP MARSA MAROC"),
+                   "AKDITAL": ("MA0000012585", "AKDITAL"), "SGTM": ("MA0000012783", "SGTM")}
+          amount = r"\d+(?: \d{3})*,\d{2}"
+          quantity = r"\d+(?: \d{3})*"
+          details = re.split(r"MARCH[ÉE]\s+(?:DE\s+)?BLOCS", document.split("PHYSIONOMIE DES TRANSACTIONS", 1)[-1], maxsplit=1)[0]
+          if details == document:
+              raise SystemExit("Section des transactions introuvable.")
+          def decimal(value):
+              return Decimal(value.replace(" ", "").replace(",", "."))
+          values = {}
+          for name, (isin, label) in codes.items():
+              quote = re.search(rf"(\d{{2}}/\d{{2}}/\d{{2}})\s+({amount})\s+{isin}\b", document)
+              transactions = re.findall(rf"^\s*{label}\s{{2,}}{amount}\s{{2,}}{quantity}\s{{2,}}({amount})\s{{2,}}\d+\s*$", details, re.M)
+              if not quote or (quote[1] == session.strftime("%d/%m/%y") and not transactions):
+                  raise SystemExit(f"Données incomplètes pour {name}. Le dernier bulletin est conservé.")
+              values[name] = {"price": float(decimal(quote[2])), "volume": float(sum(map(decimal, transactions))),
+                              "quote_date": datetime.strptime(quote[1], "%d/%m/%y").date().isoformat()}
+          Path("marche-analyse.json").write_text(json.dumps(
+              {"date": session.isoformat(), "source": source, "values": values}, ensure_ascii=False, indent=2
+          ) + "\n")
+          PY
+      - name: Publier le bulletin analysé
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add marche-analyse.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Actualiser les données de séance dans Analyse"
+          git pull --rebase
+          git push
