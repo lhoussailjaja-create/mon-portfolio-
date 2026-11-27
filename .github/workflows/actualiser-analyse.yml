@@ -1,0 +1,106 @@
+name: Actualiser les publications pour Analyse
+on:
+  schedule:
+    - cron: '30 17 * * 1-5'
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/actualiser-analyse.yml
+permissions:
+  contents: write
+concurrency:
+  group: actualiser-analyse
+  cancel-in-progress: false
+jobs:
+  publications:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lire les publications officielles
+        run: |
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          from html.parser import HTMLParser
+          import json
+          from pathlib import Path
+          from urllib.parse import urljoin, urlsplit
+          from urllib.request import Request, urlopen
+
+          sources = {
+              "AMMC": "https://www.ammc.ma/fr/communiques-presse-emetteurs",
+              "Bourse de Casablanca": "https://www.casablanca-bourse.com/apropos/publications/emetteurs",
+          }
+          path = Path("publications-analyse.json")
+          previous = json.loads(path.read_text()) if path.exists() else {}
+          articles = {item["url"]: item for item in previous.get("publications", [])}
+          now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+          availability = {}
+
+          class Links(HTMLParser):
+              def __init__(self, base, source):
+                  super().__init__(convert_charrefs=True)
+                  self.base = base
+                  self.source = source
+                  self.href = ""
+                  self.parts = []
+                  self.items = {}
+
+              def handle_starttag(self, tag, attrs):
+                  if tag == "a":
+                      self.href = dict(attrs).get("href") or ""
+                      self.parts = []
+
+              def handle_data(self, data):
+                  if self.href:
+                      self.parts.append(data)
+
+              def handle_endtag(self, tag):
+                  if tag != "a" or not self.href:
+                      return
+                  url = urljoin(self.base, self.href)
+                  self.href = ""
+                  link = urlsplit(url)
+                  title = " ".join(" ".join(self.parts).split())
+                  if link.scheme != "https" or link.netloc != urlsplit(self.base).netloc:
+                      return
+                  relevant = (
+                      link.path.startswith("/fr/actualites/communique-presse/")
+                      or "/pemetteur/" in link.path
+                      or "/publications/emetteurs/" in link.path
+                  )
+                  if relevant and len(title) >= 18:
+                      self.items[url] = {"title": title, "url": url, "source": self.source}
+
+          for source, url in sources.items():
+              try:
+                  request = Request(url, headers={"User-Agent": "MonPortfolio/1.0"})
+                  with urlopen(request, timeout=25) as response:
+                      html = response.read().decode("utf-8", errors="replace")
+                  links = Links(url, source)
+                  links.feed(html)
+                  if not links.items:
+                      raise ValueError("Aucune publication reconnue")
+                  for key, item in links.items.items():
+                      articles[key] = {"first_seen": articles.get(key, {}).get("first_seen", now), **item}
+                  availability[source] = {"ok": True}
+              except (OSError, ValueError) as error:
+                  availability[source] = {"ok": False}
+                  print(f"{source}: {error}")
+
+          if not any(item["ok"] for item in availability.values()):
+              raise SystemExit("Aucune source disponible. Le dernier résultat est conservé.")
+          path.write_text(json.dumps(
+              {"checked_at": now, "sources": availability, "publications": list(articles.values())},
+              ensure_ascii=False, indent=2
+          ) + "\n")
+          PY
+      - name: Publier le résultat
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add publications-analyse.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Actualiser les publications de l’analyse"
+          git pull --rebase
+          git push
