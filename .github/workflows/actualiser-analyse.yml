@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
+      - name: Installer pdftotext
+        run: command -v pdftotext || (sudo apt-get update && sudo apt-get install -y poppler-utils)
       - name: Lire les publications officielles
         run: |
           python3 - <<'PY'
@@ -90,8 +92,98 @@ jobs:
 
           if not any(item["ok"] for item in availability.values()):
               raise SystemExit("Aucune source disponible. Le dernier résultat est conservé.")
+          import re
+          import subprocess
+          import tempfile
+          import unicodedata
+          
+          def normalized(value):
+              return " ".join("".join(c for c in unicodedata.normalize("NFKD", value.lower())
+                                      if not unicodedata.combining(c)).split())
+          
+          months = "janvier fevrier mars avril mai juin juillet aout septembre octobre novembre decembre".split()
+          date_pattern = r"(\d{1,2})\s+(" + "|".join(months) + r")\s+(20\d{2})"
+          money_pattern = r"([−-]?\d+(?:[ .]\d{3})*(?:[,.]\d+)?)\s*(mmdh|mdh|m\s*mad|md\s*mad|milliards? de dirhams|millions? de dirhams)\b"
+          debt_pattern = re.compile(
+              r"(?:endettement net|dette nette)(?: consolide[e]?)?\s*[^.;]{0,65}?"
+              + money_pattern + r"\s+(?:au|a fin)\s+" + date_pattern
+              + r"\s*,?\s*(?:contre|versus)\s+" + money_pattern
+              + r"\s+(?:au|a fin)\s+" + date_pattern
+          )
+          
+          def amount(raw, unit):
+              number = raw.replace(" ", "").replace("−", "-")
+              if "," in number:
+                  number = number.replace(".", "").replace(",", ".")
+              return float(number) * (1000 if unit in ("mmdh", "md mad") or unit.startswith("milliard") else 1)
+          
+          def date_iso(day, month, year):
+              return datetime(int(year), months.index(month) + 1, int(day)).date().isoformat()
+          
+          def extract_debt(document, url):
+              matches = set()
+              for match in debt_pattern.finditer(normalized(document)):
+                  current, unit, day, month, year, prior, old_unit, old_day, old_month, old_year = match.groups()
+                  dates = date_iso(day, month, year), date_iso(old_day, old_month, old_year)
+                  if dates[1] < dates[0] <= now[:10]:
+                      matches.add((*dates, amount(current, unit), amount(prior, old_unit)))
+              if len(matches) != 1:
+                  return None
+              date, prior_date, current, prior = matches.pop()
+              return {"date": date, "prior_date": prior_date, "current_mdh": current, "prior_mdh": prior, "url": url}
+          
+          class PdfLinks(HTMLParser):
+              def __init__(self, base):
+                  super().__init__()
+                  self.base = base
+                  self.urls = set()
+          
+              def handle_starttag(self, tag, attrs):
+                  if tag != "a":
+                      return
+                  url = urljoin(self.base, dict(attrs).get("href") or "")
+                  link = urlsplit(url)
+                  if link.scheme == "https" and link.hostname == "www.ammc.ma" and link.path.lower().endswith(".pdf"):
+                      self.urls.add(url)
+          
+          def official_bytes(url, maximum):
+              request = Request(url, headers={"User-Agent": "MonPortfolio/1.0"})
+              with urlopen(request, timeout=10) as response:
+                  final = urlsplit(response.geturl())
+                  if final.scheme != "https" or final.hostname != "www.ammc.ma":
+                      raise ValueError("Redirection hors AMMC")
+                  data = response.read(maximum + 1)
+              if len(data) > maximum:
+                  raise ValueError("Document trop volumineux")
+              return data
+          
+          debts = previous.get("net_debt", {})
+          issuers = {"marsa maroc": "MARSA MAROC", "akdital": "AKDITAL", "sgtm": "SGTM"}
+          seen = set()
+          for article in reversed(list(articles.values())):
+              title = normalized(article["title"])
+              issuer = next((key for name, key in issuers.items() if re.search(r"\b" + name + r"\b", title)), None)
+              if not issuer or article["source"] != "AMMC" or issuer in seen:
+                  continue
+              seen.add(issuer)
+              try:
+                  url = article["url"]
+                  html = official_bytes(url, 2_000_000).decode("utf-8", errors="replace")
+                  pdfs = PdfLinks(url)
+                  pdfs.feed(html)
+                  for pdf in sorted(pdfs.urls)[:3]:
+                      with tempfile.TemporaryDirectory() as directory:
+                          file = Path(directory) / "publication.pdf"
+                          file.write_bytes(official_bytes(pdf, 10_000_000))
+                          document = subprocess.check_output(["pdftotext", "-layout", str(file), "-"], timeout=10).decode("utf-8")
+                      debt = extract_debt(document, pdf)
+                      if debt and debt["date"] >= debts.get(issuer, {}).get("date", ""):
+                          debts[issuer] = debt
+              except (OSError, ValueError, subprocess.SubprocessError) as error:
+                  print(f"Dette nette {issuer}: {error}")
+
           path.write_text(json.dumps(
-              {"checked_at": now, "sources": availability, "publications": list(articles.values())},
+              {"checked_at": now, "sources": availability, "publications": list(articles.values()), "net_debt": debts},
               ensure_ascii=False, indent=2
           ) + "\n")
           PY
