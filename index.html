@@ -2315,7 +2315,47 @@ async function refreshAnalysisPublications(){
   status.textContent='Veille automatique indisponible. Les décisions documentées restent affichées.';
  }
 }
+function analysisPriceHistory(){
+ try{
+  const history=JSON.parse(localStorage.getItem(KEY+'_priceHistory')||'[]');
+  return Array.isArray(history)?history.flatMap(entry=>Array.isArray(entry?.changes)?entry.changes:[]):[];
+ }catch{return [];}
+}
+function diagnosticContext(position,localQuotes){
+ const key=quoteKey(position.name);
+ const observations=new Map();
+ const add=(date,price)=>{
+  if(/^\d{4}-\d{2}-\d{2}$/.test(date||'')&&Number.isFinite(price)&&price>0)observations.set(date,price);
+ };
+ for(const change of localQuotes){
+  if(quoteKey(change.name||'')===key)add(change.quote?.quote_date,change.quote?.price_mad);
+ }
+ const bulletin=analysisMarketBulletin;
+ for(const [date,values] of Object.entries(bulletin?.history||{})){
+  const quote=values?.[key];
+  if(quote&&(!quote.quote_date||quote.quote_date===date))add(date,quote.price);
+ }
+ const latest=bulletin?.values?.[key];
+ if(latest&&(!latest.quote_date||latest.quote_date===bulletin.date))add(bulletin.date,latest.price);
+ const points=[...observations].sort(([a],[b])=>a.localeCompare(b));
+ if(points.length<2)return position.type==='OPCVM'?'Historique de VL insuffisant pour dater la baisse.':'Historique de cours insuffisant pour dater la baisse.';
+ const [end,last]=points.at(-1),[start,first]=points.at(-2);
+ const change=100*(last/first-1);
+ const close=date=>state.masiCloses?.[date]??PORTFOLIO_MASI_VERIFIED_CLOSES[date]?.value;
+ const left=close(start),right=close(end);
+ const market=left>0&&right>0?' · MASI '+fmt(100*(right/left-1),1)+' %':' · MASI indisponible sur ces dates';
+ const announcements=analysisPublications.filter(item=>{
+  const discovered=String(item?.first_seen||'').slice(0,10);
+  return discovered>=start&&discovered<=end&&
+   (' '+quoteKey(String(item?.title||''))+' ').includes(' '+key+' ')&&
+   /^https:\/\/www\.(ammc\.ma|casablanca-bourse\.com)\//.test(item?.url||'');
+ });
+ const announcement=announcements[0];
+ const link=announcement?' · <a href="'+esc(announcement.url)+'" target="_blank" rel="noopener noreferrer">Publication repérée sur la période ↗</a>':'';
+ return formatPositionDate(start)+' → '+formatPositionDate(end)+' : cours '+fmt(change,1)+' %'+market+link+'. Cause non établie.';
+}
 function renderAnalysis(){
+ const localQuotes=analysisPriceHistory();
  const metrics=portfolioMetrics();
  const positionResults=state.positions.map(position=>{
   const value=portfolioPositionValue(position);
@@ -2340,7 +2380,7 @@ function renderAnalysis(){
  document.getElementById('analysisDate').textContent=metrics.titlesSource;
  document.getElementById('analysisLossRows').innerHTML=losses.map(({position,pl,percent,weight})=>{
   const [status,reason]=review[quoteKey(position.name)]??['REV','Examiner les résultats et le poids de la ligne avant de renforcer.'];
-  return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Cause non confirmée. '+reason}</td></tr>`;
+  return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Piste à vérifier : '+reason}<br><small>${diagnosticContext(position,localQuotes)}</small></td></tr>`;
  }).join('')||'<tr><td colspan="6" class="empty">Aucune ligne en moins-value disponible.</td></tr>';
  const candidates=[
   {name:'Marsa Maroc',sector:'Ports et logistique',publication:'CA à fin septembre 2026 : +13 %',reason:'Vérifier la valorisation et les espèces disponibles.',url:'https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf',source:'AMMC'},
