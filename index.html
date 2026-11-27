@@ -217,26 +217,17 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 @media print { .portfolio-commands { display: none; } }
 .analysis-summary-table{width:100%;min-width:0;table-layout:fixed}
 .analysis-summary-table th,.analysis-summary-table td{padding:8px 6px;text-align:left;white-space:normal;overflow-wrap:anywhere;vertical-align:top;font-size:13px}
+.analysis-summary-table th,.analysis-summary-table td{padding:5px 4px}
+.analysis-pea-table{min-width:0}
+.analysis-pea-table th,.analysis-pea-table td{padding:5px 5px;vertical-align:top;white-space:normal}
+.analysis-pea-table th:first-child,.analysis-pea-table td:first-child,.analysis-pea-table .analysis-cause{text-align:left;overflow-wrap:anywhere}
 .analysis-summary-table th{background:#123630;color:#c9f6eb}
 .analysis-summary-table .analysis-summary-decision{color:var(--red);font-weight:700}
 .analysis-cause{min-width:11rem;width:17rem;max-width:17rem;text-align:left;white-space:normal;overflow-wrap:anywhere;vertical-align:top}
 @media(max-width:600px){.analysis-cause{width:12rem;max-width:12rem}}
 .analysis-bvc-link,.analysis-bvc-link:visited,#analyse a[href^="https://www.ammc.ma/"],#analyse a[href^="https://www.ammc.ma/"]:visited{color:#69e2cd}
 #analysisDecisions p{text-align:left;hyphens:none}
-.analysis-market-table{min-width:0}
-.analysis-market-table th,.analysis-market-table td{padding:6px 8px;white-space:normal;vertical-align:top}
-.analysis-market-table th:first-child,.analysis-market-table th:last-child,.analysis-market-table td:first-child,.analysis-market-table td:last-child{text-align:left}
-.analysis-mobile-label{display:none}
-@media(max-width:760px){
- .analysis-market-table,.analysis-market-table tbody{display:block}
- .analysis-market-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
- .analysis-market-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;padding:9px 10px}
- .analysis-market-table tbody tr+tr{border-top:1px solid var(--line)}
- .analysis-market-table tbody td{padding:0;border:0;text-align:left;overflow-wrap:anywhere}
- .analysis-market-table tbody td:first-child,.analysis-market-table tbody td:last-child{grid-column:1/-1}
- .analysis-mobile-label{display:block;color:var(--muted);font-size:.9em;font-weight:600}
- .analysis-market-table td:first-child .analysis-mobile-label{display:none}
-}
+#analysisMarketRows td:last-child{text-align:left;white-space:normal;width:16rem;min-width:12rem;max-width:16rem;overflow-wrap:break-word}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -409,13 +400,13 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="card"><h3>Résumé</h3><div class="tablewrap"><table class="analysis-summary-table"><thead><tr><th scope="col">Action</th><th scope="col">Perte / gain latent</th><th scope="col">Décision</th></tr></thead><tbody id="analysisSummaryRows"></tbody></table></div></div>
  <div class="card">
   <h3>Mon PEA</h3>
-  <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th scope="col" class="analysis-cause">Cause de la baisse</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
+  <div class="tablewrap"><table class="analysis-pea-table"><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th scope="col" class="analysis-cause">Cause de la baisse</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
   <p class="small">G/P = gains / pertes latents · ATT = attendre · REV = revoir · SURV = surveiller.</p>
  </div>
  <div class="card">
   <h3>Opportunités du marché</h3>
   <p class="small">Sélection documentée au 27/11/2026. Le PER utilise le bénéfice par action de l’exercice 2025. La liquidité indique les montants échangés sur le marché central, à la date du bulletin.</p>
-  <div class="tablewrap"><table class="analysis-market-table" role="table" aria-label="Opportunités du marché"><thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Valeur / Secteur</th><th scope="col" role="columnheader">Cours / Date</th><th scope="col" role="columnheader">Var. 1M</th><th scope="col" role="columnheader">Publication / PER</th><th scope="col" role="columnheader">Liquidité</th><th scope="col" role="columnheader">Dette nette</th><th scope="col" role="columnheader">Var. dette nette</th><th scope="col" role="columnheader">Poids après +1</th><th scope="col" role="columnheader">Avis</th><th scope="col" role="columnheader">Motif / Source</th></tr></thead><tbody id="analysisMarketRows" role="rowgroup"></tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Date</th><th>Var. 1M</th><th>Publication / PER</th><th>Liquidité</th><th>Dette nette</th><th>Var. dette nette</th><th>Poids après +1</th><th>Avis</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
   <p class="small">ÉTU = étudier l’achat · Liq. = liquidité. <a href="https://www.casablanca-bourse.com/" target="_blank" rel="noopener noreferrer" class="analysis-bvc-link">Bourse de Casablanca ↗</a></p>
  </div>
  <div class="card">
@@ -2376,13 +2367,13 @@ function renderAnalysis(){
   const amount=pl===null?'—':(pl>0?'+':'')+fmt(pl)+' DH';
   return `<tr><td>${esc(position.name)}</td><td>${amount}</td><td class="analysis-summary-decision">${decision}</td></tr>`;
  }).join('')||'<tr><td colspan="3" class="empty">Aucune action à signaler dans le résumé.</td></tr>';
- document.getElementById('analysisMarketRows').innerHTML=rows.map(row=>`<tr role="row">
-  <td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Valeur / Secteur</span><span class="analysis-cell-value">${row.name}<br><span class="small">${row.sector}${row.position?' · Déjà en PEA':''}</span></span></td>
-  <td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Cours / Date</span><span class="analysis-cell-value">${row.price>0?fmt(row.price)+' DH<br><span class="small">'+esc(row.date)+'</span>':'—'}</span></td>
-  <td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Var. 1M</span><span class="analysis-cell-value">—</span></td><td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Publication / PER</span><span class="analysis-cell-value">${row.publication}<br>${row.per===null?'PER : —':'<a class="analysis-bvc-link" href="'+row.earnings.url+'" target="_blank" rel="noopener noreferrer">PER 2025 : '+fmt(row.per,1)+'×</a>'}</span></td>
-  <td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Liquidité</span><span class="analysis-cell-value">${row.volume===null?'—':fmt(row.volume,0)+' DH<br><a class="analysis-bvc-link small" href="'+esc(analysisMarketBulletin.source)+'" target="_blank" rel="noopener noreferrer">'+formatPositionDate(analysisMarketBulletin.date)+'</a>'}</span></td>
-  <td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Dette nette</span><span class="analysis-cell-value">${row.debt?row.debt.label+'<br><a class="analysis-bvc-link small" href="'+esc(row.debt.url)+'" target="_blank" rel="noopener noreferrer">'+row.debt.date+'</a>':'—'}</span></td><td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Var. dette nette</span><span class="analysis-cell-value">${row.debt?.variation?esc(row.debt.variation)+'<br><small>'+esc(row.debt.comparison)+'</small>':'—'}</span></td><td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Poids après +1</span><span class="analysis-cell-value">${pct(row.weight)}</span></td>
-  <td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Avis</span><span class="analysis-cell-value">${row.status}</span></td><td role="cell"><span class="analysis-mobile-label" aria-hidden="true">Motif / Source</span><span class="analysis-cell-value">${row.reason} <a href="${row.url}" target="_blank" rel="noopener noreferrer">${row.source} ↗</a></span></td>
+ document.getElementById('analysisMarketRows').innerHTML=rows.map(row=>`<tr>
+  <td>${row.name}<br><span class="small">${row.sector}${row.position?' · Déjà en PEA':''}</span></td>
+  <td>${row.price>0?fmt(row.price)+' DH<br><span class="small">'+esc(row.date)+'</span>':'—'}</td>
+  <td>—</td><td>${row.publication}<br>${row.per===null?'PER : —':'<a class="analysis-bvc-link" href="'+row.earnings.url+'" target="_blank" rel="noopener noreferrer">PER 2025 : '+fmt(row.per,1)+'×</a>'}</td>
+  <td>${row.volume===null?'—':fmt(row.volume,0)+' DH<br><a class="analysis-bvc-link small" href="'+esc(analysisMarketBulletin.source)+'" target="_blank" rel="noopener noreferrer">'+formatPositionDate(analysisMarketBulletin.date)+'</a>'}</td>
+  <td>${row.debt?row.debt.label+'<br><a class="analysis-bvc-link small" href="'+esc(row.debt.url)+'" target="_blank" rel="noopener noreferrer">'+row.debt.date+'</a>':'—'}</td><td>${row.debt?.variation?esc(row.debt.variation)+'<br><small>'+esc(row.debt.comparison)+'</small>':'—'}</td><td>${pct(row.weight)}</td>
+  <td>${row.status}</td><td>${row.reason} <a href="${row.url}" target="_blank" rel="noopener noreferrer">${row.source} ↗</a></td>
  </tr>`).join('');
  const decisions=losses.map(({position})=>{
   const key=quoteKey(position.name);
