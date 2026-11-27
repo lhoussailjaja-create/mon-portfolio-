@@ -563,9 +563,11 @@ function save(portfolioChanged=false){
  render();
 }
 function portfolioUpdateLabel(){
- const recorded=state.portfolioUpdatedAt||state.wafaAccountSummary?.capturedAt;
- const date=recorded?new Date(recorded):null;
- if(!date||!Number.isFinite(date.getTime()))return 'Dernière mise à jour : heure indisponible';
+ const timestamps=[state.portfolioUpdatedAt,state.wafaAccountSummary?.capturedAt,
+  ...state.positions.map(position=>position.marketUpdatedAt)];
+ const latest=Math.max(...timestamps.map(value=>Date.parse(value)).filter(Number.isFinite));
+ if(!Number.isFinite(latest))return 'Dernière mise à jour : heure indisponible';
+ const date=new Date(latest);
  const parts=new Intl.DateTimeFormat('fr-FR',{timeZone:'Africa/Casablanca',dateStyle:'short',timeStyle:'short'}).format(date);
  return 'Dernière mise à jour : '+parts+' (heure du Maroc)';
 }
