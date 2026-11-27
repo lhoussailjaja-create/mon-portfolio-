@@ -210,7 +210,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .portfolio-commands > summary { display: list-item; width: fit-content; }
 .portfolio-commands[open] > .actions { margin-top: .5rem; }
 @media (max-width:560px) {
-  .sidebar { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:6px; }
+  .sidebar { display:grid;grid-template-columns:repeat(5,minmax(max-content,1fr));gap:3px;padding:6px; }
   .sidebar .nav { width:100%;padding:9px 2px;text-align:center; }
   .sidebar .nav .ico { display:none; }
 }
@@ -219,7 +219,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
 <h2 class="dashboard-title">TABLEAU DE BORD</h2>
-<div class="layout"><aside class="sidebar"><button class="nav active" data-page="accueil"><span class="ico">▥</span>Portfolio</button><button class="nav" data-page="positions"><span class="ico">▣</span>Positions</button><button class="nav" data-page="dividendes"><span class="ico">◉</span>Dividendes</button><button class="nav" data-page="notifications"><span class="ico">♧</span>Notifications</button></aside>
+<div class="layout"><aside class="sidebar"><button class="nav active" data-page="accueil"><span class="ico">▥</span>Portfolio</button><button class="nav" data-page="positions"><span class="ico">▣</span>Positions</button><button class="nav" data-page="analyse"><span class="ico">▤</span>Analyse</button><button class="nav" data-page="dividendes"><span class="ico">◉</span>Dividendes</button><button class="nav" data-page="notifications"><span class="ico">♧</span>Notifications</button></aside>
 <main class="content">
 <section class="page active" id="accueil">
 <div class="pagehead"><details class="portfolio-commands">
@@ -382,6 +382,21 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <summary class="btn"><span class="positions-show">Afficher les positions</span><span class="positions-hide">Masquer les positions</span></summary>
  <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>Catégorie</th><th>Quantité</th><th>Cours / VL</th><th>Date de mise à jour</th><th>Valorisation</th><th>PRMP</th><th>Performance</th><th>+/- latent</th><th>Frais achat</th><th>Poids</th><th>Action</th></tr></thead><tbody id="positionRows"><tr><td colspan="12" class="empty">Les positions détaillées seront chargées depuis le relevé Titres après validation de l’importateur.</td></tr></tbody></table></div><p class="small">Les données absentes restent vides. Les OPCVM sont identifiés séparément des actions. Les lignes synchronisées conservent la valorisation et le +/- latent du relevé source.</p>
 </details></section>
+<section class="page" id="analyse">
+ <div class="pagehead"><div><h2>Analyse</h2><p id="analysisDate"></p></div></div>
+ <div class="card"><h3>Résumé</h3><p id="analysisTotals"></p><p id="analysisSummary"></p><p id="analysisMarketSummary"></p></div>
+ <div class="card">
+  <h3>Mon PEA</h3>
+  <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th>Motif</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
+  <p class="small">G/P = gains / pertes latents · ATT = attendre · REV = revoir · SURV = surveiller.</p>
+ </div>
+ <div class="card">
+  <h3>Opportunités du marché</h3>
+  <p class="small">Sélection documentée au 27/11/2026. Les cours des positions proviennent de votre portefeuille. Les données manquantes sont indiquées par un tiret.</p>
+  <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Date</th><th>Var. 1M</th><th>Publication / PER</th><th>Liq.</th><th>Poids après +1</th><th>Avis</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
+  <p class="small">ÉTU = étudier l’achat · Liq. = liquidité. <a href="https://www.casablanca-bourse.com/" target="_blank" rel="noopener noreferrer">Bourse de Casablanca ↗</a></p>
+ </div>
+</section>
 <section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" oninput="clearPortfolioTradePreview()" onsubmit="previewPortfolioTrade(event)">
  <h3>Enregistrer un achat / une vente</h3>
  <p class="small">Saisissez une opération déjà exécutée chez votre courtier.</p>
@@ -2222,7 +2237,66 @@ function positionUpdateDateCell(position){
  const [date,label]=dates[0][0]?dates[0]:[positionDateIso(position.positionImportedOn),'Date d’importation'];
  return date?'<time datetime="'+date+'" title="'+label+'">'+formatPositionDate(date)+'</time>':'—';
 }
+function renderAnalysis(){
+ const metrics=portfolioMetrics();
+ const losses=state.positions.map(position=>{
+  const value=portfolioPositionValue(position);
+  const cost=parseWafaNumber(position.cmp);
+  const qty=parseWafaNumber(position.qty);
+  const price=parseWafaNumber(position.price);
+  const pl=parseWafaNumber(position.sourcePl)??(price!==null&&cost!==null&&qty!==null?(price-cost)*qty-(Number(position.buyFees)||0):null);
+  const percent=pl!==null&&cost>0&&qty>0?100*pl/(cost*qty):null;
+  return {position,pl,percent,weight:metrics.titles>0?100*value/metrics.titles:null};
+ }).filter(row=>row.pl<0).sort((a,b)=>a.pl-b.pl);
+ const review={
+  'TOTALENERGIES MAROC':['ATT','Vérifier les marges et les volumes avant de renforcer.'],
+  'LAPROPHAN':['SURV','Suivre les prochaines publications et la liquidité après l’introduction.'],
+  'LAPROPHAN S A':['SURV','Suivre les prochaines publications et la liquidité après l’introduction.'],
+  'ATTIJARI DIVIDEND FUND':['REV','Comparer le fonds à son indice de référence.'],
+  'WG LOW VOLATILITY FACTOR FUND':['REV','Comparer la volatilité du fonds à celle du marché.'],
+  'ATTIJARI ACTIONS':['REV','Vérifier le chevauchement avec les actions détenues en direct.'],
+  'ATTIJARI AL MOUCHARAKA':['REV','Comparer la performance à l’indice du fonds.']
+ };
+ const pct=value=>value===null?'—':fmt(value)+' %';
+ document.getElementById('analysisDate').textContent=metrics.titlesSource;
+ document.getElementById('analysisTotals').textContent=state.positions.length
+  ?fmt(metrics.titles)+' DH de titres · '+fmt(metrics.latent)+' DH latents'+(metrics.invested>0?' ('+pct(100*metrics.latent/metrics.invested)+')':'')+' · '+state.positions.length+' lignes'
+  :'Importez un relevé titres pour analyser votre PEA.';
+ document.getElementById('analysisSummary').textContent=losses.length
+  ?'À revoir en priorité : '+losses[0].position.name+' ('+fmt(losses[0].pl)+' DH). Vérifier la cause de la baisse avant de renforcer.'
+  :state.positions.length?'Aucune moins-value calculable sur les positions renseignées.':'';
+ document.getElementById('analysisLossRows').innerHTML=losses.map(({position,pl,percent,weight})=>{
+  const [status,reason]=review[quoteKey(position.name)]??['REV','Examiner les résultats et le poids de la ligne avant de renforcer.'];
+  return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td>${reason}</td></tr>`;
+ }).join('')||'<tr><td colspan="6" class="empty">Aucune ligne en moins-value disponible.</td></tr>';
+ const candidates=[
+  {name:'Marsa Maroc',sector:'Ports et logistique',publication:'CA à fin septembre 2026 : +13 %',reason:'Vérifier la valorisation et les espèces disponibles.',url:'https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf',source:'AMMC'},
+  {name:'Akdital',sector:'Santé',publication:'CA à fin septembre 2026 : +28 %',reason:'Vérifier le poids après un achat supplémentaire.',url:'https://lematin.ma/economie/akdital-chiffre-daffaires-en-croissance-de-28-a-fin-septembre-2026/377899',source:'Le Matin'},
+  {name:'SGTM',sector:'Construction',publication:'Résultats du 1er semestre 2026',reason:'Vérifier le cours, la valorisation et l’éligibilité auprès du courtier.',url:'https://www.ammc.ma/fr/actualites/communique-presse/sgtm-resultats-financiers-du-1er-semestre-2026',source:'AMMC'}
+ ];
+ const rows=candidates.map(candidate=>{
+  const positions=state.positions.filter(position=>quoteKey(position.name)===quoteKey(candidate.name));
+  const position=positions[0];
+  const price=parseWafaNumber(position?.price);
+  const date=position?positionTotalSourceDate(positions):'';
+  const value=positions.reduce((sum,row)=>sum+portfolioPositionValue(row),0);
+  const weight=price>0&&metrics.titles>0?100*(value+price)/(metrics.titles+price):null;
+  const status=weight!==null&&weight>=20?'ATT':candidate.name==='Marsa Maroc'&&position?'ÉTU':'SURV';
+  return {...candidate,position,price,date,weight,status};
+ });
+ const opportunity=rows.find(row=>row.status==='ÉTU'&&row.price>0);
+ document.getElementById('analysisMarketSummary').textContent=opportunity
+  ?'Piste à étudier : '+opportunity.name+' ('+fmt(opportunity.price)+' DH par action selon Positions). '+opportunity.reason
+  :'Marché : valeurs en surveillance. Confirmer les données de cours et l’éligibilité avant de retenir un achat.';
+ document.getElementById('analysisMarketRows').innerHTML=rows.map(row=>`<tr>
+  <td>${row.name}<br><span class="small">${row.sector}${row.position?' · Déjà en PEA':''}</span></td>
+  <td>${row.price>0?fmt(row.price)+' DH<br><span class="small">'+esc(row.date)+'</span>':'—'}</td>
+  <td>—</td><td>${row.publication}<br>PER : —</td><td>—</td><td>${pct(row.weight)}</td>
+  <td>${row.status}</td><td>${row.reason} <a href="${row.url}" target="_blank" rel="noopener noreferrer">${row.source} ↗</a></td>
+ </tr>`).join('');
+}
 function render(){
+ renderAnalysis();
  renderDividendCalendar();
  renderSnapshotManager();
  renderPortfolioJournal();
