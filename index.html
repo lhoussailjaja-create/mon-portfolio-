@@ -215,6 +215,8 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   .sidebar .nav .ico { display:none; }
 }
 @media print { .portfolio-commands { display: none; } }
+.analysis-cause{min-width:11rem;width:17rem;max-width:17rem;text-align:left;white-space:normal;overflow-wrap:anywhere;vertical-align:top}
+@media(max-width:600px){.analysis-cause{width:12rem;max-width:12rem}}
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
@@ -387,7 +389,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="card"><h3>Résumé</h3><p id="analysisTotals"></p><p id="analysisSummary"></p><p id="analysisMarketSummary"></p></div>
  <div class="card">
   <h3>Mon PEA</h3>
-  <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th>Motif</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
+  <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th scope="col" class="analysis-cause">Cause de la baisse</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
   <p class="small">G/P = gains / pertes latents · ATT = attendre · REV = revoir · SURV = surveiller.</p>
  </div>
  <div class="card">
@@ -2272,7 +2274,7 @@ function renderAnalysis(){
   :state.positions.length?'Aucune moins-value calculable sur les positions renseignées.':'';
  document.getElementById('analysisLossRows').innerHTML=losses.map(({position,pl,percent,weight})=>{
   const [status,reason]=review[quoteKey(position.name)]??['REV','Examiner les résultats et le poids de la ligne avant de renforcer.'];
-  return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td>${reason}</td></tr>`;
+  return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Cause non confirmée. '+reason}</td></tr>`;
  }).join('')||'<tr><td colspan="6" class="empty">Aucune ligne en moins-value disponible.</td></tr>';
  const candidates=[
   {name:'Marsa Maroc',sector:'Ports et logistique',publication:'CA à fin septembre 2026 : +13 %',reason:'Vérifier la valorisation et les espèces disponibles.',url:'https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf',source:'AMMC'},
