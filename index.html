@@ -244,7 +244,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div class="metric-sub hidden" id="dashManualSales">Gains / pertes sur ventes enregistrées <strong id="dashManualSalesResult"></strong></div>
   <div class="metric-sub">Dividendes nets perçus <strong id="dashTotalProfitReceived">—</strong><br>Tous les paiements enregistrés</div>
  </div>
- <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label" id="dashTodayLabel">Variation entre valorisations</span><span class="kpi-icon">◷</span></div><div class="metric-value neutral" id="dashToday">—</div><div class="metric-sub" id="dashTodayMeta">En attente de deux valorisations datées</div></div>
+ <div class="card dash-kpi" id="dashSnapshotVariationCard"><div class="kpi-top"><span class="metric-label" id="dashTodayLabel">Variation entre valorisations</span><span class="kpi-icon">◷</span></div><div class="metric-value neutral" id="dashToday">—</div><div class="metric-sub" id="dashTodayMeta">En attente de deux valorisations datées</div></div>
  <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Performance du jour</span><span class="kpi-icon">◷</span></div><div class="metric-value neutral" id="dashDaily">—</div><div class="metric-sub" id="dashDailyMeta">Valorisations du jour et de la veille requises</div></div>
  <div class="card dash-kpi">
   <div class="metric-label">Revenus passifs</div>
@@ -1724,9 +1724,11 @@ function snapshotVariation(snapshots){
  const previous=rows.at(-2),latest=rows.at(-1),delta=Number(latest.total)-Number(previous.total);
  return {previous,latest,delta,percent:delta/Number(previous.total)*100};
 }
-function renderSnapshotVariation(){
+function renderSnapshotVariation(daily){
  const el=document.getElementById('dashToday'),meta=document.getElementById('dashTodayMeta');if(!el)return;
  const v=snapshotVariation(state.snapshots);
+ document.getElementById("dashSnapshotVariationCard").classList.toggle("hidden",
+  !!(daily&&v&&v.previous.date===daily.yesterday&&v.latest.date===daily.today));
  el.classList.toggle('positive',!!v&&v.delta>0);el.classList.toggle('negative',!!v&&v.delta<0);el.classList.toggle('neutral',!v||v.delta===0);
  if(!v){el.textContent='—';if(meta)meta.textContent='En attente de deux valorisations datées';return;}
  const sign=v.delta>0?'+':v.delta<0?'−':'';
@@ -1754,6 +1756,7 @@ function renderDailyPerformance(){
  const sign=v.delta>0?'+':v.delta<0?'−':'';
  el.textContent=sign+fmt(Math.abs(v.delta))+' DH ('+sign+fmt(Math.abs(v.percent))+' %)';
  if(meta)meta.textContent=date(v.yesterday)+' → '+date(v.today)+' · Variation brute, apports/retraits non neutralisés';
+ return v;
 }
 // Résultat des cessions du relevé fiscal PEA du 01/01 au 15/11/2026.
 const PEA_FISCAL_REALIZED_REFERENCE = -33.25;
@@ -1789,8 +1792,7 @@ function renderPortfolioReference(){
 }
 function renderDashboardMetrics(received){
  renderPortfolioReference();
- renderDailyPerformance();
- renderSnapshotVariation();
+ renderSnapshotVariation(renderDailyPerformance());
  const m=portfolioMetrics();
  renderPortfolioAllocation(m);
  const accounting=state.wafaAccountingSummary;
