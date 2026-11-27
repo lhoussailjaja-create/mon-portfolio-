@@ -398,22 +398,22 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 </details></section>
 <section class="page" id="analyse">
  <div class="pagehead"><div><h2>Analyse</h2><p id="analysisDate"></p></div></div>
- <div class="card"><h3>Résumé</h3><div class="tablewrap"><table class="analysis-summary-table"><thead><tr><th scope="col">Action</th><th scope="col">Perte / gain latent</th><th scope="col">Décision</th></tr></thead><tbody id="analysisSummaryRows"></tbody></table></div></div>
  <div class="card">
   <h3>Mon PEA</h3>
   <div class="tablewrap"><table class="analysis-pea-table"><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th scope="col" class="analysis-cause">Cause de la baisse</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
   <p class="small">G/P = gains / pertes latents · ATT = attendre · REV = revoir · SURV = surveiller.</p>
  </div>
  <div class="card">
+  <h3>Décision à prendre</h3>
+  <p class="small">Publications consultées le 27/11/2026.</p>
+  <p class="small" id="analysisFeedStatus" role="status"></p><div id="analysisDecisions"></div>
+ </div>
+ <div class="card"><h3>Résumé</h3><div class="tablewrap"><table class="analysis-summary-table"><thead><tr><th scope="col">Action</th><th scope="col">Perte / gain latent</th><th scope="col">Décision</th></tr></thead><tbody id="analysisSummaryRows"></tbody></table></div></div>
+ <div class="card">
   <h3>Opportunités du marché</h3>
   <p class="small">Sélection documentée au 27/11/2026. Le PER utilise le bénéfice par action de l’exercice 2025. La liquidité indique les montants échangés sur le marché central, à la date du bulletin.</p>
   <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Date</th><th>Var. 1M</th><th>Publication / PER</th><th>Liquidité</th><th>Dette nette</th><th>Var. dette nette</th><th>Poids après +1</th><th>Avis</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
   <p class="small">ÉTU = étudier l’achat · Liq. = liquidité. <a href="https://www.casablanca-bourse.com/" target="_blank" rel="noopener noreferrer" class="analysis-bvc-link">Bourse de Casablanca ↗</a></p>
- </div>
- <div class="card">
-  <h3>Décision à prendre</h3>
-  <p class="small">Publications consultées le 27/11/2026.</p>
-  <p class="small" id="analysisFeedStatus" role="status"></p><div id="analysisDecisions"></div>
  </div>
 </section>
 <section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" oninput="clearPortfolioTradePreview()" onsubmit="previewPortfolioTrade(event)">
