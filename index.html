@@ -2321,16 +2321,41 @@ function analysisPriceHistory(){
   return Array.isArray(history)?history.flatMap(entry=>Array.isArray(entry?.changes)?entry.changes:[]):[];
  }catch{return [];}
 }
-function diagnosticContext(position,localQuotes){
+function recordAnalysisFundValues(positions){
+ const key=KEY+'_analysisFundValues';
+ try{
+  const saved=JSON.parse(localStorage.getItem(key)||'{}');
+  const archive=saved&&typeof saved==='object'&&!Array.isArray(saved)?saved:{};
+  let changed=false;
+  for(const position of positions){
+   const price=parseWafaNumber(position.price);
+   const date=positionDateIso(position.sourceDate);
+   const name=quoteKey(position.name);
+   if(position.type!=='OPCVM'||!name||!(price>0)||!date)continue;
+   const previous=Object.hasOwn(archive,name)?archive[name]:{};
+   if(previous[date]===price)continue;
+   const points={...previous,[date]:price};
+   Object.defineProperty(archive,name,{value:Object.fromEntries(Object.entries(points).sort(([a],[b])=>a.localeCompare(b)).slice(-90)),enumerable:true,configurable:true,writable:true});
+   changed=true;
+  }
+  if(changed)localStorage.setItem(key,JSON.stringify(archive));
+  return archive;
+ }catch{return {};}
+}
+function diagnosticContext(position,localQuotes,fundValues){
  const key=quoteKey(position.name);
  const observations=new Map();
+ const isFund=position.type==='OPCVM';
  const add=(date,price)=>{
   if(/^\d{4}-\d{2}-\d{2}$/.test(date||'')&&Number.isFinite(price)&&price>0)observations.set(date,price);
  };
- for(const change of localQuotes){
+ if(isFund){
+  for(const [date,value] of Object.entries(fundValues[key]||{}))add(date,value);
+ }
+ for(const change of isFund?[]:localQuotes){
   if(quoteKey(change.name||'')===key)add(change.quote?.quote_date,change.quote?.price_mad);
  }
- const bulletin=analysisMarketBulletin;
+ const bulletin=isFund?null:analysisMarketBulletin;
  for(const [date,values] of Object.entries(bulletin?.history||{})){
   const quote=values?.[key];
   if(quote&&(!quote.quote_date||quote.quote_date===date))add(date,quote.price);
@@ -2343,7 +2368,7 @@ function diagnosticContext(position,localQuotes){
  const change=100*(last/first-1);
  const close=date=>state.masiCloses?.[date]??PORTFOLIO_MASI_VERIFIED_CLOSES[date]?.value;
  const left=close(start),right=close(end);
- const market=left>0&&right>0?' · MASI '+fmt(100*(right/left-1),1)+' %':' · MASI indisponible sur ces dates';
+ const market=isFund?' · Indice de référence du fonds indisponible':left>0&&right>0?' · MASI '+fmt(100*(right/left-1),1)+' %':' · MASI indisponible sur ces dates';
  const announcements=analysisPublications.filter(item=>{
   const discovered=String(item?.first_seen||'').slice(0,10);
   return discovered>=start&&discovered<=end&&
@@ -2352,10 +2377,18 @@ function diagnosticContext(position,localQuotes){
  });
  const announcement=announcements[0];
  const link=announcement?' · <a href="'+esc(announcement.url)+'" target="_blank" rel="noopener noreferrer">Publication repérée sur la période ↗</a>':'';
- return formatPositionDate(start)+' → '+formatPositionDate(end)+' : cours '+fmt(change,1)+' %'+market+link+'. Cause non établie.';
+ const detachmentDates=isFund?[]:[...new Set([
+  ...(state.dividends||[]).filter(item=>item.confirmed===true),
+  ...(state.officialDividendHistory||[])
+ ].filter(item=>quoteKey(item.company||item.name||'')===key)
+  .map(item=>marketIsoDate(item.exDate))
+  .filter(date=>date>start&&date<=end))].sort();
+ const detachment=detachmentDates.length?' · Détachement enregistré le '+detachmentDates.map(formatPositionDate).join(', ')+' (piste à vérifier)':'';
+ return formatPositionDate(start)+' → '+formatPositionDate(end)+(isFund?' : VL relevée ':' : cours ')+fmt(change,1)+' %'+market+link+detachment+'. Cause non établie.';
 }
 function renderAnalysis(){
  const localQuotes=analysisPriceHistory();
+ const fundValues=recordAnalysisFundValues(state.positions);
  const metrics=portfolioMetrics();
  const positionResults=state.positions.map(position=>{
   const value=portfolioPositionValue(position);
@@ -2380,7 +2413,7 @@ function renderAnalysis(){
  document.getElementById('analysisDate').textContent=metrics.titlesSource;
  document.getElementById('analysisLossRows').innerHTML=losses.map(({position,pl,percent,weight})=>{
   const [status,reason]=review[quoteKey(position.name)]??['REV','Examiner les résultats et le poids de la ligne avant de renforcer.'];
-  return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Piste à vérifier : '+reason}<br><small>${diagnosticContext(position,localQuotes)}</small></td></tr>`;
+  return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Piste à vérifier : '+reason}<br><small>${diagnosticContext(position,localQuotes,fundValues)}</small></td></tr>`;
  }).join('')||'<tr><td colspan="6" class="empty">Aucune ligne en moins-value disponible.</td></tr>';
  const candidates=[
   {name:'Marsa Maroc',sector:'Ports et logistique',publication:'CA à fin septembre 2026 : +13 %',reason:'Vérifier la valorisation et les espèces disponibles.',url:'https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf',source:'AMMC'},
@@ -2928,6 +2961,7 @@ async function refreshMarketDividends(){
    const archive=new Map();
    bvc.value.history.forEach(x=>archive.set(marketEventKey(x),x));
    state.officialDividendHistory=[...archive.values()];
+   renderAnalysis();
   }
   if(gh.status==='fulfilled'||bvc.status==='fulfilled'){
    try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){console.warn('Cache local indisponible',e)}
