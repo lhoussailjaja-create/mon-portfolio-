@@ -3149,6 +3149,7 @@ window.addEventListener('DOMContentLoaded', () => {
   async function sync(interactive = false) {
     if (!user || busy) return;
     busy = true;
+    if (interactive) status.textContent = 'Synchronisation en cours…';
     action.disabled = logout.disabled = true;
     const userId = user.id;
     const baseKey = KEY + '_sync_base_' + userId;
@@ -3187,7 +3188,9 @@ window.addEventListener('DOMContentLoaded', () => {
       if (remote && !equal(local, result.data) && before && !result.conflicts.length) {
         localStorage.setItem(KEY + '_backup_before_sync_update', JSON.stringify(state));
       }
-      if (!remote || !equal(remote.data, result.data)) {
+      const sent = !remote || !equal(remote.data, result.data);
+      const received = !equal(local, result.data);
+      if (sent) {
         const payload = { revision: crypto.randomUUID(), data: result.data };
         const write = remote
           ? table().update(payload).eq('user_id', userId).eq('revision', remote.revision)
@@ -3210,7 +3213,14 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       if (!equal(before, result.data)) localStorage.setItem(baseKey, JSON.stringify(result.data));
       if (!equal(local, result.data)) render();
-      status.textContent = 'Synchronisé entre vos appareils.';
+      const checkedAt = new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'short', timeStyle: 'medium', timeZone: 'Africa/Casablanca'
+      }).format(new Date());
+      const detail = sent && received ? 'Données fusionnées et enregistrées en ligne.'
+        : sent ? 'Données envoyées et enregistrées en ligne.'
+        : received ? 'Données reçues sur cet appareil.'
+        : 'Vos données sont déjà à jour.';
+      status.textContent = '✓ Synchronisation terminée le ' + checkedAt + '. ' + detail;
     } catch (error) {
       status.textContent = 'Synchronisation interrompue. ' + (error.message || 'Réessayez.');
     } finally {
