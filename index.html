@@ -206,13 +206,24 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .positions-total-card{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .positions-total-card strong{font-size:1.2rem;color:var(--mint)}
 .positions-total-card small{flex-basis:100%}
+.portfolio-commands > summary { display: list-item; width: fit-content; }
+.portfolio-commands[open] > .actions { margin-top: .5rem; }
+@media print { .portfolio-commands { display: none; } }
 </style></head>
 <body><div class="app">
 <header class="top"><div class="brand"><div class="logo">P</div><div><h1>Mon portefeuille <span style="color:var(--mint)">2J</span></h1><p>Gestion et analyse</p></div></div><div class="topright"><span class="date">Version de travail · 16/11/2026 · PEA</span><span class="pill">PEA</span></div></header>
 <div class="layout"><aside class="sidebar"><button class="nav active" data-page="accueil"><span class="ico">▥</span>Portfolio</button><button class="nav" data-page="positions"><span class="ico">▣</span>Positions</button><button class="nav" data-page="dividendes"><span class="ico">◉</span>Dividendes</button><button class="nav" data-page="notifications"><span class="ico">♧</span>Notifications</button></aside>
 <main class="content">
 <section class="page active" id="accueil">
-<div class="pagehead"><div><h2>Portfolio</h2><p>Tableau de bord principal · Vue globale du compte PEA</p></div><div class="actions"><button class="btn" onclick="window.print()">Imprimer</button><button class="btn" type="button" onclick="backup()">Sauvegarder</button><button class="btn" type="button" onclick="go('parametres')">Restaurer une sauvegarde</button><button class="btn primary" onclick="go('importation')">Importer un relevé</button></div></div>
+<div class="pagehead"><div><h2>Portfolio</h2><p>Tableau de bord principal · Vue globale du compte PEA</p></div><details class="portfolio-commands">
+  <summary class="btn">Commandes</summary>
+  <div class="actions">
+    <button class="btn" onclick="window.print()">Imprimer</button>
+    <button class="btn" type="button" onclick="backup()">Sauvegarder</button>
+    <button class="btn" type="button" onclick="go('parametres')">Restaurer une sauvegarde</button>
+    <button class="btn primary" onclick="go('importation')">Importer un relevé</button>
+  </div>
+</details></div>
 <div class="portfolio-group">
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioKpis" aria-expanded="false" onclick="togglePortfolioGroup(this)">Situation du portefeuille</button>
  <div class="dash-kpis portfolio-group-content" id="portfolioKpis">
