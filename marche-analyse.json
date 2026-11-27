@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-27",
+  "source": "https://www.casablanca-bourse.com/sites/default/files/bulletins/2026-11/fr/BCFR_20261127.pdf",
+  "values": {
+    "MARSA MAROC": {
+      "price": 780,
+      "volume": 23198196.3
+    },
+    "AKDITAL": {
+      "price": 1065,
+      "volume": 27523827
+    },
+    "SGTM": {
+      "price": 580,
+      "volume": 11230480.5
+    }
+  }
+}
