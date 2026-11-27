@@ -59,8 +59,15 @@ jobs:
                   raise SystemExit(f"Données incomplètes pour {name}. Le dernier bulletin est conservé.")
               values[name] = {"price": float(decimal(quote[2])), "volume": float(sum(map(decimal, transactions))),
                               "quote_date": datetime.strptime(quote[1], "%d/%m/%y").date().isoformat()}
-          Path("marche-analyse.json").write_text(json.dumps(
-              {"date": session.isoformat(), "source": source, "values": values}, ensure_ascii=False, indent=2
+          path = Path("marche-analyse.json")
+          previous = json.loads(path.read_text()) if path.exists() else {}
+          history = dict(previous.get("history", {}))
+          if previous.get("date") and previous.get("values"):
+              history[previous["date"]] = previous["values"]
+          history[session.isoformat()] = values
+          history = {day: history[day] for day in sorted(history)[-90:]}
+          path.write_text(json.dumps(
+              {"date": session.isoformat(), "source": source, "values": values, "history": history}, ensure_ascii=False, indent=2
           ) + "\n")
           PY
       - name: Publier le bulletin analysé
