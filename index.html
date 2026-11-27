@@ -407,7 +407,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="card">
   <h3>Décision à prendre</h3>
   <p class="small">Publications consultées le 27/11/2026.</p>
-  <div id="analysisDecisions"></div>
+  <p class="small" id="analysisFeedStatus" role="status"></p><div id="analysisDecisions"></div>
  </div>
 </section>
 <section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" oninput="clearPortfolioTradePreview()" onsubmit="previewPortfolioTrade(event)">
@@ -2250,6 +2250,24 @@ function positionUpdateDateCell(position){
  const [date,label]=dates[0][0]?dates[0]:[positionDateIso(position.positionImportedOn),'Date d’importation'];
  return date?'<time datetime="'+date+'" title="'+label+'">'+formatPositionDate(date)+'</time>':'—';
 }
+let analysisPublications=[];
+let analysisCheckedAt='';
+let analysisPartial=false;
+async function refreshAnalysisPublications(){
+ const status=document.getElementById('analysisFeedStatus');
+ try{
+  const response=await fetch('https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/publications-analyse.json',{cache:'no-store'});
+  if(!response.ok)throw Error('Flux indisponible');
+  const data=await response.json();
+  if(!Array.isArray(data.publications)||!Number.isFinite(Date.parse(data.checked_at)))throw Error('Flux invalide');
+  analysisPublications=data.publications;
+  analysisCheckedAt=data.checked_at;
+  analysisPartial=Object.values(data.sources||{}).some(source=>!source.ok);
+  renderAnalysis();
+ }catch{
+  status.textContent='Veille automatique indisponible. Les décisions documentées restent affichées.';
+ }
+}
 function renderAnalysis(){
  const metrics=portfolioMetrics();
  const positionResults=state.positions.map(position=>{
@@ -2320,6 +2338,23 @@ function renderAnalysis(){
  if(marsa.position){
   const impact=marsa.weight===null?'':' Une action de plus porterait la ligne à '+pct(marsa.weight)+' des titres.';
   decisions.push(`<p><strong>Marsa Maroc · Conserver et surveiller.</strong> Les ventes progressent de 13 % à fin septembre 2026. Étudier un renforcement si les bénéfices confirment la progression, si le prix est justifié et si le poids reste acceptable.${impact} <a href="${marsa.url}" target="_blank" rel="noopener noreferrer">Publication · AMMC ↗</a></p>`);
+ }
+ const feedStatus=document.getElementById('analysisFeedStatus');
+ if(analysisCheckedAt){
+  const checked=new Intl.DateTimeFormat('fr-FR',{timeZone:'Africa/Casablanca',dateStyle:'short',timeStyle:'short'}).format(new Date(analysisCheckedAt));
+  feedStatus.textContent='Dernière collecte : '+checked+(analysisPartial?' · Certaines sources sont indisponibles.':'');
+ }
+ for(const {position} of [...losses,...(marsaResult&&!losses.includes(marsaResult)?[marsaResult]:[])]){
+  const key=quoteKey(position.name);
+  const aliases={'TOTALENERGIES MAROC':['TOTALENERGIES MARKETING MAROC','TOTALENERGIES MAROC'],'LAPROPHAN S A':['LAPROPHAN'],'ITISSALAT AL MAGHRIB':['MAROC TELECOM','ITISSALAT AL MAGHRIB'],'BCP':['BCP','BANQUE CENTRALE POPULAIRE']};
+  const names=aliases[key]||[key];
+  const item=analysisPublications.filter(item=>{
+   if(!item||typeof item.title!=='string'||!/^https:\/\/www\.(ammc\.ma|casablanca-bourse\.com)\//.test(item.url))return false;
+   const title=' '+quoteKey(item.title)+' ';
+   return names.some(name=>title.includes(' '+name+' '));
+  }).sort((a,b)=>String(b.first_seen).localeCompare(String(a.first_seen)))[0];
+  if(!item)continue;
+  decisions.push(`<p><strong>${esc(position.name)} · Réexaminer la décision.</strong> Publication repérée par la veille. Vérifier son contenu et son lien avec l’évolution du cours avant de renforcer. <a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(item.title)} · ${esc(item.source)} ↗</a></p>`);
  }
  document.getElementById('analysisDecisions').innerHTML=decisions.join('')||'<p>Aucune décision à afficher pour les positions renseignées.</p>';
 }
@@ -2921,6 +2956,7 @@ renderMarketDividends();
 renderMarketNotifications();
 renderOfficialDividendHistory();
 renderDividendAnalytics();
+refreshAnalysisPublications();
 refreshMarketDividends().catch(e=>{console.error(e);const el=document.getElementById('marketDividendStatus');if(el)el.textContent='Actualisation interrompue : '+e.message});
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
