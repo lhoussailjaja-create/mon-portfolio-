@@ -215,6 +215,9 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   .sidebar .nav .ico { display:none; }
 }
 @media print { .portfolio-commands { display: none; } }
+.analysis-summary-table{width:100%;min-width:0;table-layout:fixed}
+.analysis-summary-table th,.analysis-summary-table td{padding:8px 6px;text-align:left;white-space:normal;overflow-wrap:anywhere;vertical-align:top;font-size:13px}
+.analysis-summary-table .analysis-summary-decision{color:var(--red);font-weight:700}
 .analysis-cause{min-width:11rem;width:17rem;max-width:17rem;text-align:left;white-space:normal;overflow-wrap:anywhere;vertical-align:top}
 @media(max-width:600px){.analysis-cause{width:12rem;max-width:12rem}}
 </style></head>
@@ -386,7 +389,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 </details></section>
 <section class="page" id="analyse">
  <div class="pagehead"><div><h2>Analyse</h2><p id="analysisDate"></p></div></div>
- <div class="card"><h3>Résumé</h3><p id="analysisTotals"></p><p id="analysisSummary"></p><p id="analysisMarketSummary"></p></div>
+ <div class="card"><h3>Résumé</h3><div class="tablewrap"><table class="analysis-summary-table"><thead><tr><th scope="col">Action</th><th scope="col">Perte / gain latent</th><th scope="col">Décision</th></tr></thead><tbody id="analysisSummaryRows"></tbody></table></div></div>
  <div class="card">
   <h3>Mon PEA</h3>
   <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th scope="col" class="analysis-cause">Cause de la baisse</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
@@ -2246,7 +2249,7 @@ function positionUpdateDateCell(position){
 }
 function renderAnalysis(){
  const metrics=portfolioMetrics();
- const losses=state.positions.map(position=>{
+ const positionResults=state.positions.map(position=>{
   const value=portfolioPositionValue(position);
   const cost=parseWafaNumber(position.cmp);
   const qty=parseWafaNumber(position.qty);
@@ -2254,7 +2257,8 @@ function renderAnalysis(){
   const pl=parseWafaNumber(position.sourcePl)??(price!==null&&cost!==null&&qty!==null?(price-cost)*qty-(Number(position.buyFees)||0):null);
   const percent=pl!==null&&cost>0&&qty>0?100*pl/(cost*qty):null;
   return {position,pl,percent,weight:metrics.titles>0?100*value/metrics.titles:null};
- }).filter(row=>row.pl<0).sort((a,b)=>a.pl-b.pl);
+ });
+ const losses=positionResults.filter(row=>row.pl<0).sort((a,b)=>a.pl-b.pl);
  const review={
   'TOTALENERGIES MAROC':['ATT','Vérifier les marges et les volumes avant de renforcer.'],
   'LAPROPHAN':['SURV','Suivre les prochaines publications et la liquidité après l’introduction.'],
@@ -2266,12 +2270,6 @@ function renderAnalysis(){
  };
  const pct=value=>value===null?'—':fmt(value)+' %';
  document.getElementById('analysisDate').textContent=metrics.titlesSource;
- document.getElementById('analysisTotals').textContent=state.positions.length
-  ?fmt(metrics.titles)+' DH de titres · '+fmt(metrics.latent)+' DH latents'+(metrics.invested>0?' ('+pct(100*metrics.latent/metrics.invested)+')':'')+' · '+state.positions.length+' lignes'
-  :'Importez un relevé titres pour analyser votre PEA.';
- document.getElementById('analysisSummary').textContent=losses.length
-  ?'À revoir en priorité : '+losses[0].position.name+' ('+fmt(losses[0].pl)+' DH latents). Voir la décision en bas de l’analyse.'
-  :state.positions.length?'Aucune moins-value calculable sur les positions renseignées.':'';
  document.getElementById('analysisLossRows').innerHTML=losses.map(({position,pl,percent,weight})=>{
   const [status,reason]=review[quoteKey(position.name)]??['REV','Examiner les résultats et le poids de la ligne avant de renforcer.'];
   return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Cause non confirmée. '+reason}</td></tr>`;
@@ -2291,10 +2289,15 @@ function renderAnalysis(){
   const status=weight!==null&&weight>=20?'ATT':candidate.name==='Marsa Maroc'&&position?'ÉTU':'SURV';
   return {...candidate,position,price,date,weight,status};
  });
- const opportunity=rows.find(row=>row.status==='ÉTU'&&row.price>0);
- document.getElementById('analysisMarketSummary').textContent=opportunity
-  ?'À surveiller : '+opportunity.name+' ('+fmt(opportunity.price)+' DH selon Positions). Son chiffre d’affaires progresse de 13 % à fin septembre 2026.'
-  :'Marché : valeurs en surveillance. Confirmer les données de cours et l’éligibilité avant de retenir un achat.';
+ const priority=losses[0];
+ const marsaResult=positionResults.find(row=>quoteKey(row.position.name)==='MARSA MAROC');
+ const summaryRows=[...new Set([priority,marsaResult].filter(Boolean))];
+ document.getElementById('analysisSummaryRows').innerHTML=summaryRows.map(({position,pl})=>{
+  const key=quoteKey(position.name);
+  const decision=key==='MARSA MAROC'?'Conserver et surveiller':key==='TOTALENERGIES MAROC'?'Conserver, attendre avant de renforcer':'Attendre avant de renforcer';
+  const amount=pl===null?'—':(pl>0?'+':'')+fmt(pl)+' DH';
+  return `<tr><td>${esc(position.name)}</td><td>${amount}</td><td class="analysis-summary-decision">${decision}</td></tr>`;
+ }).join('')||'<tr><td colspan="3" class="empty">Aucune action à signaler dans le résumé.</td></tr>';
  document.getElementById('analysisMarketRows').innerHTML=rows.map(row=>`<tr>
   <td>${row.name}<br><span class="small">${row.sector}${row.position?' · Déjà en PEA':''}</span></td>
   <td>${row.price>0?fmt(row.price)+' DH<br><span class="small">'+esc(row.date)+'</span>':'—'}</td>
