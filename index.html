@@ -2256,6 +2256,21 @@ const analysisNetDebt={
  'AKDITAL':{label:'4,96 Md DH',date:'30/09/2026',variation:'+700 M DH (+16 %)',comparison:'vs 31/12/2025',url:'https://lematin.ma/economie/akdital-chiffre-daffaires-en-croissance-de-28-a-fin-septembre-2026/377899'},
  'SGTM':{label:'2,4 Md DH',date:'30/06/2026',url:'https://www.ammc.ma/sites/default/files/CP_SGTM_T2_26.pdf'}
 };
+let analysisPublishedDebt={};
+function analysisDebtFor(key){
+ const fallback=analysisNetDebt[key];
+ const item=analysisPublishedDebt[key];
+ const iso=/^\d{4}-\d{2}-\d{2}$/;
+ if(!item||!iso.test(item.date)||!iso.test(item.prior_date)||item.prior_date>=item.date||
+  !Number.isFinite(item.current_mdh)||!Number.isFinite(item.prior_mdh)||
+  !/^https:\/\/www\.ammc\.ma\//.test(item.url))return fallback;
+ if(fallback&&item.date<fallback.date.split('/').reverse().join('-'))return fallback;
+ const delta=item.current_mdh-item.prior_mdh;
+ const variation=(delta>0?'+':'')+fmt(delta,1)+' M DH';
+ const percent=item.prior_mdh>0&&item.current_mdh>=0?' ('+(delta>0?'+':'')+fmt(100*delta/item.prior_mdh,1)+' %)':'';
+ return {label:fmt(item.current_mdh,1)+' M DH',date:formatPositionDate(item.date),
+  url:item.url,variation:variation+percent,comparison:'vs '+formatPositionDate(item.prior_date)};
+}
 const analysisEarnings2025={
  'MARSA MAROC':{eps:21.65,url:'https://www.marsamaroc.co.ma/sites/default/files/2026-04/Rapport%20annuel%202025_0.pdf'},
  'AKDITAL':{eps:444000000/14159207,url:'https://www.ammc.ma/sites/default/files/Akdital_RFA_2025.pdf'},
@@ -2282,6 +2297,7 @@ async function refreshAnalysisPublications(){
   const data=await response.json();
   if(!Array.isArray(data.publications)||!Number.isFinite(Date.parse(data.checked_at)))throw Error('Flux invalide');
   analysisPublications=data.publications;
+  analysisPublishedDebt=data.net_debt||{};
   analysisCheckedAt=data.checked_at;
   analysisPartial=Object.values(data.sources||{}).some(source=>!source.ok);
   renderAnalysis();
@@ -2335,7 +2351,7 @@ function renderAnalysis(){
   const value=positions.reduce((sum,row)=>sum+portfolioPositionValue(row),0);
   const weight=price>0&&metrics.titles>0?100*(value+price)/(metrics.titles+price):null;
   const status=weight!==null&&weight>=20?'ATT':candidate.name==='Marsa Maroc'&&position?'ÉTU':'SURV';
-  return {...candidate,position,price,date,weight,status,per,earnings,volume,debt:analysisNetDebt[key]};
+  return {...candidate,position,price,date,weight,status,per,earnings,volume,debt:analysisDebtFor(key)};
  });
  const priority=losses[0];
  const marsaResult=positionResults.find(row=>quoteKey(row.position.name)==='MARSA MAROC');
