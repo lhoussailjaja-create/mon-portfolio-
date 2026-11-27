@@ -357,7 +357,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="portfolio-group">
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioReference" aria-expanded="false" onclick="togglePortfolioGroup(this)">Référence officielle</button>
  <div class="portfolio-group-content" id="portfolioReference">
-  <div class="info">Référence officielle : Wafa Bourse, 15/11/2026. Total des avoirs : 14 146,55 DH ; valorisation des titres : 13 012,13 DH. Ces montants restent distincts. Aucune performance journalière, courbe historique ou rendement de dividendes n’est inventé : ces données apparaîtront après enregistrement de leurs sources.</div>
+  <div class="info" id="portfolioReferenceSummary"></div>
  </div>
 </div>
 
@@ -1772,7 +1772,23 @@ function togglePortfolioGroup(button){
  const opening=button.getAttribute('aria-expanded')==='false';
  button.setAttribute('aria-expanded',String(opening));
 }
+function renderPortfolioReference(){
+ const reference=document.getElementById('portfolioReferenceSummary');
+ const accounting=state.wafaAccountingSummary;
+ const broker=state.wafaAccountSummary;
+ const reports=[
+  {date:accounting?.sourceDate,total:accounting?.total,titles:accounting?.titles,label:'Synthèse comptable Wafa Bourse'},
+  {date:broker?.sourceDate,total:broker?.total,titles:broker?.actions+broker?.opcvm,label:'Synchronisation Wafa Bourse'},
+  {date:PEA_BASELINE_DATE,total:14146.55,titles:13012.13,label:'Relevé initial Wafa Bourse'}
+ ];
+ const latest=reports.filter(report=>/^\d{4}-\d{2}-\d{2}$/.test(report.date)&&
+  Number.isFinite(report.total)&&Number.isFinite(report.titles))
+  .sort((a,b)=>b.date.localeCompare(a.date))[0];
+ reference.textContent=latest.label+' du '+formatPositionDate(latest.date)+
+  ' · Total des avoirs : '+fmt(latest.total)+' DH · Valeur des titres : '+fmt(latest.titles)+' DH';
+}
 function renderDashboardMetrics(received){
+ renderPortfolioReference();
  renderDailyPerformance();
  renderSnapshotVariation();
  const m=portfolioMetrics();
