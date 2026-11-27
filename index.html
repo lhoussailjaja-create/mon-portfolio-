@@ -50,6 +50,10 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 .div-source-track span{display:block;height:100%;background:#b8f51b;border-radius:8px}
 .div-disclosure > summary{cursor:pointer;font-weight:700}
 .div-disclosure[open] > summary{margin-bottom:12px}
+#analyse .analysis-disclosure > summary{display:flex;justify-content:space-between;align-items:center;gap:8px;list-style:none;padding:6px 0}
+#analyse .analysis-disclosure > summary::-webkit-details-marker{display:none}
+#analyse .analysis-disclosure > summary::after{content:"+";color:var(--mint)}
+#analyse .analysis-disclosure[open] > summary::after{content:"−"}
 .div-projection-fields{margin-top:12px}
 .div-projection-result{margin-top:14px;padding:14px;border:1px solid #3c4b55;border-radius:12px;background:#101922;color:#dbe5eb}
 .div-projection-result strong{color:#b8f51b;font-size:20px}
@@ -398,19 +402,19 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 </details></section>
 <section class="page" id="analyse">
  <div class="pagehead"><div><h2>Analyse</h2><p id="analysisDate"></p></div></div>
- <details class="card div-disclosure">
+ <details class="card div-disclosure analysis-disclosure" open>
   <summary>Diagnostic</summary>
   <div class="tablewrap"><table class="analysis-pea-table"><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th scope="col" class="analysis-cause">Cause de la baisse</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
   <p class="small">G/P = gains / pertes latents · ATT = attendre · REV = revoir · SURV = surveiller.</p>
  </details>
- <details class="card div-disclosure">
+ <details class="card div-disclosure analysis-disclosure">
   <summary>Décision à prendre</summary>
   <p class="small">Publications consultées le 27/11/2026.</p>
   <p class="small" id="analysisFeedStatus" role="status"></p><div id="analysisDecisions"></div>
  </details>
- <details class="card div-disclosure">
+ <details class="card div-disclosure analysis-disclosure">
   <summary>Résumé</summary><div class="tablewrap"><table class="analysis-summary-table"><thead><tr><th scope="col">Action</th><th scope="col">Perte / gain latent</th><th scope="col">Décision</th></tr></thead><tbody id="analysisSummaryRows"></tbody></table></div></details>
- <details class="card div-disclosure">
+ <details class="card div-disclosure analysis-disclosure">
   <summary>Opportunités du marché</summary>
   <p class="small">Sélection documentée au 27/11/2026. Le PER utilise le bénéfice par action de l’exercice 2025. La liquidité indique les montants échangés sur le marché central, à la date du bulletin.</p>
   <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Date</th><th>Var. 1M</th><th>Publication / PER</th><th>Liquidité</th><th>Dette nette</th><th>Var. dette nette</th><th>Poids après +1</th><th>Avis</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
