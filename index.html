@@ -214,8 +214,8 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
 <div class="portfolio-group">
  <button type="button" class="btn portfolio-group-toggle" aria-controls="portfolioKpis" aria-expanded="false" onclick="togglePortfolioGroup(this)">Situation du portefeuille</button>
  <div class="dash-kpis portfolio-group-content" id="portfolioKpis">
- <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Total des avoirs</span><span class="kpi-icon">◈</span></div><div class="metric-value" id="dashHoldings">14 146,55 DH</div><div class="metric-sub" id="dashHoldingsTitles">Valeur des titres : 13 012,13 DH</div><div class="metric-sub" id="dashTitlesSource"></div><div class="metric-sub" id="dashPortfolioUpdatedAt" aria-live="polite"></div><div class="metric-sub" id="dashHoldingsInvested">Montant investi : —</div><div class="metric-sub" id="dashHoldingsMeta">Espèces : 1 134,42 DH · Source : 15/11/2026</div></div>
- <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Profit / Loss latent</span><span class="kpi-icon">↘</span></div><div class="metric-value negative" id="dashProfit">−408,84 DH</div><div class="metric-sub" id="dashProfitMeta">Relevé Titres · Source : 15/11/2026</div></div>
+ <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Total des avoirs</span><span class="kpi-icon">◈</span></div><div class="metric-value" id="dashHoldings">14 146,55 DH</div><div class="metric-sub" id="dashHoldingsTitles">Valeur des titres : 13 012,13 DH</div><div class="metric-sub" id="dashPortfolioUpdatedAt" aria-live="polite"></div><div class="metric-sub" id="dashHoldingsInvested">Montant investi : —</div><div class="metric-sub" id="dashHoldingsMeta">Espèces : 1 134,42 DH</div></div>
+ <div class="card dash-kpi"><div class="kpi-top"><span class="metric-label">Profit / Loss latent</span><span class="kpi-icon">↘</span></div><div class="metric-value negative" id="dashProfit">−408,84 DH</div></div>
  <div class="card dash-kpi">
   <div class="metric-label">Résultat total indicatif</div>
   <div class="metric-value neutral" id="dashTotalProfit">—</div>
@@ -355,7 +355,7 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="actions"><button class="btn" type="button" onclick="previewManualQuotes()">Prévisualiser</button><button class="btn primary" type="button" id="manualQuoteApply" onclick="commitManualQuotes()" disabled>Appliquer les cours</button></div>
  <p class="small" id="manualQuoteStatus" role="status"></p>
  <div id="manualQuotePreview" class="tablewrap"></div>
-</details></div><div class="card hidden" id="positionForm"><h3>Nouvelle position</h3><div class="formrow"><div class="field"><label>Valeur</label><input id="pName" placeholder="Nom de l'action ou OPCVM"></div><div class="field"><label>Catégorie</label><select id="pType"><option>Action</option><option>OPCVM</option><option>À classifier</option></select></div><div class="field"><label>Quantité</label><input id="pQty" type="number" min="0" step="0.001"></div><div class="field"><label>Cours / VL (DH)</label><input id="pPrice" type="number" min="0" step="0.01"></div><div class="field"><label>PRMP (DH)</label><input id="pCmp" type="number" min="0" step="0.01"></div><div class="field"><label>Frais d'achat (DH)</label><input id="pBuyFees" type="number" min="0" step="0.01" placeholder="Optionnel"></div><div class="field"><label>Date de mise à jour</label><input id="pUpdated" type="date"></div></div><button class="btn primary" onclick="addPosition()">Enregistrer la ligne</button></div><div class="card positions-total-card"><span>Total des titres</span><strong id="positionsTotalValue">—</strong><small class="small" id="positionsTotalSourceDate">Date source · —</small><small class="small" id="positionsTotalUpdatedAt"></small></div>
+</details></div><div class="card hidden" id="positionForm"><h3>Nouvelle position</h3><div class="formrow"><div class="field"><label>Valeur</label><input id="pName" placeholder="Nom de l'action ou OPCVM"></div><div class="field"><label>Catégorie</label><select id="pType"><option>Action</option><option>OPCVM</option><option>À classifier</option></select></div><div class="field"><label>Quantité</label><input id="pQty" type="number" min="0" step="0.001"></div><div class="field"><label>Cours / VL (DH)</label><input id="pPrice" type="number" min="0" step="0.01"></div><div class="field"><label>PRMP (DH)</label><input id="pCmp" type="number" min="0" step="0.01"></div><div class="field"><label>Frais d'achat (DH)</label><input id="pBuyFees" type="number" min="0" step="0.01" placeholder="Optionnel"></div><div class="field"><label>Date de mise à jour</label><input id="pUpdated" type="date"></div></div><button class="btn primary" onclick="addPosition()">Enregistrer la ligne</button></div><div class="card positions-total-card"><span>Total des titres</span><strong id="positionsTotalValue">—</strong><small class="small" id="positionsTotalUpdatedAt"></small></div>
 <details class="card" id="positionsRegister">
  <summary class="btn"><span class="positions-show">Afficher les positions</span><span class="positions-hide">Masquer les positions</span></summary>
  <div class="tablewrap"><table><thead><tr><th>Valeur</th><th>Catégorie</th><th>Quantité</th><th>Cours / VL</th><th>Date de mise à jour</th><th>Valorisation</th><th>PRMP</th><th>Performance</th><th>+/- latent</th><th>Frais achat</th><th>Poids</th><th>Action</th></tr></thead><tbody id="positionRows"><tr><td colspan="12" class="empty">Les positions détaillées seront chargées depuis le relevé Titres après validation de l’importateur.</td></tr></tbody></table></div><p class="small">Les données absentes restent vides. Les OPCVM sont identifiés séparément des actions. Les lignes synchronisées conservent la valorisation et le +/- latent du relevé source.</p>
@@ -562,11 +562,11 @@ function save(portfolioChanged=false){
  Object.assign(state,next);
  render();
 }
-function portfolioUpdateLabel(){
+function portfolioUpdateLabel(sourceLabel){
  const timestamps=[state.portfolioUpdatedAt,state.wafaAccountSummary?.capturedAt,
   ...state.positions.map(position=>position.marketUpdatedAt)];
  const latest=Math.max(...timestamps.map(value=>Date.parse(value)).filter(Number.isFinite));
- if(!Number.isFinite(latest))return 'Dernière mise à jour : heure indisponible';
+ if(!Number.isFinite(latest))return sourceLabel;
  const date=new Date(latest);
  const parts=new Intl.DateTimeFormat('fr-FR',{timeZone:'Africa/Casablanca',dateStyle:'short',timeStyle:'short'}).format(date);
  return 'Dernière mise à jour : '+parts+' (heure du Maroc)';
@@ -1758,17 +1758,13 @@ function renderDashboardMetrics(received){
  const holdingsMeta=document.getElementById('dashHoldingsMeta');
  const holdingsTitles=document.getElementById('dashHoldingsTitles');
  if(holdingsTitles)holdingsTitles.textContent='Valeur des titres : '+fmt(display.titles)+' DH';
- const titlesSource=document.getElementById('dashTitlesSource');
- if(titlesSource)titlesSource.textContent=displayDate;
  const updated=document.getElementById('dashPortfolioUpdatedAt');
- if(updated)updated.textContent=portfolioUpdateLabel();
+ if(updated)updated.textContent=portfolioUpdateLabel(displayDate);
  const invested=document.getElementById('dashHoldingsInvested');
  if(invested)invested.textContent='Montant investi : '+(useAccounting?'—':m.invested===null?'— (quantité ou PRMP manquant) ':fmt(m.invested)+' DH');
- if(holdingsMeta)holdingsMeta.textContent=`Espèces : ${fmt(display.cash)} DH · Source : ${useAccounting?formatPositionDate(accounting.sourceDate):m.cashSourceDate}`;
+ if(holdingsMeta)holdingsMeta.textContent=`Espèces : ${fmt(display.cash)} DH`;
  const profit=document.getElementById('dashProfit');
  if(profit){profit.textContent=(display.latent<0?'−':display.latent>0?'+':'')+fmt(Math.abs(display.latent))+' DH';profit.classList.toggle('negative',display.latent<0);profit.classList.toggle('positive',display.latent>0);}
- const profitMeta=document.getElementById('dashProfitMeta');
- if(profitMeta)profitMeta.textContent=m.titlesSource;
  const realized=useAccounting?accounting.realized:PEA_FISCAL_REALIZED_REFERENCE;
  const sales=recordedPortfolioSales().filter(sale=>!useAccounting||sale.date>accounting.sourceDate);
  const salesResult=sales.reduce((sum,sale)=>sum+sale.realized,0);
@@ -2188,8 +2184,7 @@ function render(){
  if(syncNotice&&state.importIssues&&state.importIssues.length){const n=state.importIssues.length;syncNotice.innerHTML='<p class="small">Correction automatique : '+n+' ancienne(s) ligne(s) numérique(s) sans nom de valeur ont été retirées de la liste active et archivées dans les données locales. Aucune opération, dividende ou position valide n’a été supprimé.</p>';}
  const totalPositions=state.positions.reduce((sum,position)=>sum+portfolioPositionValue(position),0);
  document.getElementById('positionsTotalValue').textContent=state.positions.length?fmt(totalPositions)+' DH':'—';
- document.getElementById('positionsTotalSourceDate').textContent=positionTotalSourceDate(state.positions);
- document.getElementById('positionsTotalUpdatedAt').textContent=portfolioUpdateLabel();
+ document.getElementById('positionsTotalUpdatedAt').textContent=portfolioUpdateLabel(positionTotalSourceDate(state.positions));
  if(!state.positions.length){tbody.innerHTML='<tr><td colspan="12" class="empty">Aucune position détaillée enregistrée dans cette nouvelle base.</td></tr>'}else{tbody.innerHTML=state.positions.map(p=>{const val=p.importedValue!==null&&p.importedValue!==undefined&&Number.isFinite(Number(p.importedValue))?Number(p.importedValue):(p.price===null||p.price===undefined?'':p.qty*p.price),pl=p.sourcePl!==null&&p.sourcePl!==undefined&&Number.isFinite(Number(p.sourcePl))?Number(p.sourcePl):(p.cmp===null||p.cmp===undefined||p.price===null?'':(p.price-p.cmp)*p.qty-(Number(p.buyFees)||0)),weight=val===''||totalPositions===0?'':(val/totalPositions*100);return `<tr><td><b>${esc(p.name)}</b></td><td><span class="tag">${esc(p.type)}</span></td><td>${fmt(p.qty,3)}</td><td>${p.price===null||p.price===undefined?'—':fmt(p.price)}</td><td>${positionUpdateDateCell(p)}</td><td>${val===''?'—':fmt(val)+' DH'}</td><td>${p.cmp===null||p.cmp===undefined?'—':fmt(p.cmp)}</td><td class="${p.sourcePerf===null||p.sourcePerf===undefined?'':Number(p.sourcePerf)>=0?'positive':'negative'}">${p.sourcePerf===null||p.sourcePerf===undefined?'—':fmt(p.sourcePerf)+'%'}</td><td class="${pl===''?'':pl>=0?'positive':'negative'}">${pl===''?'—':fmt(pl)+' DH'}</td><td>${p.buyFees===null||p.buyFees===undefined?'—':fmt(p.buyFees)+' DH'}</td><td>${p.sourceWeight!==null&&p.sourceWeight!==undefined?fmt(p.sourceWeight)+'%':weight===''?'—':fmt(weight)+'%'}</td><td><button class="btn danger" onclick="deletePosition('${p.id}')">Supprimer</button></td></tr>`}).join('')}
  const confirmedDividends=state.dividends.filter(dividendIsConfirmed);const received=confirmedDividends.filter(d=>d.status==='Perçu').reduce((s,d)=>s+(Number(d.amount)||0),0),forecast=confirmedDividends.filter(d=>d.status==='Prévisionnel').reduce((s,d)=>s+(Number(d.amount)||0),0);
  renderDashboardMetrics(received);
