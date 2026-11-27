@@ -396,6 +396,11 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Date</th><th>Var. 1M</th><th>Publication / PER</th><th>Liq.</th><th>Poids après +1</th><th>Avis</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
   <p class="small">ÉTU = étudier l’achat · Liq. = liquidité. <a href="https://www.casablanca-bourse.com/" target="_blank" rel="noopener noreferrer">Bourse de Casablanca ↗</a></p>
  </div>
+ <div class="card">
+  <h3>Décision à prendre</h3>
+  <p class="small">Publications consultées le 27/11/2026.</p>
+  <div id="analysisDecisions"></div>
+ </div>
 </section>
 <section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" oninput="clearPortfolioTradePreview()" onsubmit="previewPortfolioTrade(event)">
  <h3>Enregistrer un achat / une vente</h3>
@@ -2263,7 +2268,7 @@ function renderAnalysis(){
   ?fmt(metrics.titles)+' DH de titres · '+fmt(metrics.latent)+' DH latents'+(metrics.invested>0?' ('+pct(100*metrics.latent/metrics.invested)+')':'')+' · '+state.positions.length+' lignes'
   :'Importez un relevé titres pour analyser votre PEA.';
  document.getElementById('analysisSummary').textContent=losses.length
-  ?'À revoir en priorité : '+losses[0].position.name+' ('+fmt(losses[0].pl)+' DH). Vérifier la cause de la baisse avant de renforcer.'
+  ?'À revoir en priorité : '+losses[0].position.name+' ('+fmt(losses[0].pl)+' DH latents). Voir la décision en bas de l’analyse.'
   :state.positions.length?'Aucune moins-value calculable sur les positions renseignées.':'';
  document.getElementById('analysisLossRows').innerHTML=losses.map(({position,pl,percent,weight})=>{
   const [status,reason]=review[quoteKey(position.name)]??['REV','Examiner les résultats et le poids de la ligne avant de renforcer.'];
@@ -2286,7 +2291,7 @@ function renderAnalysis(){
  });
  const opportunity=rows.find(row=>row.status==='ÉTU'&&row.price>0);
  document.getElementById('analysisMarketSummary').textContent=opportunity
-  ?'Piste à étudier : '+opportunity.name+' ('+fmt(opportunity.price)+' DH par action selon Positions). '+opportunity.reason
+  ?'À surveiller : '+opportunity.name+' ('+fmt(opportunity.price)+' DH selon Positions). Son chiffre d’affaires progresse de 13 % à fin septembre 2026.'
   :'Marché : valeurs en surveillance. Confirmer les données de cours et l’éligibilité avant de retenir un achat.';
  document.getElementById('analysisMarketRows').innerHTML=rows.map(row=>`<tr>
   <td>${row.name}<br><span class="small">${row.sector}${row.position?' · Déjà en PEA':''}</span></td>
@@ -2294,6 +2299,21 @@ function renderAnalysis(){
   <td>—</td><td>${row.publication}<br>PER : —</td><td>—</td><td>${pct(row.weight)}</td>
   <td>${row.status}</td><td>${row.reason} <a href="${row.url}" target="_blank" rel="noopener noreferrer">${row.source} ↗</a></td>
  </tr>`).join('');
+ const decisions=losses.map(({position})=>{
+  const key=quoteKey(position.name);
+  if(key==='TOTALENERGIES MAROC'){
+   return `<p><strong>${esc(position.name)} · Conserver, renforcement en attente.</strong> Au 1er semestre 2026, le bénéfice net social a reculé de 20,2 %. L’entreprise signale une pression sur ses marges et des perturbations logistiques. Le lien avec la baisse du cours reste à confirmer. Réexaminer le renforcement si les marges se redressent. Si elles continuent de se dégrader, revoir le poids de la ligne. <a href="https://www.ammc.ma/fr/node/55834" target="_blank" rel="noopener noreferrer">Résultats · AMMC ↗</a></p>`;
+  }
+  if(key==='MARSA MAROC')return '';
+  const [,reason]=review[key]??['REV','Examiner les derniers résultats et comparer l’évolution du cours au marché.'];
+  return `<p><strong>${esc(position.name)} · Attendre avant de renforcer.</strong> Cause non confirmée. ${reason}</p>`;
+ });
+ const marsa=rows[0];
+ if(marsa.position){
+  const impact=marsa.weight===null?'':' Une action de plus porterait la ligne à '+pct(marsa.weight)+' des titres.';
+  decisions.push(`<p><strong>Marsa Maroc · Conserver et surveiller.</strong> Les ventes progressent de 13 % à fin septembre 2026. Étudier un renforcement si les bénéfices confirment la progression, si le prix est justifié et si le poids reste acceptable.${impact} <a href="${marsa.url}" target="_blank" rel="noopener noreferrer">Publication · AMMC ↗</a></p>`);
+ }
+ document.getElementById('analysisDecisions').innerHTML=decisions.join('')||'<p>Aucune décision à afficher pour les positions renseignées.</p>';
 }
 function render(){
  renderAnalysis();
