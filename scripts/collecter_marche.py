@@ -127,6 +127,9 @@ def main():
             "ratio_url": ratio_url if re.fullmatch(r"https://casabourse\.ma/entreprise/[a-z0-9-]+/", ratio_url) else old.get("ratio_url", RATIOS_URL),
             **financials,
         }
+        if symbol == "RIS":
+            # Fiche officielle Bourse de Casablanca, ISIN MA0000011462.
+            row.update(name="RISMA", sector="Loisirs et Hôtels")
         rows.append(row)
     OUTPUT.write_text(json.dumps({
         "date": data["date"], "checked_at": now.isoformat(timespec="seconds"),
