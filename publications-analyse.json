@@ -1,6 +1,6 @@
 {
-  "checked_at": "2026-11-28T13:43:24+00:00",
-  "last_success_at": "2026-11-28T13:43:24+00:00",
+  "checked_at": "2026-11-28T13:53:52+00:00",
+  "last_success_at": "2026-11-28T13:53:52+00:00",
   "sources": {
     "AMMC": {
       "ok": true
@@ -349,6 +349,30 @@
       "period": "9 mois 2026 · résultat net part du groupe",
       "published_on": "2026-11-12",
       "url": "https://www.ammc.ma/sites/default/files/CP_Taqa_Morocco_T3_26.pdf"
+    },
+    "DAR SAADA": {
+      "kind": "revenue",
+      "percent": 6.0,
+      "published_on": "2026-11-27",
+      "url": "https://www.ammc.ma/sites/default/files/CP_RDS_T3_26.pdf"
+    },
+    "IMMORENTE": {
+      "kind": "revenue",
+      "percent": 8.0,
+      "published_on": "2026-11-27",
+      "url": "https://www.ammc.ma/sites/default/files/CP_Immorente_T3_26.pdf"
+    },
+    "CREDIT DU MAROC": {
+      "kind": "earnings",
+      "percent": 19.1,
+      "published_on": "2026-11-26",
+      "url": "https://www.ammc.ma/sites/default/files/CP_CDM_T3_26.pdf"
+    },
+    "LABEL VIE": {
+      "kind": "revenue",
+      "percent": 17.3,
+      "published_on": "2026-11-25",
+      "url": "https://www.ammc.ma/sites/default/files/CP_LabelVie_T3_26.pdf"
     }
   }
 }
