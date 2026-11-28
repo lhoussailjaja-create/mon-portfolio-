@@ -2367,8 +2367,8 @@ function renderMarketOpportunities(metrics=portfolioMetrics()){
    <td>${format(row.month)}</td>
    <td>${Number.isFinite(row.net_income)?'RN '+row.year+' : '+fmt(row.net_income/1000000,1)+' M DH<br>':''}${Number.isFinite(row.growth)?'Var. RN : '+format(row.growth)+'<br>':''}PER : ${row.per>0?fmt(row.per,1)+'×':'—'}</td>
    <td>${Number.isFinite(row.volume)?fmt(row.volume,0)+' DH':'—'}</td>
-   <td>${debt?esc(debt.label)+'<br><small><a class="analysis-bvc-link" href="'+esc(debt.url)+'" target="_blank" rel="noopener noreferrer">'+esc(debt.date)+' ↗</a></small>':'—'}</td>
-   <td>${debt?.variation?esc(debt.variation)+'<br><small>'+esc(debt.comparison)+'</small>':'—'}</td>
+   <td>${debt?esc(debt.label)+'<br><small><a class="analysis-bvc-link" href="'+esc(debt.url)+'" target="_blank" rel="noopener noreferrer">'+esc(debt.date)+' ↗</a></small>':'Non documentée'}</td>
+   <td>${debt?.variation?esc(debt.variation)+'<br><small>'+esc(debt.comparison)+'</small>':'Comparatif indisponible'}</td>
    <td>${format(weight)}</td><td>${score??'—'}</td><td>${reason}<br>${quoteLink} · ${ratioLink}</td>
   </tr>`;
  }).join('')||'<tr><td colspan="10" class="empty">Aucune action pour ce filtre.</td></tr>';
@@ -2394,7 +2394,7 @@ const analysisIssuerAliases={
  'BCP':['BCP','BANQUE CENTRALE POPULAIRE']
 };
 async function refreshAnalysisPublications(){
- const url='https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/publications-analyse.json';
+ const url=location.protocol==='file:'?'https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/publications-analyse.json':'./publications-analyse.json';
  const status=document.getElementById('analysisFeedStatus');
  try{
   const response=await fetch(url,{cache:'no-store'});

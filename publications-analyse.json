@@ -221,5 +221,76 @@
       "source": "AMMC"
     }
   ],
-  "net_debt": {}
+  "net_debt": {
+    "AKDITAL": {
+      "date": "2026-09-30",
+      "prior_date": "2025-12-31",
+      "current_mdh": 4968,
+      "prior_mdh": 4268,
+      "url": "https://www.ammc.ma/sites/default/files/CP_Akdital_T3_26_0.pdf"
+    },
+    "MARSA MAROC": {
+      "date": "2026-09-30",
+      "prior_date": "2025-09-30",
+      "current_mdh": 316,
+      "prior_mdh": -470,
+      "url": "https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf"
+    },
+    "TAQA MOROCCO": {
+      "date": "2026-09-30",
+      "prior_date": "2025-09-30",
+      "current_mdh": 5389,
+      "prior_mdh": 5852,
+      "url": "https://www.ammc.ma/sites/default/files/CP_Taqa_Morocco_T3_26.pdf"
+    },
+    "T2S GROUP": {
+      "date": "2026-09-30",
+      "prior_date": "2025-12-31",
+      "current_mdh": 465,
+      "prior_mdh": 222,
+      "url": "https://www.ammc.ma/sites/default/files/CP_T2S_group_T3_26.pdf"
+    },
+    "UNIMER": {
+      "date": "2026-09-30",
+      "prior_date": "2025-09-30",
+      "current_mdh": 710,
+      "prior_mdh": 729,
+      "url": "https://www.ammc.ma/sites/default/files/CP_Unimer_T3_26.pdf"
+    },
+    "OULMES": {
+      "date": "2026-09-30",
+      "prior_date": "2025-09-30",
+      "current_mdh": 1511.7,
+      "prior_mdh": 1500,
+      "url": "https://www.ammc.ma/sites/default/files/CP_Oulmes_T3_26.pdf"
+    },
+    "RISMA": {
+      "date": "2026-09-30",
+      "prior_date": "2025-09-30",
+      "current_mdh": 949,
+      "prior_mdh": 1285,
+      "url": "https://www.ammc.ma/sites/default/files/CP_Risma_T3_26.pdf"
+    },
+    "CMGP": {
+      "date": "2026-09-30",
+      "prior_date": "2025-12-31",
+      "current_mdh": 1241,
+      "prior_mdh": 949,
+      "url": "https://www.ammc.ma/sites/default/files/CP_CMGP_T3_26.pdf"
+    },
+    "ARADEI": {
+      "date": "2026-09-30",
+      "prior_date": "2025-12-31",
+      "current_mdh": 3359,
+      "prior_mdh": 2805,
+      "url": "https://www.ammc.ma/sites/default/files/CP_Aradei_capital_T3_26.pdf"
+    },
+    "SGTM": {
+      "date": "2026-06-30",
+      "prior_date": "2025-12-31",
+      "current_mdh": 2400,
+      "prior_mdh": 156,
+      "url": "https://www.ammc.ma/sites/default/files/CP_SGTM_T2_26.pdf"
+    }
+  }
 }

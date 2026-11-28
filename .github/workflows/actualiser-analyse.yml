@@ -143,9 +143,10 @@ jobs:
                   availability[source] = {"ok": False}
                   print(f"{source}: {error}")
 
+          from calendar import monthrange
+          from concurrent.futures import ThreadPoolExecutor
           import re
           import subprocess
-          import tempfile
           import unicodedata
           
           def normalized(value):
@@ -153,36 +154,53 @@ jobs:
                                       if not unicodedata.combining(c)).split())
           
           months = "janvier fevrier mars avril mai juin juillet aout septembre octobre novembre decembre".split()
-          date_pattern = r"(\d{1,2})\s+(" + "|".join(months) + r")\s+(20\d{2})"
-          money_pattern = r"([−-]?\d+(?:[ .]\d{3})*(?:[,.]\d+)?)\s*(mmdh|mdh|m\s*mad|md\s*mad|milliards? de dirhams|millions? de dirhams)\b"
-          debt_pattern = re.compile(
-              r"(?:endettement net|dette nette)(?: consolide[e]?)?\s*[^.;]{0,65}?"
-              + money_pattern + r"\s+(?:au|a fin)\s+" + date_pattern
-              + r"\s*,?\s*(?:contre|versus)\s+" + money_pattern
-              + r"\s+(?:au|a fin)\s+" + date_pattern
-          )
-          
+          month_names = "|".join(months)
+          date_pattern = r"(?:(\d{1,2})\s+)?(" + month_names + r")\s+(20\d{2})"
+          numeric = r"[−-]?\d+(?:[ .]\d{3})*(?:[,.]\d+)?"
+          unit_pattern = r"mmdh|mmad|mdh|m\s*mad|mds?\s*mad|milliards? de dirhams|millions? de dirhams"
+          money_pattern = rf"({numeric})\s*({unit_pattern})\b"
+          debt_label = r"(?:endettement net|dette nette)(?: consolide[e]?)?"
+          first_date = r"\s+(?:au|a fin)\s+" + date_pattern
+          comparison = r"\s*,?\s*(?:contre|versus)\s+(une tresorerie nette positive de\s+)?"
+          after = re.compile(debt_label + r"\s*[^.;\d]{0,100}?" + money_pattern + first_date +
+                             comparison + money_pattern + first_date)
+          before = re.compile(r"(?:au|a fin)\s+" + date_pattern + r"\s*,\s*l['’]"
+                              + debt_label + r"\s*[^.;\d]{0,100}?" + money_pattern +
+                              comparison + money_pattern + first_date)
+
           def amount(raw, unit):
               number = raw.replace(" ", "").replace("−", "-")
               if "," in number:
                   number = number.replace(".", "").replace(",", ".")
-              return float(number) * (1000 if unit in ("mmdh", "md mad") or unit.startswith("milliard") else 1)
-          
+              elif re.fullmatch(r"-?\d{1,3}(?:\.\d{3})+", number):
+                  number = number.replace(".", "")
+              return float(number) * (1000 if unit in ("mmdh", "md mad", "mds mad") or unit.startswith("milliard") else 1)
+
           def date_iso(day, month, year):
-              return datetime(int(year), months.index(month) + 1, int(day)).date().isoformat()
-          
+              month = months.index(month) + 1
+              year = int(year)
+              return datetime(year, month, int(day) if day else monthrange(year, month)[1]).date().isoformat()
+
           def extract_debt(document, url):
               matches = set()
-              for match in debt_pattern.finditer(normalized(document)):
-                  current, unit, day, month, year, prior, old_unit, old_day, old_month, old_year = match.groups()
+              plain = normalized(document)
+              candidates = []
+              for match in after.finditer(plain):
+                  current, unit, day, month, year, positive_cash, prior, old_unit, old_day, old_month, old_year = match.groups()
+                  candidates.append((current, unit, day, month, year, positive_cash, prior, old_unit, old_day, old_month, old_year))
+              for match in before.finditer(plain):
+                  day, month, year, current, unit, positive_cash, prior, old_unit, old_day, old_month, old_year = match.groups()
+                  candidates.append((current, unit, day, month, year, positive_cash, prior, old_unit, old_day, old_month, old_year))
+              for current, unit, day, month, year, positive_cash, prior, old_unit, old_day, old_month, old_year in candidates:
                   dates = date_iso(day, month, year), date_iso(old_day, old_month, old_year)
                   if dates[1] < dates[0] <= now[:10]:
-                      matches.add((*dates, amount(current, unit), amount(prior, old_unit)))
+                      previous_amount = amount(prior, old_unit)
+                      matches.add((*dates, amount(current, unit), -abs(previous_amount) if positive_cash else previous_amount))
               if len(matches) != 1:
                   return None
               date, prior_date, current, prior = matches.pop()
               return {"date": date, "prior_date": prior_date, "current_mdh": current, "prior_mdh": prior, "url": url}
-          
+
           class PdfLinks(HTMLParser):
               def __init__(self, base):
                   super().__init__()
@@ -208,15 +226,22 @@ jobs:
                   raise ValueError("Document trop volumineux")
               return data
           
+          def issuer_key(name):
+              return re.sub(r"[^a-z0-9]+", " ", normalized(name)).upper().strip()
+
+          market = json.loads(Path("opportunites-marche.json").read_text())
+          issuers = {issuer_key(row["name"]): issuer_key(row["name"]) for row in market["rows"]}
+          issuers.update({
+              "SODEP MARSA MAROC": "MARSA MAROC", "CMGP GROUP": "CMGP",
+              "T2S GROUP HOLDING": "T2S GROUP", "RDS": "DAR SAADA",
+              "RESIDENCES DAR SAADA": "DAR SAADA", "ARADEI CAPITAL": "ARADEI",
+              "LABELVIE": "LABEL VIE", "GROUPE LABELVIE": "LABEL VIE",
+              "IMMORENTE INVEST": "IMMORENTE",
+          })
           debts = previous.get("net_debt", {})
-          issuers = {"marsa maroc": "MARSA MAROC", "akdital": "AKDITAL", "sgtm": "SGTM"}
-          seen = set()
-          for article in sorted(articles.values(), key=lambda item: item.get("published_on") or item.get("first_seen", ""), reverse=True):
-              title = normalized(article["title"])
-              issuer = next((key for name, key in issuers.items() if re.search(r"\b" + name + r"\b", title)), None)
-              if not issuer or article["source"] != "AMMC" or issuer in seen:
-                  continue
-              seen.add(issuer)
+
+          def collect_debt(task):
+              issuer, article = task
               try:
                   url = article["url"]
                   if urlsplit(url).path.lower().endswith(".pdf"):
@@ -226,15 +251,30 @@ jobs:
                       pdfs.feed(official_bytes(url, 2_000_000).decode("utf-8", errors="replace"))
                       candidates = sorted(pdfs.urls)[:3]
                   for pdf in candidates:
-                      with tempfile.TemporaryDirectory() as directory:
-                          file = Path(directory) / "publication.pdf"
-                          file.write_bytes(official_bytes(pdf, 10_000_000))
-                          document = subprocess.check_output(["pdftotext", "-layout", str(file), "-"], timeout=10).decode("utf-8")
+                      data = official_bytes(pdf, 10_000_000)
+                      document = subprocess.check_output(
+                          ["pdftotext", "-layout", "-", "-"], input=data, timeout=10,
+                      ).decode("utf-8")
                       debt = extract_debt(document, pdf)
-                      if debt and debt["date"] >= debts.get(issuer, {}).get("date", ""):
-                          debts[issuer] = debt
+                      if debt:
+                          return issuer, debt
               except (OSError, ValueError, subprocess.SubprocessError) as error:
                   print(f"Dette nette {issuer}: {error}")
+              return issuer, None
+
+          tasks = []
+          for article in sorted(articles.values(), key=lambda item: item.get("published_on") or "", reverse=True):
+              title = article["title"]
+              issuer = issuers.get(issuer_key(re.split(r" +[-–—] +", title, maxsplit=1)[0]))
+              publication = article.get("published_on", "")
+              if (issuer and article["source"] == "AMMC" and publication > debts.get(issuer, {}).get("date", "")
+                      and re.search(r"indicateurs|resultats financiers|rapport financier", normalized(title))):
+                  tasks.append((issuer, article))
+
+          with ThreadPoolExecutor(max_workers=8) as executor:
+              for issuer, debt in executor.map(collect_debt, tasks[:36]):
+                  if debt and debt["date"] > debts.get(issuer, {}).get("date", ""):
+                      debts[issuer] = debt
 
           path.write_text(json.dumps(
               {"checked_at": now, "last_success_at": now if any(item["ok"] for item in availability.values()) else previous.get("last_success_at"), "sources": availability, "publications": list(articles.values()), "net_debt": debts},
