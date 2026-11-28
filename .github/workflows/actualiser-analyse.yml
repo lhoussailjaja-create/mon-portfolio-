@@ -74,24 +74,75 @@ jobs:
                   if relevant and len(title) >= 18:
                       self.items[url] = {"title": title, "url": url, "source": self.source}
 
+          class AmmcRows(HTMLParser):
+              def __init__(self, base):
+                  super().__init__(convert_charrefs=True)
+                  self.base = base
+                  self.items = {}
+                  self.row = None
+                  self.in_title = False
+
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  classes = attrs.get("class", "").split()
+                  if tag == "li" and "actualites-row" in classes:
+                      self.row = {"title": [], "date": "", "url": ""}
+                  if self.row is None:
+                      return
+                  if tag == "div" and "views-field-title" in classes:
+                      self.in_title = True
+                  if tag == "time":
+                      self.row["date"] = attrs.get("datetime", "")[:10]
+                  if tag == "a":
+                      url = urljoin(self.base, attrs.get("href") or "")
+                      link = urlsplit(url)
+                      if (link.scheme == "https" and link.netloc == "www.ammc.ma"
+                              and link.path.startswith("/sites/default/files/")
+                              and link.path.lower().endswith(".pdf")):
+                          self.row["url"] = url
+
+              def handle_data(self, data):
+                  if self.in_title and self.row is not None:
+                      self.row["title"].append(data)
+
+              def handle_endtag(self, tag):
+                  if tag == "div":
+                      self.in_title = False
+                  if tag != "li" or self.row is None:
+                      return
+                  url = self.row["url"]
+                  title = " ".join(" ".join(self.row["title"]).split())
+                  date = self.row["date"]
+                  if url and title and date:
+                      self.items[url] = {"url": url, "title": title, "published_on": date, "source": "AMMC"}
+                  self.row = None
+                  self.in_title = False
+
           for source, url in sources.items():
               try:
-                  request = Request(url, headers={"User-Agent": "MonPortfolio/1.0"})
-                  with urlopen(request, timeout=25) as response:
-                      html = response.read().decode("utf-8", errors="replace")
-                  links = Links(url, source)
-                  links.feed(html)
-                  if not links.items:
-                      raise ValueError("Aucune publication reconnue")
-                  for key, item in links.items.items():
+                  collected = {}
+                  for page_url in ([url, url + "?page=1", url + "?page=2"] if source == "AMMC" else [url]):
+                      try:
+                          request = Request(page_url, headers={"User-Agent": "MonPortfolio/1.0"})
+                          with urlopen(request, timeout=15) as response:
+                              html = response.read().decode("utf-8", errors="replace")
+                          links = AmmcRows(url) if source == "AMMC" else Links(url, source)
+                          links.feed(html)
+                          if not links.items:
+                              raise ValueError("Aucune publication reconnue")
+                          collected.update(links.items)
+                      except (OSError, ValueError) as error:
+                          if not collected:
+                              raise
+                          print(f"{page_url}: {error}")
+                          break
+                  for key, item in collected.items():
                       articles[key] = {"first_seen": articles.get(key, {}).get("first_seen", now), **item}
                   availability[source] = {"ok": True}
               except (OSError, ValueError) as error:
                   availability[source] = {"ok": False}
                   print(f"{source}: {error}")
 
-          if not any(item["ok"] for item in availability.values()):
-              raise SystemExit("Aucune source disponible. Le dernier résultat est conservé.")
           import re
           import subprocess
           import tempfile
@@ -160,7 +211,7 @@ jobs:
           debts = previous.get("net_debt", {})
           issuers = {"marsa maroc": "MARSA MAROC", "akdital": "AKDITAL", "sgtm": "SGTM"}
           seen = set()
-          for article in sorted(articles.values(), key=lambda item: item.get("first_seen", ""), reverse=True):
+          for article in sorted(articles.values(), key=lambda item: item.get("published_on") or item.get("first_seen", ""), reverse=True):
               title = normalized(article["title"])
               issuer = next((key for name, key in issuers.items() if re.search(r"\b" + name + r"\b", title)), None)
               if not issuer or article["source"] != "AMMC" or issuer in seen:
@@ -168,10 +219,13 @@ jobs:
               seen.add(issuer)
               try:
                   url = article["url"]
-                  html = official_bytes(url, 2_000_000).decode("utf-8", errors="replace")
-                  pdfs = PdfLinks(url)
-                  pdfs.feed(html)
-                  for pdf in sorted(pdfs.urls)[:3]:
+                  if urlsplit(url).path.lower().endswith(".pdf"):
+                      candidates = [url]
+                  else:
+                      pdfs = PdfLinks(url)
+                      pdfs.feed(official_bytes(url, 2_000_000).decode("utf-8", errors="replace"))
+                      candidates = sorted(pdfs.urls)[:3]
+                  for pdf in candidates:
                       with tempfile.TemporaryDirectory() as directory:
                           file = Path(directory) / "publication.pdf"
                           file.write_bytes(official_bytes(pdf, 10_000_000))
@@ -183,7 +237,7 @@ jobs:
                   print(f"Dette nette {issuer}: {error}")
 
           path.write_text(json.dumps(
-              {"checked_at": now, "sources": availability, "publications": list(articles.values()), "net_debt": debts},
+              {"checked_at": now, "last_success_at": now if any(item["ok"] for item in availability.values()) else previous.get("last_success_at"), "sources": availability, "publications": list(articles.values()), "net_debt": debts},
               ensure_ascii=False, indent=2
           ) + "\n")
           PY

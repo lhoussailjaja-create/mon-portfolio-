@@ -404,12 +404,11 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <div class="pagehead"><div><h2>Analyse</h2><p id="analysisDate"></p></div></div>
  <details class="card div-disclosure analysis-disclosure" open>
   <summary>Diagnostic</summary>
-  <div class="tablewrap"><table class="analysis-pea-table"><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th scope="col" class="analysis-cause">Cause de la baisse</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
+  <div class="tablewrap"><table class="analysis-pea-table"><thead><tr><th>Valeur</th><th>G/P DH</th><th>G/P %</th><th>Poids</th><th>Avis</th><th scope="col" class="analysis-cause">Cause du mouvement</th></tr></thead><tbody id="analysisLossRows"></tbody></table></div>
   <p class="small">G/P = gains / pertes latents · ATT = attendre · REV = revoir · SURV = surveiller.</p>
  </details>
  <details class="card div-disclosure analysis-disclosure">
   <summary>Décision à prendre</summary>
-  <p class="small">Publications consultées le 27/11/2026.</p>
   <p class="small" id="analysisFeedStatus" role="status"></p><div id="analysisDecisions"></div>
  </details>
  <details class="card div-disclosure analysis-disclosure">
@@ -2289,18 +2288,26 @@ async function refreshAnalysisMarketBulletin(){
 }
 let analysisPublications=[];
 let analysisCheckedAt='';
-let analysisPartial=false;
+let analysisUnavailable=[];
+const ANALYSIS_MOVE_THRESHOLD=3;
+const analysisIssuerAliases={
+ 'TOTALENERGIES MAROC':['TOTALENERGIES MARKETING MAROC','TOTALENERGIES MAROC'],
+ 'LAPROPHAN S A':['LAPROPHAN'],
+ 'ITISSALAT AL MAGHRIB':['MAROC TELECOM','ITISSALAT AL MAGHRIB'],
+ 'BCP':['BCP','BANQUE CENTRALE POPULAIRE']
+};
 async function refreshAnalysisPublications(){
+ const url=location.protocol==='file:'?'https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/publications-analyse.json':'./publications-analyse.json';
  const status=document.getElementById('analysisFeedStatus');
  try{
-  const response=await fetch('https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/publications-analyse.json',{cache:'no-store'});
+  const response=await fetch(url,{cache:'no-store'});
   if(!response.ok)throw Error('Flux indisponible');
   const data=await response.json();
   if(!Array.isArray(data.publications)||!Number.isFinite(Date.parse(data.checked_at)))throw Error('Flux invalide');
   analysisPublications=data.publications;
   analysisPublishedDebt=data.net_debt||{};
   analysisCheckedAt=data.checked_at;
-  analysisPartial=Object.values(data.sources||{}).some(source=>!source.ok);
+  analysisUnavailable=Object.entries(data.sources||{}).filter(([,source])=>!source.ok).map(([name])=>name);
   renderAnalysis();
  }catch{
   status.textContent='Veille automatique indisponible. Les décisions documentées restent affichées.';
@@ -2312,17 +2319,17 @@ function analysisPriceHistory(){
   return Array.isArray(history)?history.flatMap(entry=>Array.isArray(entry?.changes)?entry.changes:[]):[];
  }catch{return [];}
 }
-function recordAnalysisFundValues(positions){
- const key=KEY+'_analysisFundValues';
+function recordAnalysisValues(positions,type){
+ const key=KEY+(type==='OPCVM'?'_analysisFundValues':'_analysisActionValues');
  try{
   const saved=JSON.parse(localStorage.getItem(key)||'{}');
   const archive=saved&&typeof saved==='object'&&!Array.isArray(saved)?saved:{};
   let changed=false;
   for(const position of positions){
    const price=parseWafaNumber(position.price);
-   const date=positionDateIso(position.sourceDate);
+   const date=positionDateIso(position.marketQuoteDate||position.sourceDate);
    const name=quoteKey(position.name);
-   if(position.type!=='OPCVM'||!name||!(price>0)||!date)continue;
+   if(position.type!==type||!name||!(price>0)||!date)continue;
    const previous=Object.hasOwn(archive,name)?archive[name]:{};
    if(previous[date]===price)continue;
    const points={...previous,[date]:price};
@@ -2333,19 +2340,20 @@ function recordAnalysisFundValues(positions){
   return archive;
  }catch{return {};}
 }
-function diagnosticContext(position,localQuotes,fundValues){
+function diagnosticContext(position,localQuotes,savedValues){
  const key=quoteKey(position.name);
  const observations=new Map();
  const isFund=position.type==='OPCVM';
  const add=(date,price)=>{
   if(/^\d{4}-\d{2}-\d{2}$/.test(date||'')&&Number.isFinite(price)&&price>0)observations.set(date,price);
  };
- if(isFund){
-  for(const [date,value] of Object.entries(fundValues[key]||{}))add(date,value);
- }
+ for(const [date,value] of Object.entries(savedValues[key]||{}))add(date,value);
  for(const change of isFund?[]:localQuotes){
-  if(quoteKey(change.name||'')===key)add(change.quote?.quote_date,change.quote?.price_mad);
+  if(quoteKey(change.name||'')!==key)continue;
+  add(positionDateIso(change.before?.marketQuoteDate||change.before?.sourceDate),parseWafaNumber(change.before?.price));
+  add(change.quote?.quote_date,change.quote?.price_mad);
  }
+ add(positionDateIso(position.marketQuoteDate||position.sourceDate),parseWafaNumber(position.price));
  const bulletin=isFund?null:analysisMarketBulletin;
  for(const [date,values] of Object.entries(bulletin?.history||{})){
   const quote=values?.[key];
@@ -2354,20 +2362,21 @@ function diagnosticContext(position,localQuotes,fundValues){
  const latest=bulletin?.values?.[key];
  if(latest&&(!latest.quote_date||latest.quote_date===bulletin.date))add(bulletin.date,latest.price);
  const points=[...observations].sort(([a],[b])=>a.localeCompare(b));
- if(points.length<2)return position.type==='OPCVM'?'Historique de VL insuffisant pour dater la baisse.':'Historique de cours insuffisant pour dater la baisse.';
+ if(points.length<2)return {detail:isFund?'Historique de VL insuffisant.':'Historique de cours insuffisant.'};
  const [end,last]=points.at(-1),[start,first]=points.at(-2);
  const change=100*(last/first-1);
  const close=date=>state.masiCloses?.[date]??PORTFOLIO_MASI_VERIFIED_CLOSES[date]?.value;
  const left=close(start),right=close(end);
- const market=isFund?' · Indice de référence du fonds indisponible':left>0&&right>0?' · MASI '+fmt(100*(right/left-1),1)+' %':' · MASI indisponible sur ces dates';
- const announcements=analysisPublications.filter(item=>{
-  const discovered=String(item?.first_seen||'').slice(0,10);
-  return discovered>=start&&discovered<=end&&
-   (' '+quoteKey(String(item?.title||''))+' ').includes(' '+key+' ')&&
+ const marketChange=!isFund&&left>0&&right>0?100*(right/left-1):null;
+ const market=isFund?' · Indice de référence du fonds indisponible':marketChange===null?' · MASI indisponible sur ces dates':' · MASI '+fmt(marketChange,1)+' %';
+ const names=analysisIssuerAliases[key]||[key];
+ const announcement=isFund?null:analysisPublications.filter(item=>{
+  const published=String(item?.published_on||'');
+  const title=' '+quoteKey(item?.title||'')+' ';
+  return published>=start&&published<=end&&names.some(name=>name&&title.includes(' '+name+' '))&&
    /^https:\/\/www\.(ammc\.ma|casablanca-bourse\.com)\//.test(item?.url||'');
- });
- const announcement=announcements[0];
- const link=announcement?' · <a href="'+esc(announcement.url)+'" target="_blank" rel="noopener noreferrer">Publication repérée sur la période ↗</a>':'';
+ }).sort((a,b)=>b.published_on.localeCompare(a.published_on))[0];
+ const link=announcement?' · <a href="'+esc(announcement.url)+'" target="_blank" rel="noopener noreferrer">'+esc(announcement.title)+' · '+formatPositionDate(announcement.published_on)+' ↗</a>':'';
  const detachmentDates=isFund?[]:[...new Set([
   ...(state.dividends||[]).filter(item=>item.confirmed===true),
   ...(state.officialDividendHistory||[])
@@ -2375,11 +2384,20 @@ function diagnosticContext(position,localQuotes,fundValues){
   .map(item=>marketIsoDate(item.exDate))
   .filter(date=>date>start&&date<=end))].sort();
  const detachment=detachmentDates.length?' · Détachement enregistré le '+detachmentDates.map(formatPositionDate).join(', ')+' (piste à vérifier)':'';
- return formatPositionDate(start)+' → '+formatPositionDate(end)+(isFund?' : VL relevée ':' : cours ')+fmt(change,1)+' %'+market+link+detachment+'. Cause non établie.';
+ const detail=formatPositionDate(start)+' → '+formatPositionDate(end)+(isFund?' : VL relevée ':' : cours ')+fmt(change,1)+' %'+market+link+detachment+'. Cause non établie.';
+ if(isFund||Math.abs(change)+1e-9<ANALYSIS_MOVE_THRESHOLD)return {detail};
+ const downturn=change<0;
+ if(detachmentDates.length&&downturn)return {detail,status:'REV',decision:'Vérifier l’effet du détachement',reason:'Comparer la variation au dividende par action et au MASI.'};
+ if(announcement)return {detail,status:'REV',decision:'Réexaminer la position',reason:'Lire le communiqué et vérifier si son contenu explique le mouvement.'};
+ if(marketChange!==null&&Math.sign(marketChange)===Math.sign(change)&&Math.abs(change-marketChange)<ANALYSIS_MOVE_THRESHOLD){
+  return {detail,status:'SURV',decision:'Surveiller',reason:'Le titre et le MASI évoluent dans le même sens sur la période.'};
+ }
+ return {detail,status:downturn?'ATT':'SURV',decision:downturn?'Attendre avant de renforcer':'Surveiller la hausse',reason:'Vérifier les volumes et rechercher une annonce propre à la société.'};
 }
 function renderAnalysis(){
  const localQuotes=analysisPriceHistory();
- const fundValues=recordAnalysisFundValues(state.positions);
+ const fundValues=recordAnalysisValues(state.positions,'OPCVM');
+ const actionValues=recordAnalysisValues(state.positions,'Action');
  const metrics=portfolioMetrics();
  const positionResults=state.positions.map(position=>{
   const value=portfolioPositionValue(position);
@@ -2388,9 +2406,10 @@ function renderAnalysis(){
   const price=parseWafaNumber(position.price);
   const pl=parseWafaNumber(position.sourcePl)??(price!==null&&cost!==null&&qty!==null?(price-cost)*qty-(Number(position.buyFees)||0):null);
   const percent=pl!==null&&cost>0&&qty>0?100*pl/(cost*qty):null;
-  return {position,pl,percent,weight:metrics.titles>0?100*value/metrics.titles:null};
+  return {position,pl,percent,context:diagnosticContext(position,localQuotes,position.type==='OPCVM'?fundValues:actionValues),weight:metrics.titles>0?100*value/metrics.titles:null};
  });
  const losses=positionResults.filter(row=>row.pl<0).sort((a,b)=>a.pl-b.pl);
+ const diagnosed=positionResults.filter(row=>row.pl<0||row.context.status).sort((a,b)=>Number(Boolean(b.context.status))-Number(Boolean(a.context.status))||a.pl-b.pl);
  const review={
   'TOTALENERGIES MAROC':['ATT','Vérifier les marges et les volumes avant de renforcer.'],
   'LAPROPHAN':['SURV','Suivre les prochaines publications et la liquidité après l’introduction.'],
@@ -2402,10 +2421,10 @@ function renderAnalysis(){
  };
  const pct=value=>value===null?'—':fmt(value)+' %';
  document.getElementById('analysisDate').textContent=metrics.titlesSource;
- document.getElementById('analysisLossRows').innerHTML=losses.map(({position,pl,percent,weight})=>{
+ document.getElementById('analysisLossRows').innerHTML=diagnosed.map(({position,pl,percent,weight,context})=>{
   const [status,reason]=review[quoteKey(position.name)]??['REV','Examiner les résultats et le poids de la ligne avant de renforcer.'];
-  return `<tr><td>${esc(position.name)}</td><td class="negative">${fmt(pl)}</td><td class="negative">${pct(percent)}</td><td>${pct(weight)}</td><td>${status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Piste à vérifier : '+reason}<br><small>${diagnosticContext(position,localQuotes,fundValues)}</small></td></tr>`;
- }).join('')||'<tr><td colspan="6" class="empty">Aucune ligne en moins-value disponible.</td></tr>';
+  return `<tr><td>${esc(position.name)}</td><td class="${pl<0?'negative':''}">${pl===null?'—':fmt(pl)}</td><td class="${pl<0?'negative':''}">${pct(percent)}</td><td>${pct(weight)}</td><td>${context.status||status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Piste à vérifier : '+reason}<br><small>${context.detail}</small></td></tr>`;
+ }).join('')||'<tr><td colspan="6" class="empty">Aucune moins-value ni variation marquée à signaler.</td></tr>';
  const candidates=[
   {name:'Marsa Maroc',sector:'Ports et logistique',publication:'CA à fin septembre 2026 : +13 %',reason:'Vérifier la valorisation et les espèces disponibles.',url:'https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf',source:'AMMC'},
   {name:'Akdital',sector:'Santé',publication:'CA à fin septembre 2026 : +28 %',reason:'Vérifier le poids après un achat supplémentaire.',url:'https://lematin.ma/economie/akdital-chiffre-daffaires-en-croissance-de-28-a-fin-septembre-2026/377899',source:'Le Matin'},
@@ -2429,10 +2448,10 @@ function renderAnalysis(){
  });
  const priority=losses[0];
  const marsaResult=positionResults.find(row=>quoteKey(row.position.name)==='MARSA MAROC');
- const summaryRows=[...new Set([priority,marsaResult].filter(Boolean))];
- document.getElementById('analysisSummaryRows').innerHTML=summaryRows.map(({position,pl})=>{
+ const summaryRows=[...new Set([...diagnosed.filter(row=>row.context.status),priority,marsaResult].filter(Boolean))];
+ document.getElementById('analysisSummaryRows').innerHTML=summaryRows.map(({position,pl,context})=>{
   const key=quoteKey(position.name);
-  const decision=key==='MARSA MAROC'?'Conserver et surveiller':key==='TOTALENERGIES MAROC'?'Conserver, attendre avant de renforcer':'Attendre avant de renforcer';
+  const decision=context.decision||(key==='MARSA MAROC'?'Conserver et surveiller':key==='TOTALENERGIES MAROC'?'Conserver, attendre avant de renforcer':'Attendre avant de renforcer');
   const amount=pl===null?'—':(pl>0?'+':'')+fmt(pl)+' DH';
   return `<tr><td>${esc(position.name)}</td><td>${amount}</td><td class="analysis-summary-decision">${decision}</td></tr>`;
  }).join('')||'<tr><td colspan="3" class="empty">Aucune action à signaler dans le résumé.</td></tr>';
@@ -2444,7 +2463,8 @@ function renderAnalysis(){
   <td>${row.debt?row.debt.label+'<br><a class="analysis-bvc-link small" href="'+esc(row.debt.url)+'" target="_blank" rel="noopener noreferrer">'+row.debt.date+'</a>':'—'}</td><td>${row.debt?.variation?esc(row.debt.variation)+'<br><small>'+esc(row.debt.comparison)+'</small>':'—'}</td><td>${pct(row.weight)}</td>
   <td>${row.status}</td><td>${row.reason} <a href="${row.url}" target="_blank" rel="noopener noreferrer">${row.source} ↗</a></td>
  </tr>`).join('');
- const decisions=losses.map(({position})=>{
+ const decisions=diagnosed.map(({position,context})=>{
+  if(context.decision)return `<p><strong>${esc(position.name)} · ${context.decision}.</strong> ${context.reason}<br><small>${context.detail}</small></p>`;
   const key=quoteKey(position.name);
   if(key==='TOTALENERGIES MAROC'){
    return `<p><strong>${esc(position.name)} · Conserver, renforcement en attente.</strong> Au 1er semestre 2026, le bénéfice net social a reculé de 20,2 %. L’entreprise signale une pression sur ses marges et des perturbations logistiques. Le lien avec la baisse du cours reste à confirmer. Réexaminer le renforcement si les marges se redressent. Si elles continuent de se dégrader, revoir le poids de la ligne. <a href="https://www.ammc.ma/fr/node/55834" target="_blank" rel="noopener noreferrer">Résultats · AMMC ↗</a></p>`;
@@ -2454,26 +2474,14 @@ function renderAnalysis(){
   return `<p><strong>${esc(position.name)} · Attendre avant de renforcer.</strong> Cause non confirmée. ${reason}</p>`;
  });
  const marsa=rows[0];
- if(marsa.position){
+ if(marsa.position&&!marsaResult?.context.decision){
   const impact=marsa.weight===null?'':' Une action de plus porterait la ligne à '+pct(marsa.weight)+' des titres.';
   decisions.push(`<p><strong>Marsa Maroc · Conserver et surveiller.</strong> Les ventes progressent de 13 % à fin septembre 2026. Étudier un renforcement si les bénéfices confirment la progression, si le prix est justifié et si le poids reste acceptable.${impact} <a href="${marsa.url}" target="_blank" rel="noopener noreferrer">Publication · AMMC ↗</a></p>`);
  }
  const feedStatus=document.getElementById('analysisFeedStatus');
  if(analysisCheckedAt){
   const checked=new Intl.DateTimeFormat('fr-FR',{timeZone:'Africa/Casablanca',dateStyle:'short',timeStyle:'short'}).format(new Date(analysisCheckedAt));
-  feedStatus.textContent='Dernière collecte : '+checked+(analysisPartial?' · Certaines sources sont indisponibles.':'');
- }
- for(const {position} of [...losses,...(marsaResult&&!losses.includes(marsaResult)?[marsaResult]:[])]){
-  const key=quoteKey(position.name);
-  const aliases={'TOTALENERGIES MAROC':['TOTALENERGIES MARKETING MAROC','TOTALENERGIES MAROC'],'LAPROPHAN S A':['LAPROPHAN'],'ITISSALAT AL MAGHRIB':['MAROC TELECOM','ITISSALAT AL MAGHRIB'],'BCP':['BCP','BANQUE CENTRALE POPULAIRE']};
-  const names=aliases[key]||[key];
-  const item=analysisPublications.filter(item=>{
-   if(!item||typeof item.title!=='string'||!/^https:\/\/www\.(ammc\.ma|casablanca-bourse\.com)\//.test(item.url))return false;
-   const title=' '+quoteKey(item.title)+' ';
-   return names.some(name=>title.includes(' '+name+' '));
-  }).sort((a,b)=>String(b.first_seen).localeCompare(String(a.first_seen)))[0];
-  if(!item)continue;
-  decisions.push(`<p><strong>${esc(position.name)} · Réexaminer la décision.</strong> Publication repérée par la veille. Vérifier son contenu et son lien avec l’évolution du cours avant de renforcer. <a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(item.title)} · ${esc(item.source)} ↗</a></p>`);
+  feedStatus.textContent='Dernière vérification le '+checked+(analysisUnavailable.length?' · Sources indisponibles : '+analysisUnavailable.join(', ')+'.':'');
  }
  document.getElementById('analysisDecisions').innerHTML=decisions.join('')||'<p>Aucune décision à afficher pour les positions renseignées.</p>';
 }
