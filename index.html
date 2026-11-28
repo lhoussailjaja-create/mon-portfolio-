@@ -2297,7 +2297,7 @@ const analysisIssuerAliases={
  'BCP':['BCP','BANQUE CENTRALE POPULAIRE']
 };
 async function refreshAnalysisPublications(){
- const url=location.protocol==='file:'?'https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/publications-analyse.json':'./publications-analyse.json';
+ const url='https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/publications-analyse.json';
  const status=document.getElementById('analysisFeedStatus');
  try{
   const response=await fetch(url,{cache:'no-store'});
