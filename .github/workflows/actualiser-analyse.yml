@@ -240,7 +240,31 @@ jobs:
           })
           debts = previous.get("net_debt", {})
 
-          def collect_debt(task):
+          signals = previous.get("positive_signals", {})
+          signal_patterns = {
+              "earnings": r"resultat net(?: consolide| part du groupe)",
+              "revenue": r"chiffre d['’]affaires consolide",
+          }
+
+          def extract_signal(document, pdf, publication):
+              plain = normalized(document)
+              for kind, metric in signal_patterns.items():
+                  pattern = (
+                      r"(" + metric + r"[^.!?;%]{0,110}?\ben (?:hausse|progression|croissance) de "
+                      r"\+?(\d+(?:[,.]\d+)?)\s*%)"
+                  )
+                  matches = {
+                      float(match[1].replace(",", "."))
+                      for match in re.findall(pattern, plain)
+                      if not re.search(r"attendu|prevu|objectif|pro forma|proforma", match[0])
+                  }
+                  if len(matches) == 1:
+                      percent = matches.pop()
+                      if 0 < percent <= 250:
+                          return {"kind": kind, "percent": percent, "published_on": publication, "url": pdf}
+              return None
+
+          def collect_metrics(task):
               issuer, article = task
               try:
                   url = article["url"]
@@ -250,34 +274,42 @@ jobs:
                       pdfs = PdfLinks(url)
                       pdfs.feed(official_bytes(url, 2_000_000).decode("utf-8", errors="replace"))
                       candidates = sorted(pdfs.urls)[:3]
+                  debt = signal = None
                   for pdf in candidates:
                       data = official_bytes(pdf, 10_000_000)
                       document = subprocess.check_output(
                           ["pdftotext", "-layout", "-", "-"], input=data, timeout=10,
                       ).decode("utf-8")
-                      debt = extract_debt(document, pdf)
-                      if debt:
-                          return issuer, debt
+                      debt = debt or extract_debt(document, pdf)
+                      signal = signal or extract_signal(document, pdf, article["published_on"])
+                      if debt and signal:
+                          break
+                  return issuer, debt, signal
               except (OSError, ValueError, subprocess.SubprocessError) as error:
-                  print(f"Dette nette {issuer}: {error}")
-              return issuer, None
+                  print(f"Publication financière {issuer}: {error}")
+              return issuer, None, None
 
+          from datetime import timedelta
+          oldest_signal = (datetime.now(timezone.utc).date() - timedelta(days=30)).isoformat()
           tasks = []
           for article in sorted(articles.values(), key=lambda item: item.get("published_on") or "", reverse=True):
               title = article["title"]
               issuer = issuers.get(issuer_key(re.split(r" +[-–—] +", title, maxsplit=1)[0]))
               publication = article.get("published_on", "")
-              if (issuer and article["source"] == "AMMC" and publication > debts.get(issuer, {}).get("date", "")
+              if (issuer and article["source"] == "AMMC" and (publication > debts.get(issuer, {}).get("date", "")
+                           or publication >= oldest_signal and publication > signals.get(issuer, {}).get("published_on", ""))
                       and re.search(r"indicateurs|resultats financiers|rapport financier", normalized(title))):
                   tasks.append((issuer, article))
 
           with ThreadPoolExecutor(max_workers=8) as executor:
-              for issuer, debt in executor.map(collect_debt, tasks[:36]):
+              for issuer, debt, signal in executor.map(collect_metrics, tasks[:36]):
                   if debt and debt["date"] > debts.get(issuer, {}).get("date", ""):
                       debts[issuer] = debt
+                  if signal and signal["published_on"] > signals.get(issuer, {}).get("published_on", ""):
+                      signals[issuer] = signal
 
           path.write_text(json.dumps(
-              {"checked_at": now, "last_success_at": now if any(item["ok"] for item in availability.values()) else previous.get("last_success_at"), "sources": availability, "publications": list(articles.values()), "net_debt": debts},
+              {"checked_at": now, "last_success_at": now if any(item["ok"] for item in availability.values()) else previous.get("last_success_at"), "sources": availability, "publications": list(articles.values()), "net_debt": debts, "positive_signals": signals},
               ensure_ascii=False, indent=2
           ) + "\n")
           PY

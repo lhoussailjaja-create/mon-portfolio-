@@ -420,10 +420,10 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <p class="small" id="marketPublicationsStatus" role="status"></p>
   <div class="formrow">
    <div class="field"><label for="marketSearch">Rechercher une action</label><input id="marketSearch" type="search" placeholder="Nom, mnémonique ou secteur" oninput="renderMarketOpportunities()"></div>
-   <div class="field"><label for="marketView">Afficher</label><select id="marketView" onchange="renderMarketOpportunities()"><option value="all">Toutes les actions</option><option value="ranked">Valeurs classées</option><option value="cash">Dans mes espèces disponibles</option></select></div>
+   <div class="field"><label for="marketView">Afficher</label><select id="marketView" onchange="renderMarketOpportunities()"><option value="all">Toutes les actions</option><option value="ranked">Valeurs classées</option><option value="priority">Priorités à court terme</option><option value="cash">Dans mes espèces disponibles</option></select></div>
   </div>
   <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Séance</th><th>Var. 1M</th><th>Résultats annuels / PER</th><th>Liquidité</th><th>Dette nette</th><th>Var. dette nette</th><th>Poids après +1</th><th>Score</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
-  <p class="small">Score sur 100 · 40 % valorisation comparée au secteur, 35 % croissance annuelle du bénéfice, 25 % montant échangé sur la séance. Vérifier l’éligibilité PEA et la dette avant un achat. <a href="https://www.casablanca-bourse.com/en/marches-produits/actions" target="_blank" rel="noopener noreferrer" class="analysis-bvc-link">Bourse de Casablanca ↗</a></p>
+  <p class="small">Score sur 100 · 50 points pour le PER sectoriel, 30 pour les publications positives des 30 derniers jours, 10 pour le bénéfice annuel et 10 pour la liquidité. Les titres au PER inférieur à la médiane du secteur et avec un signal officiel récent passent en tête. Vérifier l’éligibilité PEA et la dette avant un achat. <a href="https://www.casablanca-bourse.com/en/marches-produits/actions" target="_blank" rel="noopener noreferrer" class="analysis-bvc-link">Bourse de Casablanca ↗</a></p>
  </details>
 </section>
 <section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" oninput="clearPortfolioTradePreview()" onsubmit="previewPortfolioTrade(event)">
@@ -2303,10 +2303,15 @@ function marketPercentile(value,values){
  const equal=values.filter(other=>other===value).length;
  return (lower+(equal-1)/2)/(values.length-1);
 }
-function marketScores(rows,year){
- const valid=row=>row.year>=year-1&&row.year<year&&row.per>0;
- const eligible=rows.filter(row=>valid(row)&&row.volume>0&&Number.isFinite(row.growth));
- const growth=eligible.map(row=>row.growth);
+function marketRecentSignal(name){
+ const signal=marketSignals[quoteKey(name)];
+  const age=(Date.now()-Date.parse(signal?.published_on+'T00:00:00Z'))/86400000;
+ return age>=0&&age<=30&&['earnings','revenue'].includes(signal?.kind)&&
+   Number.isFinite(signal.percent)&&signal.percent>0&&/^https:\/\/www\.ammc\.ma\/sites\/default\/files\//.test(signal.url)?signal:null;
+}
+function marketScores(rows,date){
+ const year=Number(date.slice(0,4));
+ const valid=row=>row.year===year-1&&row.per>0;
  const volume=rows.filter(row=>Number.isFinite(row.volume)).map(row=>row.volume);
  const sectorPers=new Map();
  for(const row of rows.filter(valid)){
@@ -2316,12 +2321,19 @@ function marketScores(rows,year){
   sectorPers.set(row.sector,peers);
  }
  const scores=new Map();
- if(growth.length<2||volume.length<2)return scores;
- for(const row of eligible){
-  const peers=sectorPers.get(row.sector)||[];
-  if(peers.length<2)continue;
-  const score=40*(1-marketPercentile(row.per,peers))+35*marketPercentile(row.growth,growth)+25*marketPercentile(row.volume,volume);
-  scores.set(row.symbol,Math.round(score));
+ if(volume.length<2)return scores;
+ for(const row of rows){
+  const peers=(sectorPers.get(row.sector)||[]).sort((a,b)=>a-b);
+  if(!valid(row)||row.volume<=0||!Number.isFinite(row.volume)||peers.length<2)continue;
+  const middle=Math.floor(peers.length/2);
+  const median=peers.length%2?peers[middle]:(peers[middle-1]+peers[middle])/2;
+  const recent=marketRecentSignal(row.name);
+  const priority=row.per<median&&Boolean(recent);
+  const news=recent?(recent.kind==='earnings'?30:20):0;
+  const growth=Number.isFinite(row.growth)?Math.min(10,Math.max(0,row.growth/3)):0;
+  const valuation=50*(1-marketPercentile(row.per,peers));
+  const score=Math.round(valuation+news+growth+10*marketPercentile(row.volume,volume));
+  scores.set(row.symbol,{score,priority,median});
  }
  return scores;
 }
@@ -2338,15 +2350,15 @@ function renderMarketOpportunities(metrics=portfolioMetrics()){
  const {rows,date}=marketScan;
  const sessionAge=(Date.now()-Date.parse(date+'T00:00:00Z'))/86400000;
  const stale=sessionAge>7;
- const scores=stale?new Map():marketScores(rows,Number(date.slice(0,4)));
+ const scores=stale?new Map():marketScores(rows,date);
  const query=quoteKey(document.getElementById('marketSearch').value);
  const view=document.getElementById('marketView').value;
  const format=value=>Number.isFinite(value)?fmt(value,1)+' %':'—';
  const displayed=rows.filter(row=>{
   const searchable=quoteKey([row.name,row.symbol,row.sector].join(' '));
   return (!query||searchable.includes(query))&&(view!=='ranked'||scores.has(row.symbol))&&
-   (view!=='cash'||(row.price>0&&row.price<=metrics.cash));
- }).sort((a,b)=>(scores.get(b.symbol)??-1)-(scores.get(a.symbol)??-1)||(b.volume??-1)-(a.volume??-1)||a.name.localeCompare(b.name,'fr'));
+   (view!=='priority'||scores.get(row.symbol)?.priority)&&(view!=='cash'||(row.price>0&&row.price<=metrics.cash));
+ }).sort((a,b)=>Number(Boolean(scores.get(b.symbol)?.priority))-Number(Boolean(scores.get(a.symbol)?.priority))||(scores.get(b.symbol)?.score??-1)-(scores.get(a.symbol)?.score??-1)||(b.volume??-1)-(a.volume??-1)||a.name.localeCompare(b.name,'fr'));
  status.textContent=rows.length+' actions recensées · '+scores.size+' classées · Séance du '+formatPositionDate(date)+
   (stale?' · Données de séance anciennes.':'')+
   (!marketScan.ratios_available?(marketScan.ratios_checked_on?' · Ratios en cache du '+formatPositionDate(marketScan.ratios_checked_on)+'.':' · Ratios indisponibles.'):'')+
@@ -2358,10 +2370,15 @@ function renderMarketOpportunities(metrics=portfolioMetrics()){
   const holdingValue=holdings.reduce((sum,position)=>sum+portfolioPositionValue(position),0);
   const weight=row.price>0&&metrics.titles>0?100*(holdingValue+row.price)/(metrics.titles+row.price):null;
   const debt=analysisDebtFor(key);
-  const score=scores.get(row.symbol);
+  const evaluation=scores.get(row.symbol);
+  const score=evaluation?.score;
+  const signal=marketRecentSignal(row.name);
   const reason=stale?'Séance à actualiser.':!row.price?'Cours de séance indisponible.':row.volume===0?'Aucun échange sur la séance.':
    score===undefined?'Comparables ou données financières insuffisants.':weight>=20?'Poids après achat ≥ 20 %.':row.price>metrics.cash?'Au-dessus des espèces disponibles.':'À examiner.';
   const quoteLink=marketLinkedText(row.quote_url,/^https:\/\/www\.yuna\.ma\/bourse(?:\/[a-z0-9-]+)?$/,'Cours');
+  const signalLabel=signal?(signal.kind==='earnings'?'Bénéfice':'Chiffre d’affaires')+' : +'+fmt(signal.percent,1)+' %'+(signal.period?' · '+signal.period:'')+' · '+formatPositionDate(signal.published_on):'';
+  const news=signal?marketLinkedText(signal.url,/^https:\/\/www\.ammc\.ma\/sites\/default\/files\//,signalLabel):'Aucun signal positif récent repéré.';
+  const valuation=evaluation?'PER médian du secteur : '+fmt(evaluation.median,1)+'×':'';
   const ratioLink=marketLinkedText(row.ratio_url,/^https:\/\/casabourse\.ma\/(?:entreprise\/[a-z0-9-]+|screener)\/$/,'Ratios');
   return `<tr>
    <td>${esc(row.name)}<br><span class="small">${esc(row.symbol)} · ${esc(row.sector||'Secteur indisponible')}${holdings.length?' · En PEA':''}</span></td>
@@ -2371,7 +2388,7 @@ function renderMarketOpportunities(metrics=portfolioMetrics()){
    <td>${Number.isFinite(row.volume)?fmt(row.volume,0)+' DH':'—'}</td>
    <td>${debt?esc(debt.label)+'<br><small><a class="analysis-bvc-link" href="'+esc(debt.url)+'" target="_blank" rel="noopener noreferrer">'+esc(debt.date)+' ↗</a></small>':'Non documentée'}</td>
    <td>${debt?.variation?esc(debt.variation)+'<br><small>'+esc(debt.comparison)+'</small>':'Comparatif indisponible'}</td>
-   <td>${format(weight)}</td><td>${score??'—'}</td><td>${reason}<br>${quoteLink} · ${ratioLink}</td>
+   <td>${format(weight)}</td><td>${score??'—'}</td><td>${evaluation?.priority?'<strong>Priorité à court terme</strong><br>':''}${esc(valuation)}${valuation?'<br>':''}${news}<br>${reason}<br>${quoteLink} · ${ratioLink}</td>
   </tr>`;
  }).join('')||'<tr><td colspan="10" class="empty">Aucune action pour ce filtre.</td></tr>';
 }
@@ -2386,6 +2403,7 @@ async function refreshAnalysisMarketBulletin(){
  }catch(error){console.warn('Bulletin de marché indisponible',error);}
 }
 let analysisPublications=[];
+let marketSignals={};
 let analysisCheckedAt='';
 let analysisUnavailable=[];
 const ANALYSIS_MOVE_THRESHOLD=3;
@@ -2410,6 +2428,7 @@ async function refreshAnalysisPublications(){
   if(!Array.isArray(data.publications)||!Number.isFinite(Date.parse(data.checked_at)))throw Error('Flux invalide');
   analysisPublications=data.publications;
   analysisPublishedDebt=data.net_debt||{};
+  marketSignals=data.positive_signals||{};
   analysisCheckedAt=data.checked_at;
   analysisUnavailable=Object.entries(data.sources||{}).filter(([,source])=>!source.ok).map(([name])=>name);
   renderAnalysis();
