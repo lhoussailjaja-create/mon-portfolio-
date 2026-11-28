@@ -2345,7 +2345,8 @@ function renderMarketOpportunities(metrics=portfolioMetrics()){
    (view!=='cash'||(row.price>0&&row.price<=metrics.cash));
  }).sort((a,b)=>(scores.get(b.symbol)??-1)-(scores.get(a.symbol)??-1)||(b.volume??-1)-(a.volume??-1)||a.name.localeCompare(b.name,'fr'));
  status.textContent=rows.length+' actions recensées · '+scores.size+' classées · Séance du '+formatPositionDate(date)+
-  (stale?' · Données de séance anciennes.':!marketScan.ratios_available?' · Ratios indisponibles.':'')+
+  (stale?' · Données de séance anciennes.':'')+
+  (!marketScan.ratios_available?(marketScan.ratios_checked_on?' · Ratios en cache du '+formatPositionDate(marketScan.ratios_checked_on)+'.':' · Ratios indisponibles.'):'')+
   (displayed.length===rows.length?'':' · '+displayed.length+' affichées');
  tbody.innerHTML=displayed.map(row=>{
   const key=quoteKey(row.name);

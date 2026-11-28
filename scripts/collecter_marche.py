@@ -14,7 +14,7 @@ OUTPUT = Path("opportunites-marche.json")
 def download(url):
     return subprocess.check_output(
         ["curl", "--fail", "--silent", "--show-error", "--location",
-         "--max-time", "30", "--retry", "2", url],
+         "--max-time", "30", "--retry", "2", "--user-agent", "Mozilla/5.0", url],
         text=True, timeout=100,
     )
 
@@ -68,10 +68,11 @@ def fundamentals(row, price, session_year):
         growth = 100 * (current / prior - 1)
     income = number(row.get("latest_net_income"))
     shares = number(row.get("shares_outstanding"))
-    per = price * shares / income if year and price and shares and shares > 0 and income and income > 0 else None
+    eps = income / shares if year and shares and shares > 0 and income and income > 0 else None
+    per = price / eps if price and eps else None
     published_price = number(row.get("current_price"))
     month = number(row.get("performance_1m")) if price and published_price == price else None
-    return {"year": year, "net_income": income if year else None, "growth": growth, "per": per, "month": month}
+    return {"year": year, "net_income": income if year else None, "growth": growth, "eps": eps, "per": per, "month": month}
 
 
 def main():
@@ -92,6 +93,7 @@ def main():
         ratios = {}
         collection_complete = False
     previous_rows = by_symbol(prior.get("rows", []))
+    last_ratios_check = now.date().isoformat() if collection_complete else prior.get("ratios_checked_on")
     rows = []
     for symbol in sorted(quotes.keys() | ratios.keys() | previous_rows.keys()):
         quote, ratio = quotes.get(symbol, {}), ratios.get(symbol, {})
@@ -103,21 +105,32 @@ def main():
         volume = number(quote.get("volume_mad"))
         slug = quote.get("slug", "")
         ratio_url = ratio.get("url", "")
+        financials = fundamentals(ratio, price, session.year)
+        if not collection_complete and old:
+            eps = old.get("eps")
+            financials = {
+                "year": old["year"],
+                "net_income": old.get("net_income"),
+                "growth": old.get("growth"),
+                "eps": eps,
+                "per": price / eps if eps and price else None,
+                "month": old.get("month") if data["date"] == prior["date"] and price == old.get("price") else None,
+            }
         row = {
             "symbol": symbol,
             "name": quote.get("nom") or ratio.get("name") or old["name"],
-            "sector": ratio.get("sector_fr") or quote.get("secteur") or old.get("sector", ""),
+            "sector": ratio.get("sector_fr") or old.get("sector") or quote.get("secteur", ""),
             "price": price if price and price > 0 else None,
             "volume": volume if volume is not None and volume >= 0 else None,
             "change": number(quote.get("change_percent")),
             "quote_url": QUOTES_URL + "/" + slug if re.fullmatch(r"[a-z0-9-]+", slug) else QUOTES_URL,
-            "ratio_url": ratio_url if re.fullmatch(r"https://casabourse\.ma/entreprise/[a-z0-9-]+/", ratio_url) else RATIOS_URL,
-            **fundamentals(ratio, price, session.year),
+            "ratio_url": ratio_url if re.fullmatch(r"https://casabourse\.ma/entreprise/[a-z0-9-]+/", ratio_url) else old.get("ratio_url", RATIOS_URL),
+            **financials,
         }
         rows.append(row)
     OUTPUT.write_text(json.dumps({
         "date": data["date"], "checked_at": now.isoformat(timespec="seconds"),
-        "ratios_available": collection_complete, "rows": rows,
+        "ratios_available": collection_complete, "ratios_checked_on": last_ratios_check, "rows": rows,
     }, ensure_ascii=False, allow_nan=False, indent=2) + "\n")
     print(f"{len(rows)} actions, {len(quotes)} valeurs dans le flux de séance, date {session}")
 
