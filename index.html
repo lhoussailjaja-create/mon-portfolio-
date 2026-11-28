@@ -416,6 +416,8 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
  <details class="card div-disclosure analysis-disclosure">
   <summary>Opportunités du marché</summary>
   <p class="small" id="marketScanStatus" role="status">Chargement des actions cotées…</p>
+  <div class="actions"><button class="btn" id="marketPublicationsRefresh" type="button" onclick="refreshAnalysisPublications()">Actualiser les publications officielles</button></div>
+  <p class="small" id="marketPublicationsStatus" role="status"></p>
   <div class="formrow">
    <div class="field"><label for="marketSearch">Rechercher une action</label><input id="marketSearch" type="search" placeholder="Nom, mnémonique ou secteur" oninput="renderMarketOpportunities()"></div>
    <div class="field"><label for="marketView">Afficher</label><select id="marketView" onchange="renderMarketOpportunities()"><option value="all">Toutes les actions</option><option value="ranked">Valeurs classées</option><option value="cash">Dans mes espèces disponibles</option></select></div>
@@ -2396,8 +2398,13 @@ const analysisIssuerAliases={
 async function refreshAnalysisPublications(){
  const url=location.protocol==='file:'?'https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/publications-analyse.json':'./publications-analyse.json';
  const status=document.getElementById('analysisFeedStatus');
+ const button=document.getElementById('marketPublicationsRefresh');
+ const marketStatus=document.getElementById('marketPublicationsStatus');
+ if(button.disabled)return;
+ button.disabled=true;
+ marketStatus.textContent='Chargement des dernières publications collectées…';
  try{
-  const response=await fetch(url,{cache:'no-store'});
+  const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw Error('Flux indisponible');
   const data=await response.json();
   if(!Array.isArray(data.publications)||!Number.isFinite(Date.parse(data.checked_at)))throw Error('Flux invalide');
@@ -2406,8 +2413,17 @@ async function refreshAnalysisPublications(){
   analysisCheckedAt=data.checked_at;
   analysisUnavailable=Object.entries(data.sources||{}).filter(([,source])=>!source.ok).map(([name])=>name);
   renderAnalysis();
+  const lastSuccess=data.last_success_at||(!analysisUnavailable.includes('AMMC')?data.checked_at:'');
+  const date=Number.isFinite(Date.parse(lastSuccess))?new Intl.DateTimeFormat('fr-FR',{
+   timeZone:'Africa/Casablanca',dateStyle:'short',timeStyle:'short'
+  }).format(new Date(lastSuccess)):'';
+  const notice=analysisUnavailable.includes('AMMC')?' · AMMC indisponible à la dernière vérification.':'';
+  marketStatus.textContent=(date?'Dernière collecte réussie le '+date:'Date de collecte indisponible')+notice;
  }catch{
   status.textContent='Veille automatique indisponible. Les décisions documentées restent affichées.';
+  marketStatus.textContent='Chargement indisponible. Les données déjà affichées restent visibles.';
+ }finally{
+  button.disabled=false;
  }
 }
 function analysisPriceHistory(){
