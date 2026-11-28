@@ -415,9 +415,13 @@ body{background:radial-gradient(900px 440px at 82% -12%,#49621b30,transparent 65
   <summary>Résumé</summary><div class="tablewrap"><table class="analysis-summary-table"><thead><tr><th scope="col">Action</th><th scope="col">Perte / gain latent</th><th scope="col">Décision</th></tr></thead><tbody id="analysisSummaryRows"></tbody></table></div></details>
  <details class="card div-disclosure analysis-disclosure">
   <summary>Opportunités du marché</summary>
-  <p class="small">Sélection documentée au 27/11/2026. Le PER utilise le bénéfice par action de l’exercice 2025. La liquidité indique les montants échangés sur le marché central, à la date du bulletin.</p>
-  <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Date</th><th>Var. 1M</th><th>Publication / PER</th><th>Liquidité</th><th>Dette nette</th><th>Var. dette nette</th><th>Poids après +1</th><th>Avis</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
-  <p class="small">ÉTU = étudier l’achat · Liq. = liquidité. <a href="https://www.casablanca-bourse.com/" target="_blank" rel="noopener noreferrer" class="analysis-bvc-link">Bourse de Casablanca ↗</a></p>
+  <p class="small" id="marketScanStatus" role="status">Chargement des actions cotées…</p>
+  <div class="formrow">
+   <div class="field"><label for="marketSearch">Rechercher une action</label><input id="marketSearch" type="search" placeholder="Nom, mnémonique ou secteur" oninput="renderMarketOpportunities()"></div>
+   <div class="field"><label for="marketView">Afficher</label><select id="marketView" onchange="renderMarketOpportunities()"><option value="all">Toutes les actions</option><option value="ranked">Valeurs classées</option><option value="cash">Dans mes espèces disponibles</option></select></div>
+  </div>
+  <div class="tablewrap"><table><thead><tr><th>Valeur / Secteur</th><th>Cours / Séance</th><th>Var. 1M</th><th>Résultats annuels / PER</th><th>Liquidité</th><th>Dette nette</th><th>Var. dette nette</th><th>Poids après +1</th><th>Score</th><th>Motif / Source</th></tr></thead><tbody id="analysisMarketRows"></tbody></table></div>
+  <p class="small">Score sur 100 · 40 % valorisation comparée au secteur, 35 % croissance annuelle du bénéfice, 25 % montant échangé sur la séance. Vérifier l’éligibilité PEA et la dette avant un achat. <a href="https://www.casablanca-bourse.com/en/marches-produits/actions" target="_blank" rel="noopener noreferrer" class="analysis-bvc-link">Bourse de Casablanca ↗</a></p>
  </details>
 </section>
 <section class="page" id="journal"><div class="pagehead"><div><h2>Journal des opérations</h2><p>Historique des achats, ventes, frais et mouvements.</p></div></div><form class="card hidden" id="portfolioTradeForm" oninput="clearPortfolioTradePreview()" onsubmit="previewPortfolioTrade(event)">
@@ -2271,11 +2275,102 @@ function analysisDebtFor(key){
  return {label:fmt(item.current_mdh,1)+' M DH',date:formatPositionDate(item.date),
   url:item.url,variation:variation+percent,comparison:'vs '+formatPositionDate(item.prior_date)};
 }
-const analysisEarnings2025={
- 'MARSA MAROC':{eps:21.65,url:'https://www.marsamaroc.co.ma/sites/default/files/2026-04/Rapport%20annuel%202025_0.pdf'},
- 'AKDITAL':{eps:444000000/14159207,url:'https://www.ammc.ma/sites/default/files/Akdital_RFA_2025.pdf'},
- 'SGTM':{eps:1342000000/60000000,url:'https://www.sgtm.ma/wp-content/uploads/2026/04/Press-release-2025-results.pdf'}
+let marketScan=null;
+let marketScanError=false;
+const marketPositionNames={
+ BCP:['BCP','BANQUE CENTRALE POPULAIRE'], TMA:['TOTALENERGIES MAROC','TOTALENERGIES MARKETING MAROC'],
+ LPH:['LAPROPHAN S A'], IAM:['ITTISSALAT AL MAGHRIB','ITISSALAT AL MAGHRIB'],
+ MSA:['MARSA MAROC']
 };
+async function refreshMarketOpportunities(){
+ try{
+  const response=await fetch('https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/opportunites-marche.json',{cache:'no-store'});
+  if(!response.ok)throw Error('Flux indisponible');
+  const data=await response.json();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(data.date)||!Array.isArray(data.rows)||data.rows.length<60)throw Error('Flux invalide');
+  marketScan=data;
+ }catch(error){
+  marketScanError=true;
+  console.warn('Opportunités du marché',error);
+ }
+ renderMarketOpportunities();
+}
+function marketPercentile(value,values){
+ const lower=values.filter(other=>other<value).length;
+ const equal=values.filter(other=>other===value).length;
+ return (lower+(equal-1)/2)/(values.length-1);
+}
+function marketScores(rows,year){
+ const valid=row=>row.year>=year-1&&row.year<year&&row.per>0;
+ const eligible=rows.filter(row=>valid(row)&&row.volume>0&&Number.isFinite(row.growth));
+ const growth=eligible.map(row=>row.growth);
+ const volume=rows.filter(row=>Number.isFinite(row.volume)).map(row=>row.volume);
+ const sectorPers=new Map();
+ for(const row of rows.filter(valid)){
+  if(!row.sector)continue;
+  const peers=sectorPers.get(row.sector)||[];
+  peers.push(row.per);
+  sectorPers.set(row.sector,peers);
+ }
+ const scores=new Map();
+ if(growth.length<2||volume.length<2)return scores;
+ for(const row of eligible){
+  const peers=sectorPers.get(row.sector)||[];
+  if(peers.length<2)continue;
+  const score=40*(1-marketPercentile(row.per,peers))+35*marketPercentile(row.growth,growth)+25*marketPercentile(row.volume,volume);
+  scores.set(row.symbol,Math.round(score));
+ }
+ return scores;
+}
+function marketLinkedText(url,pattern,label){
+ return pattern.test(url||'')?`<a class="analysis-bvc-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`:esc(label);
+}
+function renderMarketOpportunities(metrics=portfolioMetrics()){
+ const status=document.getElementById('marketScanStatus');
+ const tbody=document.getElementById('analysisMarketRows');
+ if(!marketScan){
+  status.textContent=marketScanError?'Données du marché momentanément indisponibles.':'Chargement des actions cotées…';
+  return;
+ }
+ const {rows,date}=marketScan;
+ const sessionAge=(Date.now()-Date.parse(date+'T00:00:00Z'))/86400000;
+ const stale=sessionAge>7;
+ const scores=stale?new Map():marketScores(rows,Number(date.slice(0,4)));
+ const query=quoteKey(document.getElementById('marketSearch').value);
+ const view=document.getElementById('marketView').value;
+ const format=value=>Number.isFinite(value)?fmt(value,1)+' %':'—';
+ const displayed=rows.filter(row=>{
+  const searchable=quoteKey([row.name,row.symbol,row.sector].join(' '));
+  return (!query||searchable.includes(query))&&(view!=='ranked'||scores.has(row.symbol))&&
+   (view!=='cash'||(row.price>0&&row.price<=metrics.cash));
+ }).sort((a,b)=>(scores.get(b.symbol)??-1)-(scores.get(a.symbol)??-1)||(b.volume??-1)-(a.volume??-1)||a.name.localeCompare(b.name,'fr'));
+ status.textContent=rows.length+' actions recensées · '+scores.size+' classées · Séance du '+formatPositionDate(date)+
+  (stale?' · Données de séance anciennes.':!marketScan.ratios_available?' · Ratios indisponibles.':'')+
+  (displayed.length===rows.length?'':' · '+displayed.length+' affichées');
+ tbody.innerHTML=displayed.map(row=>{
+  const key=quoteKey(row.name);
+  const aliases=new Set([key,quoteKey(row.symbol),...(marketPositionNames[row.symbol]||[])]);
+  const holdings=state.positions.filter(position=>position.type==='Action'&&aliases.has(quoteKey(position.name)));
+  const holdingValue=holdings.reduce((sum,position)=>sum+portfolioPositionValue(position),0);
+  const weight=row.price>0&&metrics.titles>0?100*(holdingValue+row.price)/(metrics.titles+row.price):null;
+  const debt=analysisDebtFor(key);
+  const score=scores.get(row.symbol);
+  const reason=stale?'Séance à actualiser.':!row.price?'Cours de séance indisponible.':row.volume===0?'Aucun échange sur la séance.':
+   score===undefined?'Comparables ou données financières insuffisants.':weight>=20?'Poids après achat ≥ 20 %.':row.price>metrics.cash?'Au-dessus des espèces disponibles.':'À examiner.';
+  const quoteLink=marketLinkedText(row.quote_url,/^https:\/\/www\.yuna\.ma\/bourse(?:\/[a-z0-9-]+)?$/,'Cours');
+  const ratioLink=marketLinkedText(row.ratio_url,/^https:\/\/casabourse\.ma\/(?:entreprise\/[a-z0-9-]+|screener)\/$/,'Ratios');
+  return `<tr>
+   <td>${esc(row.name)}<br><span class="small">${esc(row.symbol)} · ${esc(row.sector||'Secteur indisponible')}${holdings.length?' · En PEA':''}</span></td>
+   <td>${row.price>0?fmt(row.price)+' DH<br><small>'+formatPositionDate(date)+'</small>':'—'}</td>
+   <td>${format(row.month)}</td>
+   <td>${Number.isFinite(row.net_income)?'RN '+row.year+' : '+fmt(row.net_income/1000000,1)+' M DH<br>':''}${Number.isFinite(row.growth)?'Var. RN : '+format(row.growth)+'<br>':''}PER : ${row.per>0?fmt(row.per,1)+'×':'—'}</td>
+   <td>${Number.isFinite(row.volume)?fmt(row.volume,0)+' DH':'—'}</td>
+   <td>${debt?esc(debt.label)+'<br><small><a class="analysis-bvc-link" href="'+esc(debt.url)+'" target="_blank" rel="noopener noreferrer">'+esc(debt.date)+' ↗</a></small>':'—'}</td>
+   <td>${debt?.variation?esc(debt.variation)+'<br><small>'+esc(debt.comparison)+'</small>':'—'}</td>
+   <td>${format(weight)}</td><td>${score??'—'}</td><td>${reason}<br>${quoteLink} · ${ratioLink}</td>
+  </tr>`;
+ }).join('')||'<tr><td colspan="10" class="empty">Aucune action pour ce filtre.</td></tr>';
+}
 async function refreshAnalysisMarketBulletin(){
  try{
   const response=await fetch('https://raw.githubusercontent.com/lhoussailjaja-create/mon-portfolio-/main/marche-analyse.json',{cache:'no-store'});
@@ -2425,27 +2520,6 @@ function renderAnalysis(){
   const [status,reason]=review[quoteKey(position.name)]??['REV','Examiner les résultats et le poids de la ligne avant de renforcer.'];
   return `<tr><td>${esc(position.name)}</td><td class="${pl<0?'negative':''}">${pl===null?'—':fmt(pl)}</td><td class="${pl<0?'negative':''}">${pct(percent)}</td><td>${pct(weight)}</td><td>${context.status||status}</td><td class="analysis-cause">${quoteKey(position.name)==='TOTALENERGIES MAROC'?'Marges sous pression au 1er semestre 2026. Lien avec le cours à confirmer.':'Piste à vérifier : '+reason}<br><small>${context.detail}</small></td></tr>`;
  }).join('')||'<tr><td colspan="6" class="empty">Aucune moins-value ni variation marquée à signaler.</td></tr>';
- const candidates=[
-  {name:'Marsa Maroc',sector:'Ports et logistique',publication:'CA à fin septembre 2026 : +13 %',reason:'Vérifier la valorisation et les espèces disponibles.',url:'https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf',source:'AMMC'},
-  {name:'Akdital',sector:'Santé',publication:'CA à fin septembre 2026 : +28 %',reason:'Vérifier le poids après un achat supplémentaire.',url:'https://lematin.ma/economie/akdital-chiffre-daffaires-en-croissance-de-28-a-fin-septembre-2026/377899',source:'Le Matin'},
-  {name:'SGTM',sector:'Construction',publication:'Résultats du 1er semestre 2026',reason:'Vérifier le cours, la valorisation et l’éligibilité auprès du courtier.',url:'https://www.ammc.ma/fr/actualites/communique-presse/sgtm-resultats-financiers-du-1er-semestre-2026',source:'AMMC'}
- ];
- const rows=candidates.map(candidate=>{
-  const positions=state.positions.filter(position=>quoteKey(position.name)===quoteKey(candidate.name));
-  const position=positions[0];
-  const key=quoteKey(candidate.name);
-  const market=analysisMarketBulletin?.values[key];
-  const marketPrice=Number.isFinite(market?.price)&&market.price>0;
-  const price=marketPrice?market.price:parseWafaNumber(position?.price);
-  const date=marketPrice?formatPositionDate(market.quote_date||analysisMarketBulletin.date):position?positionTotalSourceDate(positions):'';
-  const earnings=analysisEarnings2025[key];
-  const per=price>0&&earnings?.eps>0?price/earnings.eps:null;
-  const volume=Number.isFinite(market?.volume)&&market.volume>=0?market.volume:null;
-  const value=positions.reduce((sum,row)=>sum+portfolioPositionValue(row),0);
-  const weight=price>0&&metrics.titles>0?100*(value+price)/(metrics.titles+price):null;
-  const status=weight!==null&&weight>=20?'ATT':candidate.name==='Marsa Maroc'&&position?'ÉTU':'SURV';
-  return {...candidate,position,price,date,weight,status,per,earnings,volume,debt:analysisDebtFor(key)};
- });
  const priority=losses[0];
  const marsaResult=positionResults.find(row=>quoteKey(row.position.name)==='MARSA MAROC');
  const summaryRows=[...new Set([...diagnosed.filter(row=>row.context.status),priority,marsaResult].filter(Boolean))];
@@ -2455,14 +2529,7 @@ function renderAnalysis(){
   const amount=pl===null?'—':(pl>0?'+':'')+fmt(pl)+' DH';
   return `<tr><td>${esc(position.name)}</td><td>${amount}</td><td class="analysis-summary-decision">${decision}</td></tr>`;
  }).join('')||'<tr><td colspan="3" class="empty">Aucune action à signaler dans le résumé.</td></tr>';
- document.getElementById('analysisMarketRows').innerHTML=rows.map(row=>`<tr>
-  <td>${row.name}<br><span class="small">${row.sector}${row.position?' · Déjà en PEA':''}</span></td>
-  <td>${row.price>0?fmt(row.price)+' DH<br><span class="small">'+esc(row.date)+'</span>':'—'}</td>
-  <td>—</td><td>${row.publication}<br>${row.per===null?'PER : —':'<a class="analysis-bvc-link" href="'+row.earnings.url+'" target="_blank" rel="noopener noreferrer">PER 2025 : '+fmt(row.per,1)+'×</a>'}</td>
-  <td>${row.volume===null?'—':fmt(row.volume,0)+' DH<br><a class="analysis-bvc-link small" href="'+esc(analysisMarketBulletin.source)+'" target="_blank" rel="noopener noreferrer">'+formatPositionDate(analysisMarketBulletin.date)+'</a>'}</td>
-  <td>${row.debt?row.debt.label+'<br><a class="analysis-bvc-link small" href="'+esc(row.debt.url)+'" target="_blank" rel="noopener noreferrer">'+row.debt.date+'</a>':'—'}</td><td>${row.debt?.variation?esc(row.debt.variation)+'<br><small>'+esc(row.debt.comparison)+'</small>':'—'}</td><td>${pct(row.weight)}</td>
-  <td>${row.status}</td><td>${row.reason} <a href="${row.url}" target="_blank" rel="noopener noreferrer">${row.source} ↗</a></td>
- </tr>`).join('');
+ renderMarketOpportunities(metrics);
  const decisions=diagnosed.map(({position,context})=>{
   if(context.decision)return `<p><strong>${esc(position.name)} · ${context.decision}.</strong> ${context.reason}<br><small>${context.detail}</small></p>`;
   const key=quoteKey(position.name);
@@ -2473,10 +2540,11 @@ function renderAnalysis(){
   const [,reason]=review[key]??['REV','Examiner les derniers résultats et comparer l’évolution du cours au marché.'];
   return `<p><strong>${esc(position.name)} · Attendre avant de renforcer.</strong> Cause non confirmée. ${reason}</p>`;
  });
- const marsa=rows[0];
- if(marsa.position&&!marsaResult?.context.decision){
-  const impact=marsa.weight===null?'':' Une action de plus porterait la ligne à '+pct(marsa.weight)+' des titres.';
-  decisions.push(`<p><strong>Marsa Maroc · Conserver et surveiller.</strong> Les ventes progressent de 13 % à fin septembre 2026. Étudier un renforcement si les bénéfices confirment la progression, si le prix est justifié et si le poids reste acceptable.${impact} <a href="${marsa.url}" target="_blank" rel="noopener noreferrer">Publication · AMMC ↗</a></p>`);
+ if(marsaResult&&!marsaResult.context.decision){
+  const price=analysisMarketBulletin?.values['MARSA MAROC']?.price??parseWafaNumber(marsaResult.position.price);
+  const weight=price>0&&metrics.titles>0?100*(portfolioPositionValue(marsaResult.position)+price)/(metrics.titles+price):null;
+  const impact=weight===null?'':' Une action de plus porterait la ligne à '+pct(weight)+' des titres.';
+  decisions.push(`<p><strong>Marsa Maroc · Conserver et surveiller.</strong> Les ventes progressent de 13 % à fin septembre 2026. Étudier un renforcement si les bénéfices confirment la progression, si le prix est justifié et si le poids reste acceptable.${impact} <a href="https://www.ammc.ma/sites/default/files/CP_Marsa_Maroc_T3_26.pdf" target="_blank" rel="noopener noreferrer">Publication · AMMC ↗</a></p>`);
  }
  const feedStatus=document.getElementById('analysisFeedStatus');
  if(analysisCheckedAt){
@@ -3086,6 +3154,7 @@ renderOfficialDividendHistory();
 renderDividendAnalytics();
 refreshAnalysisPublications();
 refreshAnalysisMarketBulletin();
+refreshMarketOpportunities();
 refreshMarketDividends().catch(e=>{console.error(e);const el=document.getElementById('marketDividendStatus');if(el)el.textContent='Actualisation interrompue : '+e.message});
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
